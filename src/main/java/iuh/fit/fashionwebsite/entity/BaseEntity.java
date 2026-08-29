@@ -1,17 +1,25 @@
-/*
- * @ (#) BaseEntity.java     1.0    8/16/2026
- *
- * Copyright (c) 2026 IUH. All rights reserved.
- */
 package iuh.fit.fashionwebsite.entity;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.EntityListeners;
+import jakarta.persistence.MappedSuperclass;
+import lombok.Getter;
+import lombok.Setter;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
-/*
- * @description
- * @author:NguyenTruong
- * @date:  8/16/2026
- * @version:    1.0
- */
+import java.time.LocalDateTime;
 
+@Getter
+@Setter
+@EntityListeners(AuditingEntityListener.class)
+@MappedSuperclass
 public abstract class BaseEntity {
+    @CreatedDate
+    @Column(updatable = false)
+    private LocalDateTime createdAt;
+
+    @LastModifiedDate
+    private LocalDateTime updatedAt;
 }

@@ -14,4 +14,5 @@ package iuh.fit.fashionwebsite.exception;
  */
 
 public class GlobalExceptionHandler {
+
 }

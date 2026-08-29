@@ -6,7 +6,13 @@
 package iuh.fit.fashionwebsite.mapper;
 
 
+import iuh.fit.fashionwebsite.dto.request.UserCreationRequest;
+import iuh.fit.fashionwebsite.dto.request.UserUpdateRequest;
+import iuh.fit.fashionwebsite.dto.response.UserResponse;
+import iuh.fit.fashionwebsite.entity.User;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
 
 /*
  * @description
@@ -16,4 +22,22 @@ import org.mapstruct.Mapper;
  */
 @Mapper(componentModel = "spring")
 public interface UserMapper {
+
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "passwordHash", ignore = true)
+    @Mapping(target = "role", ignore = true)
+    @Mapping(target = "status", ignore = true)
+    User toUser(UserCreationRequest request);
+
+    UserResponse toUserResponse(User user);
+
+    @Mapping(target = "id", ignore = true) //“field này MapStruct không được tự map, tôi sẽ tự xử lý nó.”
+    @Mapping(target = "username", ignore = true)
+    @Mapping(target = "passwordHash", ignore = true)
+    @Mapping(target = "role", ignore = true)
+    @Mapping(target = "status", ignore = true)
+    void updateUser(
+            @MappingTarget User user,
+            UserUpdateRequest request
+    );
 }
