@@ -31,3 +31,11 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Antigravity Local Agents & Skills ###
+.agents/
+
+### Local Documents ###
+tài liệu/
+
+
