@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<persistence xmlns="https://jakarta.ee/xml/ns/persistence"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence https://jakarta.ee/xml/ns/persistence/persistence_3_0.xsd"
+             version="3.0">
+
+    <persistence-unit name="mariadb-pu" transaction-type="RESOURCE_LOCAL">
+        <provider>org.hibernate.jpa.HibernatePersistenceProvider</provider>
+        
+        <!-- Khai báo 19 Entity -->
+        <class>iuh.fit.fashionwebsite.entity.Category</class>
+        <class>iuh.fit.fashionwebsite.entity.Product</class>
+        <class>iuh.fit.fashionwebsite.entity.ProductVariant</class>
+        <class>iuh.fit.fashionwebsite.entity.ProductImage</class>
+        <class>iuh.fit.fashionwebsite.entity.User</class>
+        <class>iuh.fit.fashionwebsite.entity.UserAddress</class>
+        <class>iuh.fit.fashionwebsite.entity.Cart</class>
+        <class>iuh.fit.fashionwebsite.entity.CartItem</class>
+        <class>iuh.fit.fashionwebsite.entity.Order</class>
+        <class>iuh.fit.fashionwebsite.entity.OrderItem</class>
+        <class>iuh.fit.fashionwebsite.entity.PaymentMethod</class>
+        <class>iuh.fit.fashionwebsite.entity.PaymentTransaction</class>
+        <class>iuh.fit.fashionwebsite.entity.SpecialOffer</class>
+        <class>iuh.fit.fashionwebsite.entity.SpecialOfferProduct</class>
+        <class>iuh.fit.fashionwebsite.entity.ProductReview</class>
+        <class>iuh.fit.fashionwebsite.entity.ProductReviewImage</class>
+        <class>iuh.fit.fashionwebsite.entity.ReturnRequest</class>
+        <class>iuh.fit.fashionwebsite.entity.ReturnRequestItem</class>
+        <class>iuh.fit.fashionwebsite.entity.ReturnRequestImage</class>
+
+        <properties>
+            <!-- Cấu hình kết nối DB MariaDB -->
+            <property name="jakarta.persistence.jdbc.driver" value="org.mariadb.jdbc.Driver" />
+            <property name="jakarta.persistence.jdbc.url" value="jdbc:mariadb://localhost:3306/fashion-website?createDatabaseIfNotExist=true" />
+            <property name="jakarta.persistence.jdbc.user" value="root" />
+            <property name="jakarta.persistence.jdbc.password" value="sapassword" />
+
+            <!-- Hibernate Settings -->
+            <property name="hibernate.dialect" value="org.hibernate.dialect.MariaDBDialect" />
+            <property name="hibernate.show_sql" value="true" />
+            <property name="hibernate.format_sql" value="true" />
+            
+            <!-- Quan trọng: Lệnh này sẽ rải 19 bảng xuống Database -->
+            <property name="jakarta.persistence.schema-generation.database.action" value="update" />
+        </properties>
+    </persistence-unit>
+</persistence>

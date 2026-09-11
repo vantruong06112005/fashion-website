@@ -27,6 +27,11 @@ public interface UserMapper {
     @Mapping(target = "passwordHash", ignore = true)
     @Mapping(target = "role", ignore = true)
     @Mapping(target = "status", ignore = true)
+    @Mapping(target = "addresses", ignore = true)
+    @Mapping(target = "orders", ignore = true)
+    @Mapping(target = "cart", ignore = true)
+    @Mapping(target = "reviews", ignore = true)
+    @Mapping(target = "returnRequests", ignore = true)
     User toUser(UserCreationRequest request);
 
     UserResponse toUserResponse(User user);
@@ -36,6 +41,13 @@ public interface UserMapper {
     @Mapping(target = "passwordHash", ignore = true)
     @Mapping(target = "role", ignore = true)
     @Mapping(target = "status", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "addresses", ignore = true)
+    @Mapping(target = "orders", ignore = true)
+    @Mapping(target = "cart", ignore = true)
+    @Mapping(target = "reviews", ignore = true)
+    @Mapping(target = "returnRequests", ignore = true)
     void updateUser(
             @MappingTarget User user,
             UserUpdateRequest request
