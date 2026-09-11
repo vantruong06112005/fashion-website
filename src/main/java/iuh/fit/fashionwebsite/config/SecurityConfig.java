@@ -27,20 +27,19 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
         http
-                // Tắt CSRF để dễ test POST / PUT / DELETE bằng Bruno
                 .csrf(csrf -> csrf.disable())
 
-                // Cấu hình quyền truy cập
                 .authorizeHttpRequests(auth -> auth
 
-                        // Cho phép tất cả API /users/**
-                        // Không cần đăng nhập
+                        // API đăng nhập → không cần JWT
+                        .requestMatchers("/auth/login").permitAll()
+
+                        // API users → không cần đăng nhập
                         .requestMatchers("/users/**").permitAll()
 
-                        // Các API khác bắt buộc phải đăng nhập
+                        // Các API còn lại → phải đăng nhập
                         .anyRequest().authenticated()
                 );
 
         return http.build();
-    }
-}
+}}

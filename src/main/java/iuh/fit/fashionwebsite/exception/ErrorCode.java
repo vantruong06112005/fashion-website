@@ -10,6 +10,7 @@ public enum ErrorCode implements BaseErrorCode{
     DUPLICATE_EMAIL("error.duplicate_email", HttpStatus.BAD_REQUEST),
     DUPLICATE_USERNAME("error.duplicate_username", HttpStatus.BAD_REQUEST),
     INVALID_PASSWORD("error.invalid_password", HttpStatus.BAD_REQUEST),
+    UNAUTHENTICATED("error.unauthenticated", HttpStatus.UNAUTHORIZED),
     UNAUTHORIZED("error.unauthorized", HttpStatus.UNAUTHORIZED);
     private final String message;
     private final HttpStatusCode statusCode;
