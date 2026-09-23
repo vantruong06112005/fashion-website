@@ -4,14 +4,12 @@ package iuh.fit.fashionwebsite.controller.user;/*
  * Copyright (c) 2026 IUH. All rights reserved.
  */
 
-
-
-import com.nimbusds.jose.JOSEException;
 import iuh.fit.fashionwebsite.dto.request.AuthenticationRequest;
 import iuh.fit.fashionwebsite.dto.request.IntrospectRequest;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
 import iuh.fit.fashionwebsite.dto.response.AuthenticationResponse;
 import iuh.fit.fashionwebsite.dto.response.IntrospectResponse;
+import iuh.fit.fashionwebsite.enums.AuthResponseCode;
 import iuh.fit.fashionwebsite.service.AuthenticationService;
 import lombok.experimental.FieldDefaults;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,23 +30,35 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthenticationController {
     @Autowired
     AuthenticationService authenticationService;
+
     @PostMapping("/login")
     ApiResponse<AuthenticationResponse> login(@RequestBody AuthenticationRequest request) {
-        // Implementation for login logic
         AuthenticationResponse isAuthenticated = authenticationService.authenticate(request);
 
         return ApiResponse.<AuthenticationResponse>builder()
-                // có thể có code
+                .code(AuthResponseCode.INTROSPECT_SUCCESS.getCode())
+                .message("Login successfully")
                 .data(isAuthenticated)
-
                 .build();
     }
+
     @PostMapping("/introspect")
-    ApiResponse<IntrospectResponse> introspect(@RequestBody IntrospectRequest request) throws JOSEException {
-        // Implementation for introspect logic
+    ApiResponse<IntrospectResponse> introspect(
+            @RequestBody IntrospectRequest request) {
+
         var introspectResponse = authenticationService.introspect(request);
 
+        if (introspectResponse.isValid()) {
+            return ApiResponse.<IntrospectResponse>builder()
+                    .code(AuthResponseCode.INTROSPECT_SUCCESS.getCode())
+                    .message("Token is valid")
+                    .data(introspectResponse)
+                    .build();
+        }
+
         return ApiResponse.<IntrospectResponse>builder()
+                .code(401)
+                .message("Token is invalid")
                 .data(introspectResponse)
                 .build();
     }

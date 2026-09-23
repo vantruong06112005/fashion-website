@@ -3,20 +3,59 @@ package iuh.fit.fashionwebsite.exception;
 import lombok.Getter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
+
 @Getter
-public enum ErrorCode implements BaseErrorCode{
-    USER_NOT_FOUND("error.user_not_found", HttpStatus.NOT_FOUND),
-    BAD_REQUEST("error.bad_request", HttpStatus.BAD_REQUEST),
-    DUPLICATE_EMAIL("error.duplicate_email", HttpStatus.BAD_REQUEST),
-    DUPLICATE_USERNAME("error.duplicate_username", HttpStatus.BAD_REQUEST),
-    INVALID_PASSWORD("error.invalid_password", HttpStatus.BAD_REQUEST),
-    UNAUTHENTICATED("error.unauthenticated", HttpStatus.UNAUTHORIZED),
-    UNAUTHORIZED("error.unauthorized", HttpStatus.UNAUTHORIZED);
+public enum ErrorCode implements BaseErrorCode {
+
+    USER_NOT_FOUND(
+            404,
+            "error.user_not_found",
+            HttpStatus.NOT_FOUND
+    ),
+
+    BAD_REQUEST(
+            400,
+            "error.bad_request",
+            HttpStatus.BAD_REQUEST
+    ),
+
+    DUPLICATE_EMAIL(
+            400,
+            "error.duplicate_email",
+            HttpStatus.BAD_REQUEST
+    ),
+
+    DUPLICATE_USERNAME(
+            400,
+            "error.duplicate_username",
+            HttpStatus.BAD_REQUEST
+    ),
+
+    INVALID_PASSWORD(
+            400,
+            "error.invalid_password",
+            HttpStatus.BAD_REQUEST
+    ),
+
+    UNAUTHENTICATED(
+            401,
+            "error.unauthenticated",
+            HttpStatus.UNAUTHORIZED
+    ),
+
+    UNAUTHORIZED(
+            403,
+            "error.unauthorized",
+            HttpStatus.FORBIDDEN
+    );
+
+    private final int code;
     private final String message;
     private final HttpStatusCode statusCode;
-    ErrorCode(String message, HttpStatusCode statusCode) {
+
+    ErrorCode(int code, String message, HttpStatusCode statusCode) {
+        this.code = code;
         this.message = message;
         this.statusCode = statusCode;
     }
-
 }

@@ -39,9 +39,9 @@ import java.util.Date;
  * @date:  9/10/2026
  * @version:    1.0
  */
-@Service // Đánh dấu đây là Service của Spring
-@RequiredArgsConstructor // Lombok tự tạo constructor cho các final field
-@Transactional // Các phương thức sẽ chạy trong transaction
+@Service
+@RequiredArgsConstructor
+@Transactional
 @Slf4j // Tạo đối tượng log
 public class AuthenticationService {
     private final UserRepository userRepository;
@@ -79,34 +79,38 @@ public class AuthenticationService {
      * Kiểm tra tính hợp lệ của JWT Token
      */
 
-    public IntrospectResponse introspect(IntrospectRequest request) throws JOSEException {
-
-        // Lấy token từ request
+    public IntrospectResponse introspect(IntrospectRequest request) {
         var token = request.getToken();
-
-        // Tạo đối tượng dùng để xác thực chữ ký của JWT
-        JWSVerifier verifier = new MACVerifier(SINGER_KEY.getBytes());
+        boolean isValid = false;
 
         try {
-            // Chuyển chuỗi token thành đối tượng SignedJWT
-            SignedJWT signedJWT = SignedJWT.parse(token);
+            if (token != null && !token.isBlank()) {
+                // Tự động loại bỏ tiền tố "Bearer " nếu người dùng gửi kèm
+                if (token.startsWith("Bearer ")) {
+                    token = token.substring(7).trim();
+                }
 
-            // Kiểm tra chữ ký JWT có hợp lệ hay không
-            var verified = signedJWT.verify(verifier);
+                // Tạo đối tượng dùng để xác thực chữ ký của JWT
+                JWSVerifier verifier = new MACVerifier(SINGER_KEY.getBytes());
 
-            // Lấy thời gian hết hạn của token
-            Date expirationTime = signedJWT.getJWTClaimsSet().getExpirationTime();
+                // Chuyển chuỗi token thành đối tượng SignedJWT
+                SignedJWT signedJWT = SignedJWT.parse(token);
 
-            // Token hợp lệ khi:
-            // 1. Chữ ký đúng
-            // 2. Chưa hết hạn
-            return IntrospectResponse.builder().valid(verified && expirationTime.after(new Date())).build();
+                // Kiểm tra chữ ký JWT có hợp lệ hay không
+                var verified = signedJWT.verify(verifier);
 
-        } catch (ParseException e) {
-            throw new RuntimeException(e);
-        } catch (JOSEException e) {
-            throw new RuntimeException(e);
+                // Lấy thời gian hết hạn của token
+                Date expirationTime = signedJWT.getJWTClaimsSet().getExpirationTime();
+
+                // Token hợp lệ khi: chữ ký đúng, có thời hạn và chưa hết hạn
+                isValid = verified && expirationTime != null && expirationTime.after(new Date());
+            }
+        } catch (Exception e) {
+            log.warn("Token introspection failed: {}", e.getMessage());
+            isValid = false;
         }
+
+        return IntrospectResponse.builder().valid(isValid).build();
     }
 
     private String generateToken(User user) {
@@ -118,21 +122,15 @@ public class AuthenticationService {
         JWTClaimsSet jwtClaimsSet = new JWTClaimsSet.Builder()
                 // Người sở hữu token
                 .subject(user.getUsername())
-
                 // Đơn vị phát hành token
                 .issuer("dev")
-
                 // Thời điểm tạo token
                 .issueTime(new Date())
-
                 // Token hết hạn sau 1 giờ
                 .expirationTime(new Date(Instant.now().plus(1, ChronoUnit.HOURS).toEpochMilli()))
-
                 // Custom Claim
                 .claim("scope", buildScope(user))
-
                 .build();
-
         // Chuyển Claims thành Payload
         Payload payload = new Payload(jwtClaimsSet.toJSONObject());
 
@@ -156,7 +154,6 @@ public class AuthenticationService {
         if (user.getRole() == null) {
             return "";
         }
-
         return user.getRole().name();
     }
 }
