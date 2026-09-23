@@ -16,7 +16,7 @@ import iuh.fit.fashionwebsite.dto.request.IntrospectRequest;
 import iuh.fit.fashionwebsite.dto.response.AuthenticationResponse;
 import iuh.fit.fashionwebsite.dto.response.IntrospectResponse;
 import iuh.fit.fashionwebsite.entity.User;
-import iuh.fit.fashionwebsite.exception.UnauthenticatedException;
+import iuh.fit.fashionwebsite.exception.user.UnauthenticatedException;
 import iuh.fit.fashionwebsite.exception.user.UserNotFoundException;
 import iuh.fit.fashionwebsite.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -27,13 +27,11 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.CollectionUtils;
 
 import java.text.ParseException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
-import java.util.stream.Collectors;
 
 /*
  * @description
