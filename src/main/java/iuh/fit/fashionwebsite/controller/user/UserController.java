@@ -58,6 +58,7 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
+
     public ApiResponse<UserResponse> getUserById(@PathVariable Long id) {
         return ApiResponse.<UserResponse>builder()
                 .message("Fetched user details successfully")
