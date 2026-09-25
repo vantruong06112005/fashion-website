@@ -54,31 +54,24 @@ public class AuthenticationService {
      */
 
     public AuthenticationResponse authenticate(AuthenticationRequest request) {
-
         // Tìm user theo username
         var user = userRepository.findByUsername(request.getUsername()).orElseThrow(UserNotFoundException::new);
-
         // BCrypt dùng để so sánh mật khẩu đã mã hóa
         PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(10);
-
         // So sánh mật khẩu người dùng nhập với mật khẩu trong database
         boolean isMatch = passwordEncoder.matches(request.getPassword_hash(), user.getPasswordHash());
-
         // Sai mật khẩu thì ném exception
         if (!isMatch) {
             throw new UnauthenticatedException();
         }
-
         // Tạo JWT Token nếu đăng nhập thành công
         var token = generateToken(user);
-
         // Trả về kết quả xác thực
         return AuthenticationResponse.builder().token(token).authenticated(true).build();
     }
     /**
      * Kiểm tra tính hợp lệ của JWT Token
      */
-
     public IntrospectResponse introspect(IntrospectRequest request) {
         var token = request.getToken();
         boolean isValid = false;
@@ -89,7 +82,6 @@ public class AuthenticationService {
                 if (token.startsWith("Bearer ")) {
                     token = token.substring(7).trim();
                 }
-
                 // Tạo đối tượng dùng để xác thực chữ ký của JWT
                 JWSVerifier verifier = new MACVerifier(SINGER_KEY.getBytes());
 
@@ -114,10 +106,8 @@ public class AuthenticationService {
     }
 
     private String generateToken(User user) {
-
         // Khai báo thuật toán ký HS512
         JWSHeader header = new JWSHeader(JWSAlgorithm.HS512);
-
         // Khai báo các thông tin (claims) của JWT
         JWTClaimsSet jwtClaimsSet = new JWTClaimsSet.Builder()
                 // Người sở hữu token
@@ -133,10 +123,8 @@ public class AuthenticationService {
                 .build();
         // Chuyển Claims thành Payload
         Payload payload = new Payload(jwtClaimsSet.toJSONObject());
-
         // Tạo JWT Object gồm Header và Payload
         JWSObject jwsObject = new JWSObject(header, payload);
-
         try {
 
             // Ký JWT bằng khóa bí mật

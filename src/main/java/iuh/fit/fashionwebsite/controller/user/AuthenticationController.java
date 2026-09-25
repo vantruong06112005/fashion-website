@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/auth")
 @FieldDefaults(level = lombok.AccessLevel.PRIVATE)
+@lombok.extern.slf4j.Slf4j
 public class AuthenticationController {
     @Autowired
     AuthenticationService authenticationService;
@@ -34,9 +35,10 @@ public class AuthenticationController {
     @PostMapping("/login")
     ApiResponse<AuthenticationResponse> login(@RequestBody AuthenticationRequest request) {
         AuthenticationResponse isAuthenticated = authenticationService.authenticate(request);
-
+        log.info("LOGIN username = {}", request.getUsername());
+        log.info("LOGIN password = {}", request.getPassword_hash());
         return ApiResponse.<AuthenticationResponse>builder()
-                .code(AuthResponseCode.INTROSPECT_SUCCESS.getCode())
+                .code(AuthResponseCode.LOGIN_SUCCESS.getCode())
                 .message("Login successfully")
                 .data(isAuthenticated)
                 .build();

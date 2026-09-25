@@ -94,4 +94,14 @@ class AuthenticationServiceTest {
         assertNotNull(emptyResponse);
         assertFalse(emptyResponse.isValid());
     }
+
+    @Test
+    void testJacksonDeserialization() throws Exception {
+        tools.jackson.databind.ObjectMapper mapper = new tools.jackson.databind.ObjectMapper();
+        String json = "{\"username\":\"nam01\",\"password_hash\":\"123456\"}";
+        iuh.fit.fashionwebsite.dto.request.AuthenticationRequest req = 
+            mapper.readValue(json, iuh.fit.fashionwebsite.dto.request.AuthenticationRequest.class);
+        System.out.println("DESERIALIZED USERNAME: " + req.getUsername());
+        System.out.println("DESERIALIZED PASSWORD_HASH: " + req.getPassword_hash());
+    }
 }
