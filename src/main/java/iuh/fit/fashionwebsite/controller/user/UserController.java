@@ -23,6 +23,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 
@@ -41,6 +42,7 @@ import java.util.List;
 @Slf4j
 public class UserController {
     private final UserService userService;
+
     @PostMapping
     public ApiResponse<UserResponse> createUser(@RequestBody @Valid UserCreationRequest request) {
         return ApiResponse.<UserResponse>builder()
@@ -50,6 +52,7 @@ public class UserController {
     }
 
     @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<List<UserResponse>> getAllUsers() {
         return ApiResponse.<List<UserResponse>>builder()
                 .message("Fetched all users successfully")
@@ -58,7 +61,7 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
-
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<UserResponse> getUserById(@PathVariable Long id) {
         return ApiResponse.<UserResponse>builder()
                 .message("Fetched user details successfully")
@@ -67,6 +70,7 @@ public class UserController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
     public ApiResponse<UserResponse> updateUser(@PathVariable Long id, @RequestBody @Valid UserUpdateRequest request) {
         return ApiResponse.<UserResponse>builder()
                 .message("User has been updated successfully")
@@ -75,13 +79,16 @@ public class UserController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<Void> deleteUser(@PathVariable Long id) {
         userService.deleteUser(id);
         return ApiResponse.<Void>builder()
                 .message("User has been deleted successfully")
                 .build();
     }
+
     @GetMapping("/info")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
     public ApiResponse<UserResponse> getCurrentUser() {
         return ApiResponse.<UserResponse>builder()
                 .message("Fetched current user details successfully")

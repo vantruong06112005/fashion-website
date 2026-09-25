@@ -12,7 +12,7 @@ public enum ErrorCode implements BaseErrorCode {
             "error.user_not_found",
             HttpStatus.NOT_FOUND
     ),
-
+    TOKEN_EXPIRED(401,"error.token_expired", HttpStatus.UNAUTHORIZED),
     BAD_REQUEST(
             400,
             "error.bad_request",
