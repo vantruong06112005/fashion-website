@@ -47,6 +47,7 @@ public class User extends BaseEntity {
     @Column(name = "status")
     private StatusUser status;
 
+    private String avt;
     // ====================== RELATIONSHIPS ======================
 
     @JsonIgnore

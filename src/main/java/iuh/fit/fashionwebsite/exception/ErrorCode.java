@@ -18,6 +18,16 @@ public enum ErrorCode implements BaseErrorCode {
             "error.bad_request",
             HttpStatus.BAD_REQUEST
     ),
+    INVALID_FILE(
+            400,
+            "error.invalid_file",
+            HttpStatus.BAD_REQUEST
+    ),
+    FILE_UPLOAD_FAILED(
+            500,
+            "error.file_upload_failed",
+            HttpStatus.INTERNAL_SERVER_ERROR
+    ),
 
     DUPLICATE_EMAIL(
             400,

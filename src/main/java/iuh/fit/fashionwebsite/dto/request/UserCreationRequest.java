@@ -36,4 +36,6 @@ public class UserCreationRequest {
     @Size(max = 20,
             message = "Phone must be less than 20 characters")
     private String phone;
+
+    private String avt;
 }

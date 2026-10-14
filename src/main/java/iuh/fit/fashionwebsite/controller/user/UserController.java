@@ -23,9 +23,12 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import iuh.fit.fashionwebsite.validator.anotation.ValidImageFile;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -38,16 +41,27 @@ import java.util.List;
 @RestController
 @RequestMapping("/users")
 @RequiredArgsConstructor
-
+@Validated
 @Slf4j
 public class UserController {
     private final UserService userService;
 
-    @PostMapping
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public ApiResponse<UserResponse> createUser(@RequestBody @Valid UserCreationRequest request) {
         return ApiResponse.<UserResponse>builder()
                 .message("User has been created successfully")
-                .data(userService.createUser(request))
+                .data(userService.createUser(request, null))
+                .build();
+    }
+
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<UserResponse> createUserMultipart(
+            @ModelAttribute @Valid UserCreationRequest request,
+            @RequestParam(value = "file", required = false) @ValidImageFile MultipartFile file
+    ) {
+        return ApiResponse.<UserResponse>builder()
+                .message("User has been created successfully")
+                .data(userService.createUser(request, file))
                 .build();
     }
 
@@ -69,12 +83,28 @@ public class UserController {
                 .build();
     }
 
-    @PutMapping("/{id}")
+    @PutMapping(value = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
-    public ApiResponse<UserResponse> updateUser(@PathVariable Long id, @RequestBody @Valid UserUpdateRequest request) {
+    public ApiResponse<UserResponse> updateUser(
+            @PathVariable Long id,
+            @RequestBody @Valid UserUpdateRequest request
+    ) {
         return ApiResponse.<UserResponse>builder()
                 .message("User has been updated successfully")
-                .data(userService.updateUser(id, request))
+                .data(userService.updateUser(id, request, null))
+                .build();
+    }
+
+    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    public ApiResponse<UserResponse> updateUserMultipart(
+            @PathVariable Long id,
+            @ModelAttribute @Valid UserUpdateRequest request,
+            @RequestParam(value = "file", required = false) @ValidImageFile MultipartFile file
+    ) {
+        return ApiResponse.<UserResponse>builder()
+                .message("User has been updated successfully")
+                .data(userService.updateUser(id, request, file))
                 .build();
     }
 
@@ -93,6 +123,52 @@ public class UserController {
         return ApiResponse.<UserResponse>builder()
                 .message("Fetched current user details successfully")
                 .data(userService.getCurrentUser())
+                .build();
+    }
+
+    @PutMapping(value = "/info", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    public ApiResponse<UserResponse> updateCurrentUserInfo(
+            @RequestBody @Valid UserUpdateRequest request
+    ) {
+        return ApiResponse.<UserResponse>builder()
+                .message("Current user profile updated successfully")
+                .data(userService.updateCurrentUser(request, null))
+                .build();
+    }
+
+    @PutMapping(value = "/info", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    public ApiResponse<UserResponse> updateCurrentUserMultipart(
+            @ModelAttribute @Valid UserUpdateRequest request,
+            @RequestParam(value = "file", required = false) @ValidImageFile MultipartFile file
+    ) {
+        return ApiResponse.<UserResponse>builder()
+                .message("Current user profile updated successfully")
+                .data(userService.updateCurrentUser(request, file))
+                .build();
+    }
+
+    @PostMapping(value = "/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    public ApiResponse<UserResponse> uploadCurrentAvatar(
+            @RequestParam("file") @ValidImageFile(nullable = false) MultipartFile file
+    ) {
+        return ApiResponse.<UserResponse>builder()
+                .message("Avatar uploaded successfully")
+                .data(userService.uploadCurrentAvatar(file))
+                .build();
+    }
+
+    @PostMapping(value = "/{id}/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    public ApiResponse<UserResponse> uploadAvatar(
+            @PathVariable Long id,
+            @RequestParam("file") @ValidImageFile(nullable = false) MultipartFile file
+    ) {
+        return ApiResponse.<UserResponse>builder()
+                .message("Avatar uploaded successfully")
+                .data(userService.uploadAvatar(id, file))
                 .build();
     }
 }

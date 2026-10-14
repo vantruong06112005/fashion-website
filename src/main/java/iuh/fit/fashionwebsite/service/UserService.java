@@ -23,6 +23,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 
@@ -35,9 +36,13 @@ public class UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
+    private final CloudinaryService cloudinaryService;
 
     public UserResponse createUser(UserCreationRequest request) {
+        return createUser(request, null);
+    }
 
+    public UserResponse createUser(UserCreationRequest request, MultipartFile file) {
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new AppException(ErrorCode.DUPLICATE_USERNAME);
         }
@@ -54,28 +59,43 @@ public class UserService {
 
         user.setRole(RoleUser.CUSTOMER);
 
+        if (file != null && !file.isEmpty()) {
+            String avatarUrl = cloudinaryService.uploadImage(file, "fashion_website/avatars");
+            user.setAvt(avatarUrl);
+        } else if (request.getAvt() != null && !request.getAvt().isBlank()) {
+            user.setAvt(request.getAvt());
+        }
+
         return userMapper.toUserResponse(
                 userRepository.save(user)
         );
     }
 
     public UserResponse updateUser(Long id, UserUpdateRequest request) {
+        return updateUser(id, request, null);
+    }
 
+    public UserResponse updateUser(Long id, UserUpdateRequest request, MultipartFile file) {
         User user = userRepository.findById(id)
                 .orElseThrow(UserNotFoundException::new);
 
         if (request.getEmail() != null
                 && !request.getEmail().equals(user.getEmail())
                 && userRepository.existsByEmail(request.getEmail())) {
-
             throw new AppException(ErrorCode.DUPLICATE_EMAIL);
         }
 
         userMapper.updateUser(user, request);
 
+        if (file != null && !file.isEmpty()) {
+            String avatarUrl = cloudinaryService.uploadImage(file, "fashion_website/avatars");
+            user.setAvt(avatarUrl);
+        } else if (request.getAvt() != null && !request.getAvt().isBlank()) {
+            user.setAvt(request.getAvt());
+        }
+
         if (request.getPassword() != null
                 && !request.getPassword().isBlank()) {
-
             user.setPasswordHash(
                     passwordEncoder.encode(request.getPassword())
             );
@@ -128,5 +148,42 @@ public class UserService {
                 .orElseThrow(UserNotFoundException::new);
 
         return userMapper.toUserResponse(user);
+    }
+
+    public UserResponse updateCurrentUser(UserUpdateRequest request, MultipartFile file) {
+        String username = SecurityContextHolder
+                .getContext()
+                .getAuthentication()
+                .getName();
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(UserNotFoundException::new);
+
+        return updateUser(user.getId(), request, file);
+    }
+
+    public UserResponse uploadAvatar(Long id, MultipartFile file) {
+        User user = userRepository.findById(id)
+                .orElseThrow(UserNotFoundException::new);
+
+        String avatarUrl = cloudinaryService.uploadImage(file, "fashion_website/avatars");
+        user.setAvt(avatarUrl);
+
+        return userMapper.toUserResponse(userRepository.save(user));
+    }
+
+    public UserResponse uploadCurrentAvatar(MultipartFile file) {
+        String username = SecurityContextHolder
+                .getContext()
+                .getAuthentication()
+                .getName();
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(UserNotFoundException::new);
+
+        String avatarUrl = cloudinaryService.uploadImage(file, "fashion_website/avatars");
+        user.setAvt(avatarUrl);
+
+        return userMapper.toUserResponse(userRepository.save(user));
     }
 }
