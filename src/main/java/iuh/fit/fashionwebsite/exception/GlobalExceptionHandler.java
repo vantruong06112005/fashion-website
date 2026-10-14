@@ -102,6 +102,19 @@ public class GlobalExceptionHandler {
                         .build());
     }
 
+    // Lỗi liên quan đến upload file / multipart
+    @ExceptionHandler(org.springframework.web.multipart.MultipartException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMultipartException(
+            org.springframework.web.multipart.MultipartException exception) {
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.<Void>builder()
+                        .code(400)
+                        .message(exception.getMessage() != null ? exception.getMessage() : "Yêu cầu phải là multipart/form-data và có part tên là 'file'")
+                        .build());
+    }
+
     // Các exception chưa xử lý
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleException(
@@ -113,7 +126,7 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.<Void>builder()
                         .code(500)
-                        .message("Internal server error")
+                        .message(exception.getMessage() != null ? exception.getMessage() : "Internal server error")
                         .build());
     }
 }
