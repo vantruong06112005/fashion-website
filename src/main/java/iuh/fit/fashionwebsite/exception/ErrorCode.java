@@ -6,6 +6,11 @@ import org.springframework.http.HttpStatusCode;
 
 @Getter
 public enum ErrorCode implements BaseErrorCode {
+    ORDER_NOT_FOUND(
+            404,
+            "error.order_not_found",
+            HttpStatus.NOT_FOUND
+    ),
 
     USER_NOT_FOUND(
             404,
