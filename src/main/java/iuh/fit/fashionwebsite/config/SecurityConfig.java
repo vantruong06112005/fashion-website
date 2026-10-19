@@ -17,6 +17,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -33,11 +35,13 @@ public class SecurityConfig {
     public SecurityConfig(CustomJwtDecoder customJwtDecoder) {
         this.customJwtDecoder = customJwtDecoder;
     }
+
     // Mã hóa password
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder(10);
     }
+
     // Cấu hình Spring Security
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -53,17 +57,31 @@ public class SecurityConfig {
                 );
         // Cấu hình Spring Security để xác thực JWT
         // đăng ký JwtDecoder và JwtAuthenticationConverter
-        http.oauth2ResourceServer(oauth2->
-
-                oauth2.jwt(jwtConfigurer -> jwtConfigurer
+        http.oauth2ResourceServer(oauth2 -> oauth2
+                // Bỏ qua header Bearer ở /auth/** (login, refresh, logout, introspect)
+                // để token cũ/hết hạn còn sót trong header không làm request bị 401
+                .bearerTokenResolver(bearerTokenResolver())
+                .jwt(jwtConfigurer -> jwtConfigurer
                         .decoder(customJwtDecoder)
-                        .jwtAuthenticationConverter(jwtAuthenticationConverter())
-                ));
+                        .jwtAuthenticationConverter(jwtAuthenticationConverter())));
         return http.build();
     }
+
+    // Chỉ đọc access token từ header Authorization với các API cần xác thực
+    BearerTokenResolver bearerTokenResolver() {
+        DefaultBearerTokenResolver delegate = new DefaultBearerTokenResolver();
+        return request -> {
+            String path = request.getRequestURI().substring(request.getContextPath().length());
+            if (path.startsWith("/auth/")) {
+                return null;
+            }
+            return delegate.resolve(request);
+        };
+    }
+
     // dùng để chuyển đổi JWT thành Authentication object
     @Bean
-    JwtAuthenticationConverter jwtAuthenticationConverter(){
+    JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtGrantedAuthoritiesConverter jwtGrantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
         jwtGrantedAuthoritiesConverter.setAuthorityPrefix("ROLE_");
         JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
@@ -82,8 +100,7 @@ public class SecurityConfig {
         // Cho phép các HTTP method thường dùng trong REST API
         // OPTIONS được dùng cho request kiểm tra CORS (preflight)
         configuration.setAllowedMethods(
-                List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
-        );
+                List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
 
         // Cho phép tất cả HTTP header
         // Ví dụ: Content-Type, Authorization,...
@@ -93,8 +110,7 @@ public class SecurityConfig {
         configuration.setAllowCredentials(true);
 
         // Tạo nơi lưu và áp dụng cấu hình CORS theo URL
-        UrlBasedCorsConfigurationSource source =
-                new UrlBasedCorsConfigurationSource();
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
 
         // Áp dụng cấu hình CORS cho tất cả các API
         // /** = tất cả đường dẫn
