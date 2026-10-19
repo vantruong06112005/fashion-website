@@ -48,6 +48,14 @@ public class User extends BaseEntity {
     private StatusUser status;
 
     private String avt;
+
+    /**
+     * Phiên bản token. Tăng lên mỗi khi đổi mật khẩu để vô hiệu hoá
+     * toàn bộ access/refresh token đã cấp trước đó.
+     */
+    @Column(name = "token_version")
+    @Builder.Default
+    private Integer tokenVersion = 0;
     // ====================== RELATIONSHIPS ======================
 
     @JsonIgnore
