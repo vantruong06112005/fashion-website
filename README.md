@@ -8,7 +8,7 @@ Hệ thống backend cho website bán quần áo, xây dựng theo mô hình **l
 
 - **Java** + **Spring Boot**
 - **Spring Data JPA** — thao tác với database
-- **Spring Security** (+ JWT) — xác thực, phân quyền
+- **Spring Security** (+ JWT Stateless OAuth2 Resource Server) — xác thực, phân quyền (Chi tiết xem tại [SECURITY.md](SECURITY.md))
 - **MapStruct** — mapping giữa Entity và DTO
 - **Lombok** — giảm boilerplate code (getter/setter, constructor...)
 - **Maven** — quản lý dependency

@@ -100,10 +100,6 @@ public class UserService {
             user.setPasswordHash(
                     passwordEncoder.encode(request.getPassword())
             );
-            // Đổi mật khẩu => vô hiệu hoá toàn bộ token cũ
-            user.setTokenVersion(
-                    (user.getTokenVersion() == null ? 0 : user.getTokenVersion()) + 1
-            );
         }
 
         return userMapper.toUserResponse(

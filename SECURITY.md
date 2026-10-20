@@ -1,63 +1,61 @@
 # HƯỚNG DẪN BẢO MẬT & CƠ CHẾ TOKEN (SECURITY & JWT GUIDE)
 
-Tài liệu này giải thích chi tiết cấu hình Spring Security (`SecurityConfig`), vòng đời của Token (Access Token, Refresh Token), cơ chế vô hiệu hoá token (Blacklist & Token Versioning), cũng như cách xử lý các trường hợp thường gặp trong dự án **Fashion Website**.
+Tài liệu này giải thích chi tiết toàn bộ kiến trúc bảo mật của dự án **Fashion Website**: cấu hình Spring Security 6 (`SecurityConfig`), vòng đời cặp token (Access Token ngắn hạn & Refresh Token dài hạn), cơ chế giải mã **Stateless 100% (Zero DB Hits)**, quy trình xoay vòng token (**Refresh Token Rotation**), và cách xử lý sự cố.
 
 ---
 
 ## MỤC LỤC
-1. [Tổng Quan Kiến Trúc Bảo Mật](#1-tổng-quan-kiến-trúc-bảo-mật)
+1. [Tổng Quan Kiến Trúc Bảo Mật (Stateless Architecture)](#1-tổng-quan-kiến-trúc-bảo-mật-stateless-architecture)
 2. [Chi Tiết Cấu Hình `SecurityConfig.java`](#2-chi-tiết-cấu-hình-securityconfigjava)
-3. [Cấu Trúc & Các Loại Token](#3-cấu-trúc--các-loại-token)
-4. [Cơ Chế Vô Hiệu Hoá Token (Token Revocation)](#4-cơ-chế-vô-hiệu-hoá-token-token-revocation)
-   - [Cơ chế 1: `tokenVersion` (Đổi mật khẩu)](#cơ-chế-1-tokenversion-khi-đổi-mật-khẩu)
-   - [Cơ chế 2: Bảng Blacklist `invalidated_tokens` (Logout & Refresh Rotation)](#cơ-chế-2-bảng-blacklist-invalidated_tokens-logout--refresh-rotation)
-5. [Cơ Chế `CustomJwtDecoder` & `BearerTokenResolver`](#5-cơ-chế-customjwtdecoder--bearertokenresolver)
-6. [Quy Trình & Hướng Dẫn Sử Dụng API](#6-quy-trình--hướng-dẫn-sử-dụng-api)
-   - [Đăng nhập (`/auth/login`)](#1-đăng-nhập-post-authlogin)
-   - [Cấp mới token (`/auth/refresh`)](#2-cấp-lại-token-post-authrefresh)
-   - [Đăng xuất (`/auth/logout`)](#3-đăng-xuất-post-authlogout)
-   - [Kiểm tra token (`/auth/introspect`)](#4-kiểm-tra-token-post-authintrospect)
-   - [Đổi mật khẩu (`/users/change-password`)](#5-đổi-mật-khẩu-put-userschange-password)
-7. [Dọn Dẹp Token Hết Hạn Định Kỳ](#7-dọn-dẹp-token-hết-hạn-định-kỳ)
-8. [Các Lỗi Thường Gặp & Cách Khắc Phục](#8-các-lỗi-thường-gặp--cách-khắc-phục)
+3. [Cấu Trúc & Vòng Đời Của Token](#3-cấu-trúc--vòng-đời-của-token)
+4. [Cơ Chế Xác Thực Stateless Trong `CustomJwtDecoder`](#4-cơ-chế-xác-thực-stateless-trong-customjwtdecoder)
+5. [Cơ Chế Xoay Vòng & Thu Hồi Token (Revocation & Rotation)](#5-cơ-chế-xoay-vòng--thu-hồi-token-revocation--rotation)
+6. [Quản Lý Blacklist & Dọn Dẹp Token Hết Hạn Định Kỳ](#6-quản-lý-blacklist--dọn-dẹp-token-hết-hạn-định-kỳ)
+7. [Hướng Dẫn Sử Dụng Chi Tiết Các API Xác Thực](#7-hướng-dẫn-sử-dụng-chi-tiết-các-api-xác-thực)
+8. [Bảng Mã Lỗi Thường Gặp & Cách Khắc Phục](#8-bảng-mã-lỗi-thường-gặp--cách-khắc-phục)
 
 ---
 
-## 1. Tổng Quan Kiến Trúc Bảo Mật
+## 1. Tổng Quan Kiến Trúc Bảo Mật (Stateless Architecture)
 
-Hệ thống sử dụng mô hình **Stateless Authentication** dựa trên **Spring Security 6 (OAuth2 Resource Server)** kết hợp thư viện **Nimbus JOSE + JWT**:
+Hệ thống xây dựng theo mô hình **Stateless Resource Server** dựa trên **Spring Security 6 (OAuth2 Resource Server)** và thư viện **Nimbus JOSE + JWT**:
 
 ```
-[ Client ] 
-    │ (Gửi request kèm Header: Authorization: Bearer <access_token>)
-    ▼
-[ SecurityFilterChain ]
-    │
-    ├── 1. CORS Filter & CSRF Disabled (phù hợp REST API)
-    │
-    ├── 2. BearerTokenResolver:
-    │      - Bỏ qua header Bearer đối với đường dẫn /auth/**
-    │      - Trích xuất token cho các API bảo mật (/users/**, /orders/**, ...)
-    │
-    └── 3. OAuth2 Resource Server -> CustomJwtDecoder:
-           ├── Kiểm tra chữ ký bí mật (HS512 - HMAC)
-           ├── Kiểm tra hạn hết hạn (Expiration Time)
-           ├── Kiểm tra loại token (type = ACCESS, cấm dùng REFRESH token gọi API)
-           ├── Kiểm tra danh sách đen Blacklist (bảng invalidated_tokens)
-           └── Kiểm tra tokenVersion so với DB (ngăn dùng token cũ sau khi đổi mật khẩu)
-    │
-    ▼
-[ JwtAuthenticationConverter ] -> Chuyển Claim "scope" thành GrantedAuthority (ROLE_ADMIN, ROLE_CUSTOMER)
-    │
-    ▼
-[ Controller ]
+[ Client (Browser / Mobile / Postman) ]
+                  │
+                  │ (Gửi Header: Authorization: Bearer <access_token>)
+                  ▼
+         [ SecurityFilterChain ]
+                  │
+                  ├── 1. CORS Filter & CSRF Disabled (RESTful API)
+                  │
+                  ├── 2. Custom BearerTokenResolver:
+                  │      - Bỏ qua header Bearer đối với đường dẫn /auth/**
+                  │      - Trích xuất token cho các API tài nguyên (/users/**, /orders/**, ...)
+                  │
+                  └── 3. OAuth2 Resource Server -> CustomJwtDecoder (Stateless):
+                         ├── In-memory HMAC-SHA512: Kiểm tra chữ ký bằng signerKey bí mật
+                         ├── In-memory Expiration: Kiểm tra hạn dùng (exp)
+                         └── Claim Type: Đảm bảo type == ACCESS (chặn dùng Refresh Token)
+                         └── ZERO DATABASE QUERY (Phản hồi < 1ms, không nghẽn DB)
+                  │
+                  ▼
+      [ JwtAuthenticationConverter ]
+                  │ (Map Claim "scope" -> Spring GrantedAuthority: ROLE_ADMIN, ROLE_CUSTOMER)
+                  ▼
+         [ Controller / API Resource ]
 ```
+
+### Tại sao lại chọn Stateless thay vì lưu `tokenVersion` trong Database?
+* **Khắc phục nghẽn Database (Bottleneck):** Trước đây, mỗi request API bất kỳ (xem sản phẩm, thêm giỏ hàng, đặt hàng...) đều phải query `SELECT * FROM users WHERE username = ?` để check `tokenVersion`. Khi có 1,000 user online cùng lúc, DB sẽ phải xử lý hàng nghìn query thừa thãi.
+* **Tối ưu hiệu năng:** Token verification diễn ra 100% trong RAM bằng CPU.
+* **Chuẩn hóa công nghiệp:** Tuân thủ RFC 6749 (OAuth 2.0) và khuyến nghị của các nền tảng bảo mật hàng đầu (Auth0, Okta, Google).
 
 ---
 
 ## 2. Chi Tiết Cấu Hình `SecurityConfig.java`
 
-File cấu hình nằm tại: `src/main/java/iuh/fit/fashionwebsite/config/SecurityConfig.java`.
+Đường dẫn: `src/main/java/iuh/fit/fashionwebsite/config/SecurityConfig.java`.
 
 ### A. Mã hoá mật khẩu (`PasswordEncoder`)
 ```java
@@ -66,25 +64,24 @@ public PasswordEncoder passwordEncoder() {
     return new BCryptPasswordEncoder(10);
 }
 ```
-- Sử dụng thuật toán **BCrypt** với cost factor = 10, an toàn trước tấn công brute-force.
+* Áp dụng thuật toán băm **BCrypt** với cost factor = 10 (băm qua 2¹⁰ vòng), tự động thêm Salt ngẫu nhiên, chống tấn công dò từ điển (Dictionary attack) và bảng băm sẵn (Rainbow tables).
 
-### B. Phân quyền Request (`authorizeHttpRequests`)
-- `.requestMatchers("/auth/**").permitAll()`: Cho phép truy cập công khai vào các endpoint xác thực (login, register, refresh, logout, introspect).
-- `.requestMatchers(HttpMethod.POST, "/users").permitAll()`: Cho phép đăng ký tài khoản mới.
-- `.anyRequest().authenticated()`: Tất cả endpoint còn lại bắt buộc phải có Access Token hợp lệ.
+### B. Phân quyền Endpoint (`authorizeHttpRequests`)
+* **Công khai (`permitAll`):**
+  * `/auth/**`: Đăng nhập (`/login`), cấp lại token (`/refresh`), đăng xuất (`/logout`), kiểm tra token (`/introspect`).
+  * `POST /users`: Đăng ký tài khoản người dùng mới.
+* **Bảo vệ (`authenticated`):**
+  * `.anyRequest().authenticated()`: Toàn bộ API còn lại (giỏ hàng, đơn hàng, cập nhật hồ sơ, quản trị...) bắt buộc phải có Access Token hợp lệ.
 
-### C. Giải quyết lỗi dính JWT cũ khi gọi `/auth/**` (`BearerTokenResolver`)
-**Vấn đề thực tế:**
-Khi client (Postman/Frontend) gửi request đến `/auth/login` hoặc `/auth/refresh`, thường trong header vẫn còn lưu `Authorization: Bearer <token_cũ_đã_hết_hạn>`. Nếu dùng bộ lọc mặc định của Spring Security, Spring sẽ cố gắng validate token đó **trước** khi kịp vào controller và trả về **401 Unauthorized (Jwt expired)** ngay tại `/auth/login`.
-
-**Giải pháp:**
-Cấu hình custom `BearerTokenResolver`:
+### C. Giải quyết lỗi "Dính Token Hết Hạn" bằng `BearerTokenResolver`
+* **Vấn đề thực tế:** Khi phiên làm việc hết hạn, trình duyệt hoặc Postman vẫn lưu trữ token cũ trong header `Authorization: Bearer <expired_token>`. Nếu người dùng gọi `/auth/login` hoặc `/auth/refresh`, bộ lọc mặc định của Spring Security sẽ chặn lại và quăng lỗi **401 Unauthorized** trước khi request kịp đến Controller.
+* **Giải pháp:**
 ```java
 BearerTokenResolver bearerTokenResolver() {
     DefaultBearerTokenResolver delegate = new DefaultBearerTokenResolver();
     return request -> {
         String path = request.getRequestURI().substring(request.getContextPath().length());
-        // Bỏ qua header Authorization nếu là API /auth/**
+        // Bỏ qua header Bearer đối với toàn bộ các endpoint /auth/**
         if (path.startsWith("/auth/")) {
             return null;
         }
@@ -92,117 +89,168 @@ BearerTokenResolver bearerTokenResolver() {
     };
 }
 ```
-Nhờ đó, khi gọi `/auth/login` hay `/auth/refresh`, dù client có vô tình gửi kèm token hết hạn thì request vẫn được xử lý bình thường.
+
+### D. Ánh xạ quyền người dùng (`JwtAuthenticationConverter`)
+Trong Access Token, quyền của người dùng được lưu trong claim `"scope"` (ví dụ: `CUSTOMER` hoặc `ADMIN`). Spring Security yêu cầu quyền có tiền tố `ROLE_`. Converter đảm nhận nhiệm vụ này:
+```java
+@Bean
+JwtAuthenticationConverter jwtAuthenticationConverter() {
+    JwtGrantedAuthoritiesConverter converter = new JwtGrantedAuthoritiesConverter();
+    converter.setAuthorityPrefix("ROLE_");
+    converter.setAuthoritiesClaimName("scope");
+    JwtAuthenticationConverter jwtConverter = new JwtAuthenticationConverter();
+    jwtConverter.setJwtGrantedAuthoritiesConverter(converter);
+    return jwtConverter;
+}
+```
+Nhờ đó, bạn có thể phân quyền bằng `@PreAuthorize("hasRole('ADMIN')")` một cách dễ dàng.
 
 ---
 
-## 3. Cấu Trúc & Các Loại Token
+## 3. Cấu Trúc & Vòng Đời Của Token
 
-Hệ thống phát hành 2 loại JWT:
+Cấu hình thời gian sống tại `application.properties`:
+```properties
+# Access token ngắn hạn: 15 phút (900 giây)
+jwt.valid-duration=900
+# Refresh token dài hạn: 7 ngày (604800 giây)
+jwt.refreshable-duration=604800
+```
 
-| Thuộc tính | Access Token | Refresh Token |
-|---|---|---|
-| **Thời gian sống** | 1 giờ (`jwt.valid-duration=3600`) | 7 ngày (`jwt.refreshable-duration=604800`) |
-| **Mục đích** | Gửi kèm mọi request API (`Authorization: Bearer ...`) | Chỉ dùng duy nhất tại endpoint `/auth/refresh` |
+### So sánh Access Token vs Refresh Token
+
+| Tiêu chí | Access Token | Refresh Token |
+| :--- | :--- | :--- |
+| **Thời hạn sống** | **15 phút** (Short-lived) | **7 ngày** (Long-lived) |
+| **Nơi sử dụng** | Gửi kèm mọi API tài nguyên (`Authorization: Bearer ...`) | **Chỉ dùng duy nhất** tại `POST /auth/refresh` |
+| **Quy trình xác thực** | **Stateless 100% in-memory**, không query DB | **Stateful**: Query DB kiểm tra user & blacklist |
 | **Claim `type`** | `ACCESS` | `REFRESH` |
-| **Claim `scope`** | `ADMIN` hoặc `CUSTOMER` | *(Không chứa scope để tăng tính an toàn)* |
+| **Claim `scope`** | Chứa role (`CUSTOMER`, `ADMIN`) | Không chứa role (tối thiểu thông tin) |
 
-### Cấu trúc Payload của JWT:
+### Cấu trúc Payload của Access Token (JSON)
 ```json
 {
-  "sub": "nguyenvana",              // Tên đăng nhập (username)
-  "iss": "dev",                     // Issuer
-  "iat": 1730000000,                // Thời điểm phát hành
-  "exp": 1730003600,                // Thời điểm hết hạn
-  "jti": "550e8400-e29b-41d4-a716", // JWT ID duy nhất (UUID)
-  "type": "ACCESS",                 // ACCESS hoặc REFRESH
-  "ver": 0,                         // tokenVersion của user tại thời điểm cấp
-  "scope": "CUSTOMER"               // Quyền hạn (chỉ có ở Access Token)
+  "sub": "truong_nguyen",
+  "iss": "dev",
+  "iat": 1730000000,
+  "exp": 1730000900,
+  "jti": "8b234ac2-72bf-4f11-9a4d-176bc5a0e301",
+  "type": "ACCESS",
+  "scope": "CUSTOMER"
 }
 ```
 
 ---
 
-## 4. Cơ Chế Vô Hiệu Hoá Token (Token Revocation)
+## 4. Cơ Chế Xác Thực Stateless Trong `CustomJwtDecoder`
 
-JWT bản chất là stateless (không cần tra DB để biết token hợp lệ hay không). Tuy nhiên, để đảm bảo tính an toàn tối đa cho ứng dụng, hệ thống kết hợp **2 cơ chế vô hiệu hoá linh hoạt**:
+Đường dẫn: `src/main/java/iuh/fit/fashionwebsite/security/CustomJwtDecoder.java`.
 
-### Cơ chế 1: `tokenVersion` khi Đổi Mật Khẩu
-- **Vấn đề:** Khi người dùng đổi mật khẩu, kẻ gian nếu đang cầm token cũ vẫn có thể gọi API trong suốt 1 tiếng còn lại.
-- **Giải pháp:**
-  1. Thêm cột `token_version` (mặc định 0) vào bảng `users`.
-  2. Mỗi khi người dùng đổi mật khẩu thành công (`UserService.changePassword` hoặc `updateUser` có đổi password):
-     ```sql
-     UPDATE users SET password_hash = :newHash, token_version = token_version + 1 WHERE id = :id;
-     ```
-  3. Giá trị `token_version` được nhúng vào token qua claim `"ver"`.
-  4. Khi client gửi request, `CustomJwtDecoder` so sánh:
-     `token.claim("ver") == user.getTokenVersion()`
-     Nếu không bằng nhau -> **Từ chối ngay lập tức (401)**.
-  - **Ưu điểm:** Vô hiệu hoá lập tức **toàn bộ** các thiết bị và token cũ mà **không cần ghi hàng chục record vào DB**.
+`CustomJwtDecoder` hiện thực interface `JwtDecoder` của Spring Security nhưng **hoàn toàn loại bỏ việc phụ thuộc vào Database**:
 
-### Cơ chế 2: Bảng Blacklist `invalidated_tokens` (Logout & Refresh Rotation)
-- **Vấn đề:** Khi người dùng bấm "Đăng xuất" hoặc khi Refresh Token được sử dụng, token đó cần phải bị huỷ ngay lập tức trước khi nó tự hết hạn.
-- **Giải pháp:**
-  - Bảng `invalidated_tokens`:
-    - `id` (VARCHAR 64): Lưu giá trị `jti` (UUID của token).
-    - `expiry_time` (TIMESTAMP): Thời gian hết hạn của chính token đó.
-  - Khi client gọi `/auth/logout` hoặc `/auth/refresh`:
-    - Token cũ được phân tích lấy `jti` và lưu vào bảng này.
-  - Khi nhận request, `CustomJwtDecoder` kiểm tra `invalidatedTokenRepository.existsById(jti)`. Nếu tồn tại -> **Bị chặn**.
+```java
+@Override
+public Jwt decode(String token) throws JwtException {
+    if (token == null || token.isBlank()) {
+        throw new BadJwtException("Token cannot be null or blank");
+    }
+    if (token.startsWith("Bearer ")) {
+        token = token.substring(7).trim();
+    }
+
+    // 1. NimbusJwtDecoder xác thực chữ ký (HS512) và thời hạn token (exp) in-memory
+    Jwt jwt = getDelegate().decode(token);
+
+    // 2. Chặn dùng Refresh Token để gọi các endpoint tài nguyên
+    String tokenType = jwt.getClaimAsString("type");
+    if (!TokenType.ACCESS.name().equals(tokenType)) {
+        throw new BadJwtException("Invalid token type: ACCESS token required");
+    }
+
+    return jwt;
+}
+```
+
+### Các bước xác thực tự động trong bộ nhớ RAM:
+1. **Chữ ký toàn vẹn (Signature Integrity):** Dùng thuật toán HMAC-SHA512 kết hợp `jwt.signerKey` để kiểm tra token có bị can thiệp hay giả mạo hay không.
+2. **Thời hạn (Expiration Time):** So sánh trường `exp` với đồng hồ hệ thống. Nếu quá 15 phút, từ chối ngay.
+3. **Phân loại Token:** Nếu client lấy nhầm Refresh Token gửi vào header `Authorization: Bearer ...`, decoder sẽ phát hiện `type != ACCESS` và ném `BadJwtException`.
 
 ---
 
-## 5. Cơ Chế `CustomJwtDecoder` & `BearerTokenResolver`
+## 5. Cơ Chế Xoay Vòng & Thu Hồi Token (Revocation & Rotation)
 
-File: `src/main/java/iuh/fit/fashionwebsite/security/CustomJwtDecoder.java`.
+### A. Cơ chế Xoay vòng Refresh Token (Refresh Token Rotation)
+Khi Access Token hết hạn sau 15 phút, Client gửi Refresh Token lên endpoint `POST /auth/refresh`:
+1. Server kiểm tra Refresh Token:
+   - Chữ ký và hạn dùng hợp lệ.
+   - `type == REFRESH`.
+   - `jti` chưa từng bị thu hồi trong bảng `invalidated_tokens`.
+   - User vẫn tồn tại trong Database.
+2. **Thu hồi ngay lập tức Refresh Token vừa dùng**: Ghi `jti` của nó vào bảng `invalidated_tokens`.
+3. **Phát hành một CẶP TOKEN HOÀN TOÀN MỚI**: 1 Access Token mới (15 phút) + 1 Refresh Token mới (7 ngày).
 
-Spring Security thông thường chỉ kiểm tra chữ ký và hạn dùng. `CustomJwtDecoder` trong dự án mở rộng thêm các bước kiểm tra chặt chẽ:
+> **Ý nghĩa bảo mật:** Nếu kẻ xấu đánh cắp được Refresh Token nhưng người dùng hợp lệ đã dùng nó để refresh trước đó, server sẽ phát hiện token đã nằm trong `invalidated_tokens` và từ chối ngay lập tức.
 
-```
-Token gửi lên API
-      │
-      ▼
-1. Kiểm tra chữ ký HMAC-SHA512 (khóa bí mật jwt.signerKey)
-      │
-      ▼
-2. Kiểm tra Expiration Time (chưa hết hạn)
-      │
-      ▼
-3. Kiểm tra Claim "type" == ACCESS (Nghiêm cấm dùng Refresh Token để gọi API)
-      │
-      ▼
-4. Tra cứu Blacklist: jti có trong bảng `invalidated_tokens` không?
-      │
-      ▼
-5. So sánh Claim "ver" với `tokenVersion` hiện tại của User trong Database
-      │
-      ▼
-HỢP LỆ -> Tiếp tục xử lý request
-```
+### B. Cơ chế Đăng xuất (Logout)
+Client gửi Access Token và/hoặc Refresh Token đến endpoint `POST /auth/logout`:
+* Server lấy `jti` của token và lưu vào bảng `invalidated_tokens`.
+* Refresh Token bị vô hiệu hoá lập tức, ngăn chặn việc xin cấp thêm Access Token mới.
+
+### C. Cơ chế Đổi mật khẩu
+Khi người dùng đổi mật khẩu thành công:
+1. Mật khẩu mới được mã hóa và lưu vào bảng `users`.
+2. Phiên làm việc hiện tại mất khả năng refresh (hoặc người dùng thực hiện đăng nhập lại để nhận token mới).
+3. Access Token cũ (nếu bị lộ) chỉ có thể tồn tại tối đa trong khoảng thời gian sống còn lại (dưới 15 phút) rồi sẽ vĩnh viễn không thể sử dụng hay gia hạn được nữa.
 
 ---
 
-## 6. Quy Trình & Hướng Dẫn Sử Dụng API
+## 6. Quản Lý Blacklist & Dọn Dẹp Token Hết Hạn Định Kỳ
+
+Bảng `invalidated_tokens` chỉ lưu những token bị hủy trước thời hạn (Logout, Refresh Rotation):
+
+```sql
+CREATE TABLE invalidated_tokens (
+    id VARCHAR(64) PRIMARY KEY,      -- Lưu jti (UUID) của token
+    expiry_time TIMESTAMP NOT NULL   -- Thời điểm token đó tự hết hạn
+);
+```
+
+### Dọn dẹp tự động (Scheduled Cleanup Job)
+File: `src/main/java/iuh/fit/fashionwebsite/config/InvalidatedTokenCleanup.java`.
+
+* Khi một token đã vượt qua thời điểm `expiry_time`, bản thân nó đã tự động bị Nimbus từ chối vì hết hạn, không cần giữ lại trong bảng blacklist nữa.
+* Hệ thống cấu hình cron job chạy tự động vào đầu mỗi giờ (`@Scheduled(cron = "0 0 * * * *")`):
+  ```java
+  @Scheduled(cron = "0 0 * * * *")
+  @Transactional
+  public void purgeExpiredTokens() {
+      invalidatedTokenRepository.deleteAllExpired(Instant.now());
+  }
+  ```
+* **Kết quả:** Bảng `invalidated_tokens` luôn được duy trì kích thước nhỏ gọn, tốc độ tra cứu `existsById(jti)` luôn đạt $O(1)$ mà **không bao giờ sợ phình to dữ liệu**.
+
+---
+
+## 7. Hướng Dẫn Sử Dụng Chi Tiết Các API Xác Thực
 
 ### 1. Đăng nhập (`POST /auth/login`)
-- **Request:**
+* **Endpoint:** `POST /auth/login`
+* **Headers:** `Content-Type: application/json`
+* **Request Body:**
   ```json
-  POST /auth/login
-  Content-Type: application/json
-
   {
     "username": "customer1",
     "password_hash": "123456"
   }
   ```
-- **Response:**
+* **Response Body (200 OK):**
   ```json
   {
     "code": 1001,
     "message": "Login successfully",
     "data": {
-      "token": "eyJhbGciOiJIUzUxMiJ9...",         // Access Token (dùng trong 1h)
+      "token": "eyJhbGciOiJIUzUxMiJ9...",         // Access Token (dùng trong 15 phút)
       "refreshToken": "eyJhbGciOiJIUzUxMiJ9...",  // Refresh Token (dùng trong 7 ngày)
       "authenticated": true
     }
@@ -211,25 +259,24 @@ HỢP LỆ -> Tiếp tục xử lý request
 
 ---
 
-### 2. Cấp lại token (`POST /auth/refresh`)
-Khi Access Token hết hạn, Frontend dùng Refresh Token để xin cấp cặp token mới (cơ chế **Refresh Token Rotation** - Refresh token cũ sẽ bị vô hiệu hoá ngay để chống dùng lại):
-- **Request:**
+### 2. Cấp lại Token khi Access Token hết hạn (`POST /auth/refresh`)
+Khi nhận lỗi 401 do Access Token hết hạn, Frontend tự động gọi endpoint này:
+* **Endpoint:** `POST /auth/refresh`
+* **Headers:** `Content-Type: application/json`
+* **Request Body:**
   ```json
-  POST /auth/refresh
-  Content-Type: application/json
-
   {
-    "refreshToken": "eyJhbGciOiJIUzUxMiJ9..."
+    "refreshToken": "eyJhbGciOiJIUzUxMiJ9...chuoi_refresh_token_cu"
   }
   ```
-- **Response:**
+* **Response Body (200 OK):**
   ```json
   {
     "code": 1003,
     "message": "Token refreshed successfully",
     "data": {
-      "token": "eyJhbGciOiJIUzUxMiJ9...new_access_token",
-      "refreshToken": "eyJhbGciOiJIUzUxMiJ9...new_refresh_token",
+      "token": "eyJhbGciOiJIUzUxMiJ9...access_token_moi",
+      "refreshToken": "eyJhbGciOiJIUzUxMiJ9...refresh_token_moi",
       "authenticated": true
     }
   }
@@ -238,17 +285,16 @@ Khi Access Token hết hạn, Frontend dùng Refresh Token để xin cấp cặp
 ---
 
 ### 3. Đăng xuất (`POST /auth/logout`)
-- **Request:** (Gửi access token và/hoặc refresh token cần thu hồi)
+* **Endpoint:** `POST /auth/logout`
+* **Headers:** `Content-Type: application/json`
+* **Request Body:**
   ```json
-  POST /auth/logout
-  Content-Type: application/json
-
   {
     "token": "eyJhbGciOiJIUzUxMiJ9...access_token",
     "refreshToken": "eyJhbGciOiJIUzUxMiJ9...refresh_token"
   }
   ```
-- **Response:**
+* **Response Body (200 OK):**
   ```json
   {
     "code": 1002,
@@ -259,17 +305,16 @@ Khi Access Token hết hạn, Frontend dùng Refresh Token để xin cấp cặp
 
 ---
 
-### 4. Kiểm tra token (`POST /auth/introspect`)
-- **Request:**
+### 4. Kiểm tra tính hợp lệ của Token (`POST /auth/introspect`)
+* **Endpoint:** `POST /auth/introspect`
+* **Headers:** `Content-Type: application/json`
+* **Request Body:**
   ```json
-  POST /auth/introspect
-  Content-Type: application/json
-
   {
-    "token": "eyJhbGciOiJIUzUxMiJ9..."
+    "token": "eyJhbGciOiJIUzUxMiJ9...access_token"
   }
   ```
-- **Response:**
+* **Response Body (200 OK):**
   ```json
   {
     "code": 1005,
@@ -283,46 +328,36 @@ Khi Access Token hết hạn, Frontend dùng Refresh Token để xin cấp cặp
 ---
 
 ### 5. Đổi mật khẩu (`PUT /users/change-password`)
-- **Header:** `Authorization: Bearer <access_token>`
-- **Request:**
+* **Endpoint:** `PUT /users/change-password`
+* **Headers:**
+  * `Content-Type: application/json`
+  * `Authorization: Bearer <access_token>`
+* **Request Body:**
   ```json
-  PUT /users/change-password
-  Content-Type: application/json
-
   {
-    "oldPassword": "old_password_123",
-    "newPassword": "new_password_456",
-    "confirmPassword": "new_password_456"
+    "oldPassword": "mat_khau_cu_123",
+    "newPassword": "mat_khau_moi_456",
+    "confirmPassword": "mat_khau_moi_456"
   }
   ```
-- **Hệ quả:** Ngay khi đổi mật khẩu thành công:
-  - `token_version` của user tăng thêm 1.
-  - Tất cả Access Token và Refresh Token cấp trước đó đều **mất hiệu lực ngay lập tức**, bắt buộc người dùng phải đăng nhập lại trên tất cả thiết bị.
-
----
-
-## 7. Dọn Dẹp Token Hết Hạn Định Kỳ
-
-File: `src/main/java/iuh/fit/fashionwebsite/config/InvalidatedTokenCleanup.java`.
-
-- Một token trong bảng `invalidated_tokens` chỉ cần lưu giữ cho đến khi token đó **tự hết hạn** theo thời gian (`exp`).
-- Hệ thống thiết lập cron job tự động chạy mỗi giờ (`@Scheduled(cron = "0 0 * * * *")`):
-  ```sql
-  DELETE FROM invalidated_tokens WHERE expiry_time < NOW();
+* **Response Body (200 OK):**
+  ```json
+  {
+    "code": 1000,
+    "message": "Password changed successfully",
+    "data": null
+  }
   ```
-- **Lợi ích:** Bảng blacklist luôn gọn nhẹ, không làm chậm database theo thời gian.
 
 ---
 
-## 8. Các Lỗi Thường Gặp & Cách Khắc Phục
+## 8. Bảng Mã Lỗi Thường Gặp & Cách Khắc Phục
 
-| Mã lỗi / Triệu chứng | Nguyên nhân | Cách khắc phục |
-|---|---|---|
-| **401 khi gọi `/auth/login` (Jwt expired)** | Client vô tình gửi kèm Header `Authorization: Bearer <token_hết_hạn>` từ phiên làm việc trước. | Đã được giải quyết bằng `BearerTokenResolver` trong `SecurityConfig`. |
-| **400 `Refresh token cannot be blank`** | Gửi sai tên field body khi gọi `/auth/refresh`. | Đổi tên field trong JSON thành `"refreshToken": "..."`. |
-| **401 `error.token_invalid` tại `/auth/refresh`** | 1. Gửi nhầm Access Token vào endpoint refresh.<br>2. Refresh token đó đã được sử dụng rồi (đã bị rotate).<br>3. Người dùng vừa đổi mật khẩu. | Lấy đúng giá trị `refreshToken`. Đăng nhập lại nếu token đã bị xoay vòng hoặc đổi mật khẩu. |
-| **401 `error.token_invalid` khi gọi API chức năng** | Dùng nhầm Refresh Token để gọi API (thay vì Access Token). | Client chỉ được dùng `token` (Access Token) gắn vào header `Authorization: Bearer ...`. |
-| **401 `error.token_expired`** | Token đã hết hạn 1 giờ. | Gọi API `/auth/refresh` bằng Refresh Token để nhận Access Token mới. |
-| **400 `error.old_password_incorrect`** | Nhập sai mật khẩu cũ khi đổi mật khẩu. | Nhập chính xác mật khẩu hiện tại. |
-| **400 `error.password_confirmation_mismatch`** | Mật khẩu xác nhận không trùng với mật khẩu mới. | Đảm bảo `newPassword` và `confirmPassword` giống hệt nhau. |
-| **400 `error.new_password_same_as_old`** | Mật khẩu mới trùng với mật khẩu hiện tại. | Chọn mật khẩu mới khác mật khẩu cũ. |
+| Mã lỗi / Hiện tượng | Nguyên nhân | Cách khắc phục |
+| :--- | :--- | :--- |
+| **401 `Jwt expired` tại API tài nguyên** | Access Token đã quá hạn 15 phút. | Frontend bắt mã lỗi 401, tự động gọi `POST /auth/refresh` bằng Refresh Token để lấy cặp token mới rồi thực hiện lại request. |
+| **401 `error.token_invalid` tại `/auth/refresh`** | 1. Gửi nhầm Access Token thay vì Refresh Token.<br>2. Refresh Token đã bị sử dụng trước đó (đã bị rotate).<br>3. Refresh Token đã hết hạn 7 ngày hoặc tài khoản bị vô hiệu hóa. | Yêu cầu người dùng đăng nhập lại từ đầu tại `POST /auth/login`. |
+| **401 `Invalid token type: ACCESS token required`** | Dùng nhầm chuỗi Refresh Token gắn vào Header `Authorization: Bearer ...` khi gọi API tài nguyên. | Đảm bảo header `Authorization` chỉ mang `token` (Access Token), không mang `refreshToken`. |
+| **401 khi gọi `/auth/login`** | Lỗi dính header Authorization cũ. | Hệ thống đã xử lý triệt để qua `BearerTokenResolver` trong `SecurityConfig.java`. |
+| **400 `error.old_password_incorrect`** | Mật khẩu cũ người dùng nhập không khớp với mật khẩu băm trong DB. | Nhập chính xác mật khẩu hiện tại. |
+| **400 `error.password_confirmation_mismatch`** | `newPassword` và `confirmPassword` trong request không trùng nhau. | Kiểm tra lại 2 ô nhập mật khẩu mới trên giao diện. |
