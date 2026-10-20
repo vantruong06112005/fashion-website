@@ -54,7 +54,6 @@ import java.util.UUID;
 @Slf4j // Tạo đối tượng log
 public class AuthenticationService {
     private static final String CLAIM_TYPE = "type";
-    private static final String CLAIM_VERSION = "ver";
     private static final String CLAIM_SCOPE = "scope";
 
     private final UserRepository userRepository;
@@ -135,7 +134,7 @@ public class AuthenticationService {
 
     /**
      * Xác minh token: chữ ký, hạn dùng, loại token, chưa bị thu hồi
-     * và tokenVersion còn khớp với user (đổi mật khẩu sẽ làm lệch version).
+     * và user tồn tại trong hệ thống.
      */
     @Transactional(readOnly = true)
     public SignedJWT verifyToken(String token, TokenType expectedType) {
@@ -172,11 +171,6 @@ public class AuthenticationService {
 
             User user = userRepository.findByUsername(claims.getSubject())
                     .orElseThrow(() -> new AppException(ErrorCode.TOKEN_INVALID));
-            Object tokenVersion = claims.getClaim(CLAIM_VERSION);
-            int currentVersion = Objects.requireNonNullElse(user.getTokenVersion(), 0);
-            if (!(tokenVersion instanceof Number number) || number.intValue() != currentVersion) {
-                throw new AppException(ErrorCode.TOKEN_INVALID);
-            }
 
             return signedJWT;
         } catch (ParseException | JOSEException e) {
@@ -236,9 +230,7 @@ public class AuthenticationService {
                 // ID duy nhất của token, dùng để thu hồi
                 .jwtID(UUID.randomUUID().toString())
                 // Loại token: ACCESS / REFRESH
-                .claim(CLAIM_TYPE, type.name())
-                // Phiên bản token theo user
-                .claim(CLAIM_VERSION, Objects.requireNonNullElse(user.getTokenVersion(), 0));
+                .claim(CLAIM_TYPE, type.name());
         // Chỉ access token mới mang quyền
         if (type == TokenType.ACCESS) {
             claimsBuilder.claim(CLAIM_SCOPE, buildScope(user));

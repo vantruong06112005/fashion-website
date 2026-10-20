@@ -27,7 +27,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE User u SET u.passwordHash = :passwordHash, " +
-            "u.tokenVersion = COALESCE(u.tokenVersion, 0) + 1, " +
             "u.updatedAt = CURRENT_TIMESTAMP WHERE u.id = :id")
     int updatePassword(@Param("id") Long id, @Param("passwordHash") String passwordHash);
 
