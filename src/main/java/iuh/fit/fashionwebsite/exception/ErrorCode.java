@@ -18,6 +18,7 @@ public enum ErrorCode implements BaseErrorCode {
             HttpStatus.NOT_FOUND
     ),
     TOKEN_EXPIRED(401,"error.token_expired", HttpStatus.UNAUTHORIZED),
+    TOKEN_INVALID(401, "error.token_invalid", HttpStatus.UNAUTHORIZED),
     BAD_REQUEST(
             400,
             "error.bad_request",
@@ -49,6 +50,24 @@ public enum ErrorCode implements BaseErrorCode {
     INVALID_PASSWORD(
             400,
             "error.invalid_password",
+            HttpStatus.BAD_REQUEST
+    ),
+
+    OLD_PASSWORD_INCORRECT(
+            400,
+            "error.old_password_incorrect",
+            HttpStatus.BAD_REQUEST
+    ),
+
+    PASSWORD_CONFIRMATION_MISMATCH(
+            400,
+            "error.password_confirmation_mismatch",
+            HttpStatus.BAD_REQUEST
+    ),
+
+    NEW_PASSWORD_SAME_AS_OLD(
+            400,
+            "error.new_password_same_as_old",
             HttpStatus.BAD_REQUEST
     ),
 

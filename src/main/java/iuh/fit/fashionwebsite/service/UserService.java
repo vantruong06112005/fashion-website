@@ -5,6 +5,7 @@
  */
 package iuh.fit.fashionwebsite.service;
 
+import iuh.fit.fashionwebsite.dto.request.ChangePasswordRequest;
 import iuh.fit.fashionwebsite.dto.request.UserCreationRequest;
 import iuh.fit.fashionwebsite.dto.request.UserUpdateRequest;
 import iuh.fit.fashionwebsite.dto.response.UserResponse;
@@ -99,6 +100,10 @@ public class UserService {
             user.setPasswordHash(
                     passwordEncoder.encode(request.getPassword())
             );
+            // Đổi mật khẩu => vô hiệu hoá toàn bộ token cũ
+            user.setTokenVersion(
+                    (user.getTokenVersion() == null ? 0 : user.getTokenVersion()) + 1
+            );
         }
 
         return userMapper.toUserResponse(
@@ -185,5 +190,37 @@ public class UserService {
         user.setAvt(avatarUrl);
 
         return userMapper.toUserResponse(userRepository.save(user));
+    }
+
+    /**
+     * Đổi mật khẩu cho người dùng đang đăng nhập.
+     */
+    public void changePassword(ChangePasswordRequest request) {
+        String username = SecurityContextHolder
+                .getContext()
+                .getAuthentication()
+                .getName();
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(UserNotFoundException::new);
+
+        if (!passwordEncoder.matches(request.getOldPassword(), user.getPasswordHash())) {
+            throw new AppException(ErrorCode.OLD_PASSWORD_INCORRECT);
+        }
+
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new AppException(ErrorCode.PASSWORD_CONFIRMATION_MISMATCH);
+        }
+
+        if (passwordEncoder.matches(request.getNewPassword(), user.getPasswordHash())) {
+            throw new AppException(ErrorCode.NEW_PASSWORD_SAME_AS_OLD);
+        }
+
+        userRepository.updatePassword(
+                user.getId(),
+                passwordEncoder.encode(request.getNewPassword())
+        );
+
+        log.info("User '{}' changed password successfully", username);
     }
 }

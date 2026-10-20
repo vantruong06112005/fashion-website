@@ -14,6 +14,7 @@ package iuh.fit.fashionwebsite.controller.user;
  */
 
 
+import iuh.fit.fashionwebsite.dto.request.ChangePasswordRequest;
 import iuh.fit.fashionwebsite.dto.request.UserCreationRequest;
 import iuh.fit.fashionwebsite.dto.request.UserUpdateRequest;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
@@ -146,6 +147,17 @@ public class UserController {
         return ApiResponse.<UserResponse>builder()
                 .message("Current user profile updated successfully")
                 .data(userService.updateCurrentUser(request, file))
+                .build();
+    }
+
+    @PutMapping(value = "/change-password", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    public ApiResponse<Void> changePassword(
+            @RequestBody @Valid ChangePasswordRequest request
+    ) {
+        userService.changePassword(request);
+        return ApiResponse.<Void>builder()
+                .message("Password has been changed successfully")
                 .build();
     }
 
