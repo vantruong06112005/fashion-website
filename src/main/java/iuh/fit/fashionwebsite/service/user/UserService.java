@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2026 IUH. All rights reserved.
  */
-package iuh.fit.fashionwebsite.service;
+package iuh.fit.fashionwebsite.service.user;
 
 import iuh.fit.fashionwebsite.dto.request.ChangePasswordRequest;
 import iuh.fit.fashionwebsite.dto.request.UserCreationRequest;
@@ -11,20 +11,21 @@ import iuh.fit.fashionwebsite.dto.request.UserUpdateRequest;
 import iuh.fit.fashionwebsite.dto.response.UserResponse;
 import iuh.fit.fashionwebsite.entity.User;
 import iuh.fit.fashionwebsite.enums.RoleUser;
+import iuh.fit.fashionwebsite.enums.StatusUser;
 import iuh.fit.fashionwebsite.exception.AppException;
 import iuh.fit.fashionwebsite.exception.ErrorCode;
 import iuh.fit.fashionwebsite.exception.user.UserNotFoundException;
 import iuh.fit.fashionwebsite.mapper.UserMapper;
 import iuh.fit.fashionwebsite.repository.UserRepository;
+import iuh.fit.fashionwebsite.service.cloudinary.CloudinaryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import java.time.Instant;
 import java.util.List;
 
 
@@ -41,6 +42,16 @@ public class UserService {
 
     public UserResponse createUser(UserCreationRequest request) {
         return createUser(request, null);
+    }
+    // get user hien tai
+    public User getCurrentUserEntity() {
+        String username = SecurityContextHolder
+                .getContext()
+                .getAuthentication()
+                .getName();
+
+        return userRepository.findByUsername(username)
+                .orElseThrow(UserNotFoundException::new);
     }
 
     public UserResponse createUser(UserCreationRequest request, MultipartFile file) {
@@ -59,6 +70,7 @@ public class UserService {
         );
 
         user.setRole(RoleUser.CUSTOMER);
+        user.setStatus(StatusUser.ACTIVE);
 
         if (file != null && !file.isEmpty()) {
             String avatarUrl = cloudinaryService.uploadImage(file, "fashion_website/avatars");
@@ -95,11 +107,14 @@ public class UserService {
             user.setAvt(request.getAvt());
         }
 
+        // Chỉ ADMIN đi qua đường này (PUT /users/{id}) → cho phép reset mật khẩu.
+        // Đánh dấu thời điểm đổi để vô hiệu hoá các refresh token cũ của user.
         if (request.getPassword() != null
                 && !request.getPassword().isBlank()) {
             user.setPasswordHash(
                     passwordEncoder.encode(request.getPassword())
             );
+            user.setPasswordChangedAt(Instant.now());
         }
 
         return userMapper.toUserResponse(
@@ -152,6 +167,11 @@ public class UserService {
     }
 
     public UserResponse updateCurrentUser(UserUpdateRequest request, MultipartFile file) {
+        // Người dùng tự đổi mật khẩu phải qua PUT /users/change-password (có xác minh mật khẩu cũ)
+        if (request.getPassword() != null && !request.getPassword().isBlank()) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
         String username = SecurityContextHolder
                 .getContext()
                 .getAuthentication()
@@ -212,9 +232,11 @@ public class UserService {
             throw new AppException(ErrorCode.NEW_PASSWORD_SAME_AS_OLD);
         }
 
+        // Cập nhật mật khẩu + passwordChangedAt → mọi refresh token cũ không thể dùng để /auth/refresh nữa
         userRepository.updatePassword(
                 user.getId(),
-                passwordEncoder.encode(request.getNewPassword())
+                passwordEncoder.encode(request.getNewPassword()),
+                Instant.now()
         );
 
         log.info("User '{}' changed password successfully", username);

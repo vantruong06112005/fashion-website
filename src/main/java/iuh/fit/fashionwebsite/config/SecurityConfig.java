@@ -7,6 +7,7 @@
 package iuh.fit.fashionwebsite.config;
 
 import iuh.fit.fashionwebsite.security.CustomJwtDecoder;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -32,8 +33,13 @@ import java.util.List;
 public class SecurityConfig {
     private final CustomJwtDecoder customJwtDecoder;
 
-    public SecurityConfig(CustomJwtDecoder customJwtDecoder) {
+    // Danh sách origin frontend được phép gọi API (cấu hình qua CORS_ALLOWED_ORIGINS)
+    private final List<String> allowedOrigins;
+
+    public SecurityConfig(CustomJwtDecoder customJwtDecoder,
+                          @Value("${app.cors.allowed-origins}") List<String> allowedOrigins) {
         this.customJwtDecoder = customJwtDecoder;
+        this.allowedOrigins = allowedOrigins;
     }
 
     // Mã hóa password
@@ -49,17 +55,13 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        // API xác thực & đăng ký người dùng → không cần JWT
                         .requestMatchers("/auth/**").permitAll()
-                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/users").permitAll()
                         .anyRequest().authenticated()
 
                 );
         // Cấu hình Spring Security để xác thực JWT
         // đăng ký JwtDecoder và JwtAuthenticationConverter
         http.oauth2ResourceServer(oauth2 -> oauth2
-                // Bỏ qua header Bearer ở /auth/** (login, refresh, logout, introspect)
-                // để token cũ/hết hạn còn sót trong header không làm request bị 401
                 .bearerTokenResolver(bearerTokenResolver())
                 .jwt(jwtConfigurer -> jwtConfigurer
                         .decoder(customJwtDecoder)
@@ -68,11 +70,14 @@ public class SecurityConfig {
     }
 
     // Chỉ đọc access token từ header Authorization với các API cần xác thực
+    // Giải quyết lỗi khi token hết hạn
     BearerTokenResolver bearerTokenResolver() {
         DefaultBearerTokenResolver delegate = new DefaultBearerTokenResolver();
         return request -> {
             String path = request.getRequestURI().substring(request.getContextPath().length());
             if (path.startsWith("/auth/")) {
+                // nó không có nghĩa là tự auto bỏ qua xác thực JWT,
+                // mà là Spring Security sẽ không tìm token trong header Authorization.
                 return null;
             }
             return delegate.resolve(request);
@@ -82,32 +87,35 @@ public class SecurityConfig {
     // dùng để chuyển đổi JWT thành Authentication object
     @Bean
     JwtAuthenticationConverter jwtAuthenticationConverter() {
+       //Tạo đối tượng có nhiệm vụ đọc thông tin quyền từ JWT và chuyển thành danh sách GrantedAuthority
         JwtGrantedAuthoritiesConverter jwtGrantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
         jwtGrantedAuthoritiesConverter.setAuthorityPrefix("ROLE_");
+        jwtGrantedAuthoritiesConverter.setAuthoritiesClaimName("scope");
         JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
         jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(jwtGrantedAuthoritiesConverter);
         return jwtAuthenticationConverter;
     }
 
+    // backend chưa quan tâm
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         // Tạo cấu hình CORS cho phép frontend gọi API từ domain khác
         CorsConfiguration configuration = new CorsConfiguration();
-        // Cho phép request từ mọi origin
-        // Dùng "*" để thuận tiện trong quá trình phát triển
-        configuration.setAllowedOriginPatterns(List.of("*"));
+        // Chỉ cho phép các origin nằm trong whitelist (không dùng "*")
+        configuration.setAllowedOrigins(allowedOrigins);
 
         // Cho phép các HTTP method thường dùng trong REST API
         // OPTIONS được dùng cho request kiểm tra CORS (preflight)
         configuration.setAllowedMethods(
                 List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
 
-        // Cho phép tất cả HTTP header
-        // Ví dụ: Content-Type, Authorization,...
-        configuration.setAllowedHeaders(List.of("*"));
+        // Chỉ cho phép các header cần thiết
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
 
-        // Cho phép gửi credentials như Cookie/Session
-        configuration.setAllowCredentials(true);
+        // Xác thực bằng Bearer token trong header (không dùng Cookie/Session)
+        // → không cần gửi credentials
+        configuration.setAllowCredentials(false);
+        configuration.setMaxAge(3600L);
 
         // Tạo nơi lưu và áp dụng cấu hình CORS theo URL
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

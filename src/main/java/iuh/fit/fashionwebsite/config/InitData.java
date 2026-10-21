@@ -10,8 +10,8 @@ import iuh.fit.fashionwebsite.enums.RoleUser;
 import iuh.fit.fashionwebsite.enums.StatusUser;
 import iuh.fit.fashionwebsite.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -20,7 +20,10 @@ import org.springframework.stereotype.Component;
 public class InitData implements CommandLineRunner {
 
     private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(10);
+    private final PasswordEncoder passwordEncoder;
+
+    @Value("${app.seed.default-password}")
+    private String defaultPassword;
 
     @Override
     public void run(String... args) throws Exception {
@@ -29,7 +32,7 @@ public class InitData implements CommandLineRunner {
             return;
         }
 
-        String password = passwordEncoder.encode("123456");
+        String password = passwordEncoder.encode(defaultPassword);
 
         userRepository.save(User.builder()
                 .username("admin01")
