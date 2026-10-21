@@ -6,6 +6,7 @@ import iuh.fit.fashionwebsite.enums.StatusUser;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -48,6 +49,11 @@ public class User extends BaseEntity {
     private StatusUser status;
 
     private String avt;
+
+    // Thời điểm đổi mật khẩu gần nhất. Refresh token phát hành trước thời điểm này sẽ bị từ chối.
+    @JsonIgnore
+    @Column(name = "password_changed_at")
+    private Instant passwordChangedAt;
 
 
     @JsonIgnore

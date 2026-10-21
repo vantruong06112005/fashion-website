@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2026 IUH. All rights reserved.
  */
-package iuh.fit.fashionwebsite.service;
+package iuh.fit.fashionwebsite.service.authentication;
 
 
 import com.nimbusds.jose.*;
@@ -11,35 +11,35 @@ import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jose.crypto.MACVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
-import iuh.fit.fashionwebsite.dto.request.AuthenticationRequest;
-import iuh.fit.fashionwebsite.dto.request.IntrospectRequest;
-import iuh.fit.fashionwebsite.dto.request.LogoutRequest;
-import iuh.fit.fashionwebsite.dto.request.RefreshTokenRequest;
+import iuh.fit.fashionwebsite.dto.request.*;
 import iuh.fit.fashionwebsite.dto.response.AuthenticationResponse;
 import iuh.fit.fashionwebsite.dto.response.IntrospectResponse;
-import iuh.fit.fashionwebsite.entity.InvalidatedToken;
+import iuh.fit.fashionwebsite.dto.response.UserResponse;
 import iuh.fit.fashionwebsite.entity.User;
+import iuh.fit.fashionwebsite.enums.RoleUser;
+import iuh.fit.fashionwebsite.enums.StatusUser;
 import iuh.fit.fashionwebsite.enums.TokenType;
 import iuh.fit.fashionwebsite.exception.AppException;
 import iuh.fit.fashionwebsite.exception.ErrorCode;
 import iuh.fit.fashionwebsite.exception.user.UnauthenticatedException;
-import iuh.fit.fashionwebsite.exception.user.UserNotFoundException;
+import iuh.fit.fashionwebsite.mapper.UserMapper;
 import iuh.fit.fashionwebsite.repository.InvalidatedTokenRepository;
 import iuh.fit.fashionwebsite.repository.UserRepository;
+import iuh.fit.fashionwebsite.service.cloudinary.CloudinaryService;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
-import java.util.Objects;
 import java.util.UUID;
 
 /*
@@ -57,12 +57,20 @@ public class AuthenticationService {
     private static final String CLAIM_SCOPE = "scope";
 
     private final UserRepository userRepository;
+    private final UserMapper userMapper;
     private final InvalidatedTokenRepository invalidatedTokenRepository;
+    private final CloudinaryService cloudinaryService;
+    private final PasswordEncoder passwordEncoder;
 
     @NonFinal
-    // Đọc khóa bí mật từ file application.properties
+    // Đọc khóa bí mật từ biến môi trường JWT_SIGNER_KEY (qua application.properties)
     @Value("${jwt.signerKey}")
-    protected String SINGER_KEY;
+    protected String SIGNER_KEY;
+
+    @NonFinal
+    // Đơn vị phát hành token (claim "iss"), được CustomJwtDecoder kiểm tra
+    @Value("${jwt.issuer}")
+    protected String ISSUER;
 
     @NonFinal
     // Thời gian sống của access token (giây)
@@ -78,16 +86,17 @@ public class AuthenticationService {
      * Xác thực đăng nhập
      */
     public AuthenticationResponse authenticate(AuthenticationRequest request) {
-        // Tìm user theo username
-        var user = userRepository.findByUsername(request.getUsername()).orElseThrow(UserNotFoundException::new);
-        // BCrypt dùng để so sánh mật khẩu đã mã hóa
-        PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(10);
-        // So sánh mật khẩu người dùng nhập với mật khẩu trong database
-        boolean isMatch = passwordEncoder.matches(request.getPassword_hash(), user.getPasswordHash());
-        // Sai mật khẩu thì ném exception
-        if (!isMatch) {
+        // Sai username hay sai mật khẩu đều trả về cùng một lỗi
+        // → không tiết lộ username nào đang tồn tại (chống user enumeration)
+        var user = userRepository.findByUsername(request.getUsername())
+                .orElseThrow(UnauthenticatedException::new);
+        // So sánh mật khẩu người dùng nhập với mật khẩu đã băm trong database
+        if (request.getPassword() == null
+                || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             throw new UnauthenticatedException();
         }
+        // Tài khoản bị khóa / chưa kích hoạt thì không cho đăng nhập
+        ensureActive(user);
         // Tạo cặp access/refresh token nếu đăng nhập thành công
         return buildAuthenticationResponse(user);
     }
@@ -113,10 +122,20 @@ public class AuthenticationService {
         SignedJWT signedJWT = verifyToken(request.getRefreshToken(), TokenType.REFRESH);
 
         try {
-            invalidate(signedJWT);
-            String username = signedJWT.getJWTClaimsSet().getSubject();
-            User user = userRepository.findByUsername(username)
-                    .orElseThrow(UnauthenticatedException::new);
+            JWTClaimsSet claims = signedJWT.getJWTClaimsSet();
+            User user = userRepository.findByUsername(claims.getSubject())
+                    .orElseThrow(() -> new AppException(ErrorCode.TOKEN_INVALID));
+
+            // Refresh token phát hành trước lần đổi mật khẩu gần nhất → không còn hiệu lực
+            if (isIssuedBeforePasswordChange(claims, user)) {
+                throw new AppException(ErrorCode.TOKEN_INVALID);
+            }
+            ensureActive(user);
+
+            // Thu hồi nguyên tử: nếu token đã bị dùng (request song song / replay) thì từ chối
+            if (!invalidate(signedJWT)) {
+                throw new AppException(ErrorCode.TOKEN_INVALID);
+            }
             return buildAuthenticationResponse(user);
         } catch (ParseException e) {
             throw new AppException(ErrorCode.TOKEN_INVALID);
@@ -148,7 +167,7 @@ public class AuthenticationService {
 
         try {
             SignedJWT signedJWT = SignedJWT.parse(token);
-            JWSVerifier verifier = new MACVerifier(SINGER_KEY.getBytes());
+            JWSVerifier verifier = new MACVerifier(SIGNER_KEY.getBytes(StandardCharsets.UTF_8));
             if (!signedJWT.verify(verifier)) {
                 throw new AppException(ErrorCode.TOKEN_INVALID);
             }
@@ -160,6 +179,10 @@ public class AuthenticationService {
                 throw new AppException(ErrorCode.TOKEN_EXPIRED);
             }
 
+            if (!ISSUER.equals(claims.getIssuer())) {
+                throw new AppException(ErrorCode.TOKEN_INVALID);
+            }
+
             if (!expectedType.name().equals(claims.getStringClaim(CLAIM_TYPE))) {
                 throw new AppException(ErrorCode.TOKEN_INVALID);
             }
@@ -169,13 +192,33 @@ public class AuthenticationService {
                 throw new AppException(ErrorCode.TOKEN_INVALID);
             }
 
-            User user = userRepository.findByUsername(claims.getSubject())
-                    .orElseThrow(() -> new AppException(ErrorCode.TOKEN_INVALID));
+            if (!userRepository.existsByUsername(claims.getSubject())) {
+                throw new AppException(ErrorCode.TOKEN_INVALID);
+            }
 
             return signedJWT;
         } catch (ParseException | JOSEException e) {
             throw new AppException(ErrorCode.TOKEN_INVALID);
         }
+    }
+
+    // Chặn tài khoản bị khóa. status = null (dữ liệu cũ) vẫn được coi là hoạt động.
+    private void ensureActive(User user) {
+        if (user.getStatus() == StatusUser.INACTIVE) {
+            throw new AppException(ErrorCode.USER_INACTIVE);
+        }
+    }
+
+    // So sánh theo giây vì claim iat của JWT chỉ có độ chính xác tới giây
+    private boolean isIssuedBeforePasswordChange(JWTClaimsSet claims, User user) {
+        if (user.getPasswordChangedAt() == null) {
+            return false;
+        }
+        Date issuedAt = claims.getIssueTime();
+        if (issuedAt == null) {
+            return true;
+        }
+        return issuedAt.toInstant().getEpochSecond() < user.getPasswordChangedAt().getEpochSecond();
     }
 
     private AuthenticationResponse buildAuthenticationResponse(User user) {
@@ -197,32 +240,31 @@ public class AuthenticationService {
         }
     }
 
-    private void invalidate(SignedJWT signedJWT) {
+    /**
+     * Đưa jti vào blacklist. Trả về false nếu token đã bị thu hồi từ trước.
+     */
+    private boolean invalidate(SignedJWT signedJWT) {
         try {
             JWTClaimsSet claims = signedJWT.getJWTClaimsSet();
-            invalidatedTokenRepository.save(InvalidatedToken.builder()
-                    .id(claims.getJWTID())
-                    .expiryTime(claims.getExpirationTime().toInstant())
-                    .build());
+            return invalidatedTokenRepository.insertIfAbsent(
+                    claims.getJWTID(),
+                    claims.getExpirationTime().toInstant()) > 0;
         } catch (ParseException e) {
             throw new AppException(ErrorCode.TOKEN_INVALID);
         }
-    }
-
-    private String generateToken(User user) {
-        return generateToken(user, TokenType.ACCESS);
     }
 
     private String generateToken(User user, TokenType type) {
         long duration = type == TokenType.ACCESS ? VALID_DURATION : REFRESHABLE_DURATION;
         // Khai báo thuật toán ký HS512
         JWSHeader header = new JWSHeader(JWSAlgorithm.HS512);
+       
         // Khai báo các thông tin (claims) của JWT
         JWTClaimsSet.Builder claimsBuilder = new JWTClaimsSet.Builder()
                 // Người sở hữu token
                 .subject(user.getUsername())
                 // Đơn vị phát hành token
-                .issuer("dev")
+                .issuer(ISSUER)
                 // Thời điểm tạo token
                 .issueTime(new Date())
                 // Thời điểm hết hạn
@@ -242,7 +284,7 @@ public class AuthenticationService {
         try {
 
             // Ký JWT bằng khóa bí mật
-            jwsObject.sign(new MACSigner(SINGER_KEY.getBytes()));
+            jwsObject.sign(new MACSigner(SIGNER_KEY.getBytes(StandardCharsets.UTF_8)));
 
             // Chuyển JWT thành chuỗi để trả về client
             return jwsObject.serialize();
@@ -253,9 +295,39 @@ public class AuthenticationService {
     }
 
     private String buildScope(User user) {
-        if (user.getRole() == null) {
+        if (user.getRole() == null)     {
             return "";
         }
         return user.getRole().name();
     }
+    public UserResponse register(UserCreationRequest request, MultipartFile file) {
+        if (userRepository.existsByUsername(request.getUsername())) {
+            throw new AppException(ErrorCode.USER_EXISTED);
+        }
+
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new AppException(ErrorCode.DUPLICATE_EMAIL);
+        }
+
+        User user = userMapper.toUser(request);
+
+        user.setPasswordHash(
+                passwordEncoder.encode(request.getPassword())
+        );
+
+        user.setRole(RoleUser.CUSTOMER);
+        user.setStatus(StatusUser.ACTIVE);
+
+        if (file != null && !file.isEmpty()) {
+            String avatarUrl = cloudinaryService.uploadImage(file, "fashion_website/avatars");
+            user.setAvt(avatarUrl);
+        } else if (request.getAvt() != null && !request.getAvt().isBlank()) {
+            user.setAvt(request.getAvt());
+        }
+
+        return userMapper.toUserResponse(
+                userRepository.save(user)
+        );
+    }
+
 }

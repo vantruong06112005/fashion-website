@@ -81,8 +81,17 @@ public enum ErrorCode implements BaseErrorCode {
             403,
             "error.unauthorized",
             HttpStatus.FORBIDDEN
-    );
+    ),USER_EXISTED(
+            400,
+            "error.user_existed",
+            HttpStatus.BAD_REQUEST
+    ),
 
+    USER_INACTIVE(
+            403,
+            "error.user_inactive",
+            HttpStatus.FORBIDDEN
+    );
     private final int code;
     private final String message;
     private final HttpStatusCode statusCode;

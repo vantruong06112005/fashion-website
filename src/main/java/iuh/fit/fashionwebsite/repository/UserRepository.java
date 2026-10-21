@@ -27,8 +27,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE User u SET u.passwordHash = :passwordHash, " +
+            "u.passwordChangedAt = :changedAt, " +
             "u.updatedAt = CURRENT_TIMESTAMP WHERE u.id = :id")
-    int updatePassword(@Param("id") Long id, @Param("passwordHash") String passwordHash);
+    int updatePassword(@Param("id") Long id,
+                       @Param("passwordHash") String passwordHash,
+                       @Param("changedAt") java.time.Instant changedAt);
 
 }
 

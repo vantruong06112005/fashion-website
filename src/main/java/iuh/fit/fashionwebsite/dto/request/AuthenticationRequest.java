@@ -6,6 +6,7 @@
 package iuh.fit.fashionwebsite.dto.request;
 
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
@@ -25,6 +26,10 @@ import lombok.experimental.FieldDefaults;
 @AllArgsConstructor
 public class AuthenticationRequest {
     private String username;
-    private String password_hash;
+
+    // Mật khẩu dạng plaintext (server tự băm & so sánh).
+    // Vẫn chấp nhận key cũ "password_hash" để tương thích ngược với frontend.
+    @JsonAlias("password_hash")
+    private String password;
 
 }
