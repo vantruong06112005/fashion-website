@@ -4,13 +4,14 @@ package iuh.fit.fashionwebsite.controller.user;/*
  * Copyright (c) 2026 IUH. All rights reserved.
  */
 
-import iuh.fit.fashionwebsite.dto.request.AuthenticationRequest;
-import iuh.fit.fashionwebsite.dto.request.IntrospectRequest;
+import iuh.fit.fashionwebsite.dto.request.*;
+import iuh.fit.fashionwebsite.dto.response.UserResponse;
+import jakarta.validation.Valid;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
 import iuh.fit.fashionwebsite.dto.response.AuthenticationResponse;
 import iuh.fit.fashionwebsite.dto.response.IntrospectResponse;
 import iuh.fit.fashionwebsite.enums.AuthResponseCode;
-import iuh.fit.fashionwebsite.service.AuthenticationService;
+import iuh.fit.fashionwebsite.service.authentication.AuthenticationService;
 import lombok.experimental.FieldDefaults;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -35,8 +36,6 @@ public class AuthenticationController {
     @PostMapping("/login")
     ApiResponse<AuthenticationResponse> login(@RequestBody AuthenticationRequest request) {
         AuthenticationResponse isAuthenticated = authenticationService.authenticate(request);
-        log.info("LOGIN username = {}", request.getUsername());
-        log.info("LOGIN password = {}", request.getPassword_hash());
         return ApiResponse.<AuthenticationResponse>builder()
                 .code(AuthResponseCode.LOGIN_SUCCESS.getCode())
                 .message("Login successfully")
@@ -62,6 +61,36 @@ public class AuthenticationController {
                 .code(401)
                 .message("Token is invalid")
                 .data(introspectResponse)
+                .build();
+    }
+
+    @PostMapping("/refresh")
+    ApiResponse<AuthenticationResponse> refresh(@RequestBody @Valid RefreshTokenRequest request) {
+        return ApiResponse.<AuthenticationResponse>builder()
+                .code(AuthResponseCode.TOKEN_REFRESH_SUCCESS.getCode())
+                .message("Token refreshed successfully")
+                .data(authenticationService.refreshToken(request))
+                .build();
+    }
+
+    @PostMapping("/logout")
+    ApiResponse<Void> logout(@RequestBody LogoutRequest request) {
+        authenticationService.logout(request);
+        return ApiResponse.<Void>builder()
+                .code(AuthResponseCode.LOGOUT_SUCCESS.getCode())
+                .message("Logout successfully")
+                .build();
+    }
+    @PostMapping("/register")
+    ApiResponse<UserResponse> register(
+            @RequestBody @Valid UserCreationRequest request) {
+        // mặc định đang để ảnh là null
+        UserResponse response = authenticationService.register(request, null);
+
+        return ApiResponse.<UserResponse>builder()
+                .code(AuthResponseCode.REGISTER_SUCCESS.getCode())
+                .message("Register successfully")
+                .data(response)
                 .build();
     }
 

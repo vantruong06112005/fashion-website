@@ -8,13 +8,13 @@ Hệ thống backend cho website bán quần áo, xây dựng theo mô hình **l
 
 - **Java** + **Spring Boot**
 - **Spring Data JPA** — thao tác với database
-- **Spring Security** (+ JWT) — xác thực, phân quyền
+- **Spring Security** (+ JWT Stateless OAuth2 Resource Server) — xác thực, phân quyền (Chi tiết xem tại [SECURITY.md](SECURITY.md))
 - **MapStruct** — mapping giữa Entity và DTO
 - **Lombok** — giảm boilerplate code (getter/setter, constructor...)
 - **Maven** — quản lý dependency
 
 ---
-
+<!--  -->
 ## 2. Cấu trúc thư mục
 
 ```
@@ -39,10 +39,8 @@ src/main/java/iuh/fit/fashionwebsite/
 └── validator/          # Custom validation annotation
 
 src/main/resources/
-├── application.yml           # Cấu hình chung (port, datasource...)
-├── application-dev.yml       # Cấu hình môi trường dev
-├── application-prod.yml      # Cấu hình môi trường production
-└── db/migration/             # Script quản lý database (nếu dùng Flyway)
+├── application.properties    # Cấu hình chính (database, JWT, CORS, Cloudinary...)
+└── META-INF/persistence.xml  # Cấu hình JPA persistence
 
 src/test/java/...             # Unit test / integration test
 ```
@@ -98,7 +96,7 @@ Client nhận Response (dạng DTO, không trả trực tiếp Entity)
 ## 5. Hướng dẫn chạy dự án
 
 1. Clone project về máy
-2. Cấu hình kết nối database trong `application-dev.yml`
+2. Tạo file `.env` tại thư mục gốc từ mẫu [`.env.example`](.env.example) (điền mật khẩu DB, khóa `JWT_SIGNER_KEY`, Cloudinary...)
 3. Chạy lệnh:
    ```bash
    mvn clean install

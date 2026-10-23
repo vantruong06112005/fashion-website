@@ -14,12 +14,14 @@ package iuh.fit.fashionwebsite.controller.user;
  */
 
 
+import iuh.fit.fashionwebsite.dto.request.ChangePasswordRequest;
 import iuh.fit.fashionwebsite.dto.request.UserCreationRequest;
 import iuh.fit.fashionwebsite.dto.request.UserUpdateRequest;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
 import iuh.fit.fashionwebsite.dto.response.UserResponse;
-import iuh.fit.fashionwebsite.service.UserService;
+import iuh.fit.fashionwebsite.service.user.UserService;
 import jakarta.validation.Valid;
+import jakarta.websocket.server.PathParam;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -46,15 +48,26 @@ import java.util.List;
 public class UserController {
     private final UserService userService;
 
+    // ADMIN tạo tài khoản. Người dùng tự đăng ký qua POST /auth/register
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<UserResponse> createUser(@RequestBody @Valid UserCreationRequest request) {
         return ApiResponse.<UserResponse>builder()
                 .message("User has been created successfully")
                 .data(userService.createUser(request, null))
                 .build();
     }
-
+    // get user hiện tại đang đăng nhập
+    @GetMapping("/info/current")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    public ApiResponse<UserResponse> getCurrentUserInfo() {
+        return ApiResponse.<UserResponse>builder()
+                .message("Fetched current user details successfully")
+                .data(userService.getCurrentUser())
+                .build();
+    }
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<UserResponse> createUserMultipart(
             @ModelAttribute @Valid UserCreationRequest request,
             @RequestParam(value = "file", required = false) @ValidImageFile MultipartFile file
@@ -83,8 +96,10 @@ public class UserController {
                 .build();
     }
 
+    // Các endpoint thao tác theo {id} bất kỳ chỉ dành cho ADMIN (chống IDOR).
+    // Người dùng thường cập nhật hồ sơ của chính mình qua /users/info.
     @PutMapping(value = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<UserResponse> updateUser(
             @PathVariable Long id,
             @RequestBody @Valid UserUpdateRequest request
@@ -96,7 +111,7 @@ public class UserController {
     }
 
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<UserResponse> updateUserMultipart(
             @PathVariable Long id,
             @ModelAttribute @Valid UserUpdateRequest request,
@@ -149,6 +164,17 @@ public class UserController {
                 .build();
     }
 
+    @PutMapping(value = "/change-password", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    public ApiResponse<Void> changePassword(
+            @RequestBody @Valid ChangePasswordRequest request
+    ) {
+        userService.changePassword(request);
+        return ApiResponse.<Void>builder()
+                .message("Password has been changed successfully")
+                .build();
+    }
+
     @PostMapping(value = "/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
     public ApiResponse<UserResponse> uploadCurrentAvatar(
@@ -161,7 +187,7 @@ public class UserController {
     }
 
     @PostMapping(value = "/{id}/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<UserResponse> uploadAvatar(
             @PathVariable Long id,
             @RequestParam("file") @ValidImageFile(nullable = false) MultipartFile file

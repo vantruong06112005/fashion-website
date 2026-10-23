@@ -1,4 +1,4 @@
-package iuh.fit.fashionwebsite.service;
+package iuh.fit.fashionwebsite.service.cloudinary;
 
 import com.cloudinary.Cloudinary;
 import com.cloudinary.utils.ObjectUtils;
