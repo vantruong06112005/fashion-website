@@ -6,6 +6,7 @@
 package iuh.fit.fashionwebsite.dto.request;
 
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.*;
 
 /*
@@ -21,5 +22,6 @@ import lombok.*;
 @Builder
 
 public class IntrospectRequest {
+    @NotBlank(message = "Token cannot be blank")
     private String token;
 }

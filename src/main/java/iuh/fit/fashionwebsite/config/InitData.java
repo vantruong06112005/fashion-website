@@ -6,8 +6,11 @@
 package iuh.fit.fashionwebsite.config;
 
 import iuh.fit.fashionwebsite.entity.User;
+import iuh.fit.fashionwebsite.entity.UserAddress;
+import iuh.fit.fashionwebsite.enums.AddressType;
 import iuh.fit.fashionwebsite.enums.RoleUser;
 import iuh.fit.fashionwebsite.enums.StatusUser;
+import iuh.fit.fashionwebsite.repository.UserAddressRepository;
 import iuh.fit.fashionwebsite.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,6 +23,7 @@ import org.springframework.stereotype.Component;
 public class InitData implements CommandLineRunner {
 
     private final UserRepository userRepository;
+    private final UserAddressRepository userAddressRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Value("${app.seed.default-password}")
@@ -34,7 +38,7 @@ public class InitData implements CommandLineRunner {
 
         String password = passwordEncoder.encode(defaultPassword);
 
-        userRepository.save(User.builder()
+        User admin01 = userRepository.save(User.builder()
                 .username("admin01")
                 .passwordHash(password)
                 .fullname("Nguyen Van Admin")
@@ -44,7 +48,17 @@ public class InitData implements CommandLineRunner {
                 .status(StatusUser.ACTIVE)
                 .build());
 
-        userRepository.save(User.builder()
+        User staff01 = userRepository.save(User.builder()
+                .username("staff01")
+                .passwordHash(password)
+                .fullname("Tran Thi Staff")
+                .phone("0901000099")
+                .email("staff01@gmail.com")
+                .role(RoleUser.STAFF)
+                .status(StatusUser.ACTIVE)
+                .build());
+
+        User truong01 = userRepository.save(User.builder()
                 .username("truong01")
                 .passwordHash(password)
                 .fullname("Nguyen Van Truong")
@@ -54,7 +68,7 @@ public class InitData implements CommandLineRunner {
                 .status(StatusUser.ACTIVE)
                 .build());
 
-        userRepository.save(User.builder()
+        User an01 = userRepository.save(User.builder()
                 .username("an01")
                 .passwordHash(password)
                 .fullname("Tran Van An")
@@ -64,7 +78,7 @@ public class InitData implements CommandLineRunner {
                 .status(StatusUser.ACTIVE)
                 .build());
 
-        userRepository.save(User.builder()
+        User binh01 = userRepository.save(User.builder()
                 .username("binh01")
                 .passwordHash(password)
                 .fullname("Le Van Binh")
@@ -132,6 +146,42 @@ public class InitData implements CommandLineRunner {
                 .email("nam01@gmail.com")
                 .role(RoleUser.CUSTOMER)
                 .status(StatusUser.ACTIVE)
+                .build());
+
+        // Khởi tạo địa chỉ mẫu cho người dùng
+        userAddressRepository.save(UserAddress.builder()
+                .user(truong01)
+                .fullAddress("12 Nguyễn Văn Bảo, Phường 4, Quận Gò Vấp, TP. Hồ Chí Minh")
+                .addressType(AddressType.HOME)
+                .isDefault(true)
+                .build());
+
+        userAddressRepository.save(UserAddress.builder()
+                .user(truong01)
+                .fullAddress("Tòa nhà Bitexco, 2 Hải Triều, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh")
+                .addressType(AddressType.OFFICE)
+                .isDefault(false)
+                .build());
+
+        userAddressRepository.save(UserAddress.builder()
+                .user(an01)
+                .fullAddress("45 Lê Lợi, Phường Bến Thành, Quận 1, TP. Hồ Chí Minh")
+                .addressType(AddressType.HOME)
+                .isDefault(true)
+                .build());
+
+        userAddressRepository.save(UserAddress.builder()
+                .user(binh01)
+                .fullAddress("123 Quang Trung, Phường 10, Quận Gò Vấp, TP. Hồ Chí Minh")
+                .addressType(AddressType.HOME)
+                .isDefault(true)
+                .build());
+
+        userAddressRepository.save(UserAddress.builder()
+                .user(staff01)
+                .fullAddress("Văn phòng Fashion Shop, 80 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh")
+                .addressType(AddressType.OFFICE)
+                .isDefault(true)
                 .build());
     }
 }

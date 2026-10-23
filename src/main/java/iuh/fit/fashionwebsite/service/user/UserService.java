@@ -69,7 +69,7 @@ public class UserService {
                 passwordEncoder.encode(request.getPassword())
         );
 
-        user.setRole(RoleUser.CUSTOMER);
+        user.setRole(request.getRole() != null ? request.getRole() : RoleUser.CUSTOMER);
         user.setStatus(StatusUser.ACTIVE);
 
         if (file != null && !file.isEmpty()) {
@@ -99,6 +99,14 @@ public class UserService {
         }
 
         userMapper.updateUser(user, request);
+
+        if (request.getRole() != null) {
+            user.setRole(request.getRole());
+        }
+
+        if (request.getStatus() != null) {
+            user.setStatus(request.getStatus());
+        }
 
         if (file != null && !file.isEmpty()) {
             String avatarUrl = cloudinaryService.uploadImage(file, "fashion_website/avatars");
@@ -171,6 +179,10 @@ public class UserService {
         if (request.getPassword() != null && !request.getPassword().isBlank()) {
             throw new AppException(ErrorCode.BAD_REQUEST);
         }
+
+        // Không cho phép tự đổi role hoặc trạng thái hoạt động của chính mình
+        request.setRole(null);
+        request.setStatus(null);
 
         String username = SecurityContextHolder
                 .getContext()

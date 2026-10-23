@@ -75,7 +75,7 @@ Hệ thống xây dựng theo mô hình **Resource Server** dựa trên **Spring
                   │
                   ▼
       [ JwtAuthenticationConverter ]
-                  │ (Map Claim "scope" -> Spring GrantedAuthority: ROLE_ADMIN, ROLE_CUSTOMER)
+                  │ (Map Claim "scope" -> Spring GrantedAuthority: ROLE_ADMIN, ROLE_STAFF, ROLE_CUSTOMER)
                   ▼
    [ @PreAuthorize trên Controller / API Resource ]
 ```
@@ -185,7 +185,7 @@ jwt.refreshable-duration=604800
 | **Nơi sử dụng** | Gửi kèm mọi API tài nguyên (`Authorization: Bearer ...`) | **Chỉ dùng duy nhất** tại `POST /auth/refresh` |
 | **Quy trình xác thực** | **Stateless 100% in-memory**, không query DB | **Stateful**: Query DB kiểm tra user & blacklist |
 | **Claim `type`** | `ACCESS` | `REFRESH` |
-| **Claim `scope`** | Chứa role (`CUSTOMER`, `ADMIN`) | Không chứa role (tối thiểu thông tin) |
+| **Claim `scope`** | Chứa role (`CUSTOMER`, `STAFF`, `ADMIN`) | Không chứa role (tối thiểu thông tin) |
 
 ### Cấu trúc Payload của Access Token (JSON)
 ```json
