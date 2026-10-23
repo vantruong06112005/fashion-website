@@ -34,7 +34,7 @@ public class AuthenticationController {
     AuthenticationService authenticationService;
 
     @PostMapping("/login")
-    ApiResponse<AuthenticationResponse> login(@RequestBody AuthenticationRequest request) {
+    ApiResponse<AuthenticationResponse> login(@RequestBody @Valid AuthenticationRequest request) {
         AuthenticationResponse isAuthenticated = authenticationService.authenticate(request);
         return ApiResponse.<AuthenticationResponse>builder()
                 .code(AuthResponseCode.LOGIN_SUCCESS.getCode())
@@ -45,7 +45,7 @@ public class AuthenticationController {
 
     @PostMapping("/introspect")
     ApiResponse<IntrospectResponse> introspect(
-            @RequestBody IntrospectRequest request) {
+            @RequestBody @Valid IntrospectRequest request) {
 
         var introspectResponse = authenticationService.introspect(request);
 
@@ -74,7 +74,7 @@ public class AuthenticationController {
     }
 
     @PostMapping("/logout")
-    ApiResponse<Void> logout(@RequestBody LogoutRequest request) {
+    ApiResponse<Void> logout(@RequestBody @Valid LogoutRequest request) {
         authenticationService.logout(request);
         return ApiResponse.<Void>builder()
                 .code(AuthResponseCode.LOGOUT_SUCCESS.getCode())

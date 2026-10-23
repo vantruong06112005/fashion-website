@@ -48,8 +48,8 @@ import java.util.List;
 public class UserController {
     private final UserService userService;
 
-    // ADMIN tạo tài khoản. Người dùng tự đăng ký qua POST /auth/register
-    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
+    // ADMIN tạo tài khoản cho nhân viên
+    @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<UserResponse> createUser(@RequestBody @Valid UserCreationRequest request) {
         return ApiResponse.<UserResponse>builder()
@@ -59,7 +59,7 @@ public class UserController {
     }
     // get user hiện tại đang đăng nhập
     @GetMapping("/info/current")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
     public ApiResponse<UserResponse> getCurrentUserInfo() {
         return ApiResponse.<UserResponse>builder()
                 .message("Fetched current user details successfully")
@@ -79,7 +79,7 @@ public class UserController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ApiResponse<List<UserResponse>> getAllUsers() {
         return ApiResponse.<List<UserResponse>>builder()
                 .message("Fetched all users successfully")
@@ -88,7 +88,7 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ApiResponse<UserResponse> getUserById(@PathVariable Long id) {
         return ApiResponse.<UserResponse>builder()
                 .message("Fetched user details successfully")
@@ -133,7 +133,7 @@ public class UserController {
     }
 
     @GetMapping("/info")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
     public ApiResponse<UserResponse> getCurrentUser() {
         return ApiResponse.<UserResponse>builder()
                 .message("Fetched current user details successfully")
@@ -142,7 +142,7 @@ public class UserController {
     }
 
     @PutMapping(value = "/info", consumes = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
     public ApiResponse<UserResponse> updateCurrentUserInfo(
             @RequestBody @Valid UserUpdateRequest request
     ) {
@@ -153,7 +153,7 @@ public class UserController {
     }
 
     @PutMapping(value = "/info", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
     public ApiResponse<UserResponse> updateCurrentUserMultipart(
             @ModelAttribute @Valid UserUpdateRequest request,
             @RequestParam(value = "file", required = false) @ValidImageFile MultipartFile file
@@ -165,7 +165,7 @@ public class UserController {
     }
 
     @PutMapping(value = "/change-password", consumes = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
     public ApiResponse<Void> changePassword(
             @RequestBody @Valid ChangePasswordRequest request
     ) {
@@ -176,7 +176,7 @@ public class UserController {
     }
 
     @PostMapping(value = "/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
     public ApiResponse<UserResponse> uploadCurrentAvatar(
             @RequestParam("file") @ValidImageFile(nullable = false) MultipartFile file
     ) {
