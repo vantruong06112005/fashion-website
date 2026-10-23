@@ -1,7 +1,9 @@
 package iuh.fit.fashionwebsite.dto.request;
 
+import iuh.fit.fashionwebsite.enums.RoleUser;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 @AllArgsConstructor
@@ -33,9 +35,13 @@ public class UserCreationRequest {
     private String email;
 
     @NotBlank(message = "Phone number cannot be blank")
+    @Pattern(regexp = "^(0|\\+84)[0-9]{9}$",
+            message = "Phone must be a valid 10-digit Vietnamese phone number")
     @Size(max = 20,
             message = "Phone must be less than 20 characters")
     private String phone;
 
+    @Size(max = 500, message = "Avatar URL must not exceed 500 characters")
     private String avt;
+    private RoleUser role;
 }
