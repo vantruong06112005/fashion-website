@@ -1,4 +1,4 @@
-package iuh.fit.fashionwebsite.controller.payment;
+package iuh.fit.fashionwebsite.controller.order;
 
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
 import iuh.fit.fashionwebsite.dto.response.OrderResponse;

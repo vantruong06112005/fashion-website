@@ -6,10 +6,12 @@ import iuh.fit.fashionwebsite.exception.order.OrderNotFoundException;
 import iuh.fit.fashionwebsite.mapper.OrderMapper;
 import iuh.fit.fashionwebsite.repository.OrderRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
+@Transactional
 public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderMapper orderMapper;
@@ -20,6 +22,7 @@ public class OrderService {
     }
 
     // Get all orders
+    @Transactional(readOnly = true)
     public List<OrderResponse> getAllOrders() {
         return orderRepository.findAll().stream()
                 .map(orderMapper::toOrderResponse)
@@ -27,6 +30,7 @@ public class OrderService {
     }
 
     // Get an order by ID
+    @Transactional(readOnly = true)
     public OrderResponse getOrderById(Long id) {
         return orderMapper.toOrderResponse(orderRepository.findById(id).orElseThrow(OrderNotFoundException::new));
     }
@@ -39,18 +43,8 @@ public class OrderService {
         orderRepository.deleteById(id);
     }
 
-    public Order createOrder(Order order) {
-        return orderRepository.save(order);
-    }
+    // Create a new order
 
     // Update an existing order by ID
-    public Order updateOrder(Long id, Order orderDetails) {
-        Order order = orderRepository.findById(id).orElseThrow(OrderNotFoundException::new);
-        order.setUser(orderDetails.getUser());
-        order.setOrderCode(orderDetails.getOrderCode());
-        order.setOrderItems(orderDetails.getOrderItems());
-        order.setTotalAmount(orderDetails.getTotalAmount());
 
-        return orderRepository.save(order);
-    }
 }
