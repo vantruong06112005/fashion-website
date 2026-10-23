@@ -1,7 +1,9 @@
-package iuh.fit.fashionwebsite.service.payment;
+package iuh.fit.fashionwebsite.service.order;
 
+import iuh.fit.fashionwebsite.dto.response.OrderResponse;
 import iuh.fit.fashionwebsite.entity.Order;
 import iuh.fit.fashionwebsite.exception.order.OrderNotFoundException;
+import iuh.fit.fashionwebsite.mapper.OrderMapper;
 import iuh.fit.fashionwebsite.repository.OrderRepository;
 import org.springframework.stereotype.Service;
 
@@ -10,19 +12,31 @@ import java.util.List;
 @Service
 public class OrderService {
     private final OrderRepository orderRepository;
+    private final OrderMapper orderMapper;
 
-    public OrderService(OrderRepository orderRepository) {
+    public OrderService(OrderRepository orderRepository, OrderMapper orderMapper) {
+        this.orderMapper = orderMapper;
         this.orderRepository = orderRepository;
     }
 
     // Get all orders
-    public List<Order> getAllOrders() {
-        return orderRepository.findAll();
+    public List<OrderResponse> getAllOrders() {
+        return orderRepository.findAll().stream()
+                .map(orderMapper::toOrderResponse)
+                .toList();
     }
 
     // Get an order by ID
-    public Order getOrderById(Long id) {
-        return orderRepository.findById(id).orElseThrow(OrderNotFoundException::new);
+    public OrderResponse getOrderById(Long id) {
+        return orderMapper.toOrderResponse(orderRepository.findById(id).orElseThrow(OrderNotFoundException::new));
+    }
+
+    // Delete an order by ID
+    public void deleteOrder(Long id) {
+        if(!orderRepository.existsById(id)) {
+            throw new OrderNotFoundException();
+        }
+        orderRepository.deleteById(id);
     }
 
     public Order createOrder(Order order) {
@@ -38,13 +52,5 @@ public class OrderService {
         order.setTotalAmount(orderDetails.getTotalAmount());
 
         return orderRepository.save(order);
-    }
-
-    // Delete an order by ID
-    public void deleteOrder(Long id) {
-        if(!orderRepository.existsById(id)) {
-            throw new OrderNotFoundException();
-        }
-        orderRepository.deleteById(id);
     }
 }
