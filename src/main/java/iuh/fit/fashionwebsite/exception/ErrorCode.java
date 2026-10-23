@@ -11,12 +11,30 @@ public enum ErrorCode implements BaseErrorCode {
             "error.order_not_found",
             HttpStatus.NOT_FOUND
     ),
-
+    ORDER_ITEM_NOT_FOUND(
+            404,
+            "error.order_item_not_found",
+            HttpStatus.NOT_FOUND
+    ),
+    PAYMENT_TRANSACTION_NOT_FOUND(
+            404,
+            "error.payment_transaction_not_found",
+            HttpStatus.NOT_FOUND
+    ),
+    PAYMENT_METHOD_NOT_FOUND(
+            404,
+            "error.payment_method_not_found",
+            HttpStatus.NOT_FOUND
+    ),
     USER_NOT_FOUND(
             404,
             "error.user_not_found",
             HttpStatus.NOT_FOUND
     ),
+    PAYMENT_METHOD_CODE_DUPLICATE(
+            400,
+            "error.payment_method_code_duplicate",
+            HttpStatus.BAD_REQUEST
     ADDRESS_NOT_FOUND(
             404,
             "error.address_not_found",
