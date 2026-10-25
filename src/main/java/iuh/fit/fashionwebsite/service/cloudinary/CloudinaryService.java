@@ -46,4 +46,66 @@ public class CloudinaryService {
             throw new AppException(ErrorCode.FILE_UPLOAD_FAILED);
         }
     }
+
+    public void deleteImage(String imageUrl) {
+        if (imageUrl == null || imageUrl.isBlank()) {
+            return;
+        }
+
+        if (cloudName == null || cloudName.isBlank()) {
+            log.warn("Cloudinary cloud-name is not configured. Skipping image deletion: {}", imageUrl);
+            return;
+        }
+
+        String publicId = extractPublicId(imageUrl);
+        if (publicId == null || publicId.isBlank()) {
+            log.debug("Skipping image deletion - URL is not a recognized Cloudinary image: {}", imageUrl);
+            return;
+        }
+
+        try {
+            Map<?, ?> result = cloudinary.uploader().destroy(publicId, ObjectUtils.emptyMap());
+            log.info("Cloudinary delete result for {}: {}", publicId, result.get("result"));
+        } catch (Exception e) {
+            log.error("Failed to delete image from Cloudinary (publicId: {}): {}", publicId, e.getMessage(), e);
+        }
+    }
+
+    public String extractPublicId(String imageUrl) {
+        if (imageUrl == null || imageUrl.isBlank()) {
+            return null;
+        }
+
+        // If it's already a publicId path (does not start with http:// or https://)
+        if (!imageUrl.startsWith("http://") && !imageUrl.startsWith("https://")) {
+            int lastDot = imageUrl.lastIndexOf('.');
+            return lastDot != -1 ? imageUrl.substring(0, lastDot) : imageUrl;
+        }
+
+        try {
+            int uploadIndex = imageUrl.indexOf("/upload/");
+            if (uploadIndex == -1) {
+                return null;
+            }
+
+            String pathAfterUpload = imageUrl.substring(uploadIndex + "/upload/".length());
+
+            // Remove transformation and/or version segment if present, e.g. "v1234567/" or "c_fill,w_100/v1234567/"
+            if (pathAfterUpload.matches("^(?:[^/]+/)*v\\d+/.+")) {
+                pathAfterUpload = pathAfterUpload.replaceFirst("^(?:[^/]+/)*v\\d+/", "");
+            }
+
+            // Remove file extension
+            int lastDot = pathAfterUpload.lastIndexOf('.');
+            if (lastDot != -1) {
+                pathAfterUpload = pathAfterUpload.substring(0, lastDot);
+            }
+
+            return pathAfterUpload;
+        } catch (Exception e) {
+            log.warn("Failed to extract public ID from URL: {}", imageUrl, e);
+            return null;
+        }
+    }
 }
+

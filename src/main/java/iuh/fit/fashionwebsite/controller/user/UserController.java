@@ -197,4 +197,22 @@ public class UserController {
                 .data(userService.uploadAvatar(id, file))
                 .build();
     }
+
+    @DeleteMapping("/avatar")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
+    public ApiResponse<UserResponse> deleteCurrentAvatar() {
+        return ApiResponse.<UserResponse>builder()
+                .message("Avatar deleted successfully")
+                .data(userService.deleteCurrentAvatar())
+                .build();
+    }
+
+    @DeleteMapping("/{id}/avatar")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<UserResponse> deleteAvatar(@PathVariable Long id) {
+        return ApiResponse.<UserResponse>builder()
+                .message("Avatar deleted successfully")
+                .data(userService.deleteAvatar(id))
+                .build();
+    }
 }
