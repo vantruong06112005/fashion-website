@@ -34,7 +34,7 @@ public enum ErrorCode implements BaseErrorCode {
     PAYMENT_METHOD_CODE_DUPLICATE(
             400,
             "error.payment_method_code_duplicate",
-            HttpStatus.BAD_REQUEST
+            HttpStatus.BAD_REQUEST),
     ADDRESS_NOT_FOUND(
             404,
             "error.address_not_found",

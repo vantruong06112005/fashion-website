@@ -2,7 +2,6 @@ package iuh.fit.fashionwebsite.dto.request;
 
 import lombok.*;
 
-@AllArgsConstructor
 @NoArgsConstructor
 @Getter
 @Setter
