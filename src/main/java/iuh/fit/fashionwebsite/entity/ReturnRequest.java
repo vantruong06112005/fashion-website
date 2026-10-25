@@ -9,6 +9,7 @@ import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -55,6 +56,9 @@ public class ReturnRequest extends BaseEntity {
 
     @Column(name = "difference_amount")
     private BigDecimal differenceAmount;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     @JsonIgnore
     @OneToMany(mappedBy = "returnRequest", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
