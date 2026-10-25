@@ -1,8 +1,8 @@
-package iuh.fit.fashionwebsite.service.specialoffer;
+package iuh.fit.fashionwebsite.service.offer;
 
 import iuh.fit.fashionwebsite.entity.SpecialOfferProduct;
+import iuh.fit.fashionwebsite.exception.review.SpecialOfferProductNotFound;
 import iuh.fit.fashionwebsite.repository.SpecialOfferProductRepository;
-import iuh.fit.fashionwebsite.service.ResourceNotFoundException;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -19,15 +19,13 @@ public class SpecialOfferProductService {
         return specialOfferProductRepository.findAll();
     }
     public SpecialOfferProduct findById(Long id){
-        return specialOfferProductRepository.findById(id).orElseThrow(()->
-                new ResourceNotFoundException("Không tìm thấy sản phẩm khuyến mãi với mã: "+id));
+        return specialOfferProductRepository.findById(id).orElseThrow(SpecialOfferProductNotFound::new);
     }
     public SpecialOfferProduct create(SpecialOfferProduct specialOfferProduct){
         return specialOfferProductRepository.save(specialOfferProduct);
     }
     public SpecialOfferProduct update(Long id, SpecialOfferProduct specialOfferProduct){
-        SpecialOfferProduct sp = specialOfferProductRepository.findById(id).orElseThrow(()->
-                new ResourceNotFoundException("Không tìm thấy sản phẩm khuyến mãi với mã: "+id));
+        SpecialOfferProduct sp = specialOfferProductRepository.findById(id).orElseThrow(SpecialOfferProductNotFound::new);
         sp.setProduct(specialOfferProduct.getProduct());
         sp.setProductVariant(specialOfferProduct.getProductVariant());
         sp.setSpecialOffer(specialOfferProduct.getSpecialOffer());
@@ -38,7 +36,7 @@ public class SpecialOfferProductService {
     }
     public void delete(Long id){
         if(!specialOfferProductRepository.existsById(id)){
-            throw new ResourceNotFoundException("Không tìm thấy sản phẩm khuyến mãi với mã: "+id);
+            throw new SpecialOfferProductNotFound();
         }
         specialOfferProductRepository.deleteById(id);
     }

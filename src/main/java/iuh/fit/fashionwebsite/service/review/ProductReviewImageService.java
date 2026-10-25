@@ -1,8 +1,8 @@
 package iuh.fit.fashionwebsite.service.review;
 
 import iuh.fit.fashionwebsite.entity.ProductReviewImage;
+import iuh.fit.fashionwebsite.exception.offer.ProductRevImageNotFound;
 import iuh.fit.fashionwebsite.repository.ProductReviewImageRepository;
-import iuh.fit.fashionwebsite.service.ResourceNotFoundException;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -19,15 +19,13 @@ public class ProductReviewImageService {
         return productReviewImageRepository.findAll();
     }
     public ProductReviewImage findById(Long id){
-        return productReviewImageRepository.findById(id).orElseThrow(()->
-                new ResourceNotFoundException("Không tìm thấy hình sản phẩm với mã: "+id));
+        return productReviewImageRepository.findById(id).orElseThrow(ProductRevImageNotFound::new);
     }
     public ProductReviewImage create(ProductReviewImage productReviewImage){
         return productReviewImageRepository.save(productReviewImage);
     }
     public ProductReviewImage update(Long id, ProductReviewImage productReviewImage){
-        ProductReviewImage pi = productReviewImageRepository.findById(id).orElseThrow(()->
-                new ResourceNotFoundException("Không tìm thấy hình sản phẩm với mã: "+id));
+        ProductReviewImage pi = productReviewImageRepository.findById(id).orElseThrow(ProductRevImageNotFound::new);
         pi.setImageUrl(productReviewImage.getImageUrl());
         pi.setMediaType(productReviewImage.getMediaType());
         pi.setProductReview(productReviewImage.getProductReview());
@@ -38,7 +36,7 @@ public class ProductReviewImageService {
     }
     public void delete(Long id){
         if(!productReviewImageRepository.existsById(id)){
-            throw new ResourceNotFoundException("Không tồn tại hình sản phẩm với mã: "+id);
+            throw new ProductRevImageNotFound();
         }
         productReviewImageRepository.deleteById(id);
     }
