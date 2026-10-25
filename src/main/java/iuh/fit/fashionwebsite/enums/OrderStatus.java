@@ -1,9 +1,11 @@
 package iuh.fit.fashionwebsite.enums;
 
 public enum OrderStatus {
-    PENDING,
-    CONFIRMED,
+    PENDING_PAYMENT,
+    PROCESSING,
     SHIPPING,
     DELIVERED,
-    CANCELLED
+    CANCELLED,
+    SYSTEM_CANCELED,
+    RETURNED
 }
