@@ -68,4 +68,13 @@ public class ProductReviewImageController {
                 .message("Product review image has been deleted successfully")
                 .build();
     }
+
+    // Lấy tất cả ảnh thuộc về một đánh giá (theo ID của đánh giá)
+    @GetMapping("/review/{reviewId}")
+    public ApiResponse<List<ProductReviewImage>> getByReview(@PathVariable Long reviewId) {
+        return ApiResponse.<List<ProductReviewImage>>builder()
+                .message("Fetched review images successfully")
+                .data(productReviewImageService.getByReview(reviewId))
+                .build();
+    }
 }

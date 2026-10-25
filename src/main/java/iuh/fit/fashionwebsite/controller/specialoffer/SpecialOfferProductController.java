@@ -29,6 +29,24 @@ public class SpecialOfferProductController {
                 .build();
     }
 
+    // Lấy danh sách sản phẩm thuộc một ưu đãi cụ thể (theo ID của ưu đãi)
+    @GetMapping("/offer/{offerId}")
+    public ApiResponse<List<SpecialOfferProduct>> getByOffer(@PathVariable Long offerId) {
+        return ApiResponse.<List<SpecialOfferProduct>>builder()
+                .message("Fetched products of special offer successfully")
+                .data(specialOfferProductService.getByOffer(offerId))
+                .build();
+    }
+
+    // Lấy các ưu đãi đang có hiệu lực áp dụng cho một sản phẩm, dùng để hiển thị giá giảm ở trang sản phẩm
+    @GetMapping("/product/{productId}/active")
+    public ApiResponse<List<SpecialOfferProduct>> getActiveByProduct(@PathVariable Long productId) {
+        return ApiResponse.<List<SpecialOfferProduct>>builder()
+                .message("Fetched active offers of product successfully")
+                .data(specialOfferProductService.getActiveByProduct(productId))
+                .build();
+    }
+
     // Lấy chi tiết 1 sản phẩm thuộc ưu đãi theo ID
     @GetMapping("/{id}")
     public ApiResponse<SpecialOfferProduct> getById(@PathVariable Long id) {

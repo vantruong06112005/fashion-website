@@ -29,6 +29,15 @@ public class SpecialOfferController {
                 .build();
     }
 
+    // Lấy các ưu đãi đang có hiệu lực (đang bật và còn trong thời hạn), dùng cho trang chủ
+    @GetMapping("/active")
+    public ApiResponse<List<SpecialOffer>> getActive() {
+        return ApiResponse.<List<SpecialOffer>>builder()
+                .message("Fetched active special offers successfully")
+                .data(specialOfferService.getActiveOffers())
+                .build();
+    }
+
     // Lấy chi tiết 1 ưu đãi theo ID
     @GetMapping("/{id}")
     public ApiResponse<SpecialOffer> getById(@PathVariable Long id) {
@@ -56,6 +65,19 @@ public class SpecialOfferController {
         return ApiResponse.<SpecialOffer>builder()
                 .message("Special offer has been updated successfully")
                 .data(specialOfferService.update(id, specialOffer))
+                .build();
+    }
+
+    // Bật/tắt ưu đãi, ví dụ: PATCH /special-offers/5/active?value=false
+    @PatchMapping("/{id}/active")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
+    public ApiResponse<SpecialOffer> updateActive(
+            @PathVariable Long id,
+            @RequestParam boolean value
+    ) {
+        return ApiResponse.<SpecialOffer>builder()
+                .message("Special offer status updated successfully")
+                .data(specialOfferService.updateActive(id, value))
                 .build();
     }
 
