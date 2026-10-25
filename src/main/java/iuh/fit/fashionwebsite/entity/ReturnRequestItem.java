@@ -34,4 +34,8 @@ public class ReturnRequestItem extends BaseEntity {
 
     @Column(name = "quantity", nullable = false)
     private Integer quantity;
+
+    // Null khi chưa kiểm hàng; cần ghi số lượng được nhận trả nếu phiếu chỉ được duyệt một phần.
+    @Column(name = "accepted_quantity")
+    private Integer acceptedQuantity;
 }

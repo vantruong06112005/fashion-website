@@ -115,6 +115,19 @@ public class GlobalExceptionHandler {
                         .build());
     }
 
+    // Bắt lỗi validate param / path variable khi dùng @Validated ở Controller
+    @ExceptionHandler(jakarta.validation.ConstraintViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleConstraintViolation(
+            jakarta.validation.ConstraintViolationException exception) {
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.<Void>builder()
+                        .code(400)
+                        .message(exception.getMessage())
+                        .build());
+    }
+
     // Các exception chưa xử lý
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleException(

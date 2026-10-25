@@ -13,7 +13,17 @@ Hệ thống backend cho website bán quần áo, xây dựng theo mô hình **l
 - **Exception Handling** — xử lý ngoại lệ tập trung (Chi tiết xem tại [ExceptionDocs.md](ExceptionDocs.md))
 - **MapStruct** — mapping giữa Entity và DTO
 - **Lombok** — giảm boilerplate code (getter/setter, constructor...)
+- **Cloudinary** — lưu trữ đám mây & CDN tối ưu hình ảnh (Chi tiết xem tại [CLOUDINARY.md](CLOUDINARY.md))
 - **Maven** — quản lý dependency
+
+### Tài liệu chuyên đề (Chi tiết xem tại thư mục `docs/`):
+- 🔐 [SECURITY.md](SECURITY.md) — Xác thực, phân quyền JWT & OAuth2 Resource Server
+- ☁️ [CLOUDINARY.md](CLOUDINARY.md) — Tích hợp & quản lý hình ảnh Cloudinary (CDN, Upload, Clean-up)
+- 📋 [VALIDATION_AND_SCHEMA.md](VALIDATION_AND_SCHEMA.md) — Quy chuẩn Validation & danh mục DTO Request
+- 🔔 [NOTIFICATION.md](NOTIFICATION.md) — Thiết kế & hướng dẫn triển khai hệ thống Notification
+- 🔄 [NGHIEP_VU_DOI_TRA_HANG_THUC_TE.md](NGHIEP_VU_DOI_TRA_HANG_THUC_TE.md) — Phân tích nghiệp vụ đổi trả hàng thời trang
+- ⚠️ [ExceptionDocs.md](ExceptionDocs.md) — Bảng mã lỗi & xử lý ngoại lệ tập trung
+- 🎨 [UI_DESIGN_SYSTEM.md](UI_DESIGN_SYSTEM.md) — Hướng dẫn phong cách thiết kế UI/UX
 
 ---
 <!--  -->
@@ -100,7 +110,7 @@ Client nhận Response (dạng DTO, không trả trực tiếp Entity)
 ## 5. Hướng dẫn chạy dự án
 
 1. Clone project về máy
-2. Tạo file `.env` tại thư mục gốc từ mẫu [`.env.example`](.env.example) (điền mật khẩu DB, khóa `JWT_SIGNER_KEY`, Cloudinary...)
+2. Tạo file `.env` tại thư mục gốc từ mẫu [`.env.example`](.env.example) (điền mật khẩu DB, khóa `JWT_SIGNER_KEY`, thông số Cloudinary xem tại [CLOUDINARY.md](CLOUDINARY.md)...)
 3. Chạy lệnh:
    ```bash
    mvn clean install
