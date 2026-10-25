@@ -7,6 +7,8 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -55,6 +57,22 @@ public class Order extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "order_status", length = 30, nullable = false)
     private OrderStatus orderStatus;
+
+    // Phần giao hàng phải ghi mốc này khi xác nhận giao thành công, không lấy updatedAt thay thế.
+    @Column(name = "delivered_at")
+    private LocalDateTime deliveredAt;
+
+    public void setOrderStatus(OrderStatus orderStatus) {
+        this.orderStatus = orderStatus;
+        recordDeliveryTime();
+    }
+
+    @PrePersist
+    void recordDeliveryTime() {
+        if (orderStatus == OrderStatus.DELIVERED && deliveredAt == null) {
+            deliveredAt = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+        }
+    }
 
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_status", length = 30, nullable = false)
