@@ -8,6 +8,9 @@ package iuh.fit.fashionwebsite.repository;
 
 import iuh.fit.fashionwebsite.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -17,6 +20,19 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByUsername(String username);
     boolean existsByUsername(String username);
     boolean existsByEmail(String email);
+
+    @Modifying
+    @Query("UPDATE User u SET u.avt = :avt WHERE u.id = :id")
+    void updateAvatar(@Param("id") Long id, @Param("avt") String avt);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE User u SET u.passwordHash = :passwordHash, " +
+            "u.passwordChangedAt = :changedAt, " +
+            "u.updatedAt = CURRENT_TIMESTAMP WHERE u.id = :id")
+    int updatePassword(@Param("id") Long id,
+                       @Param("passwordHash") String passwordHash,
+                       @Param("changedAt") java.time.Instant changedAt);
+
 }
 
 
