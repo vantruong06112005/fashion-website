@@ -1,5 +1,7 @@
 -- DU LIEU DEMO V2: 70 san pham, 830 bien the, 208 anh Cloudinary, 300 don, 100 danh gia, 10 phieu TRA HANG.
--- Chon database fashion-website va autocommit ON. Chon TOAN BO file, Execute as one statement.
+-- HeidiSQL: mo file trong tab Query, chon database fashion-website, autocommit ON.
+-- Chon Send queries one by one (khong chon Send batch in one go), Ctrl+A va chay toan bo file.
+-- DELIMITER ^^ giu nguyen ca khoi BEGIN ... END khi gui den MariaDB.
 -- Chay Spring Boot truoc de tao bang va tai khoan. Khong tao/sua tai khoan, dia chi, gio hang.
 -- Dung khach hang ACTIVE co san; thong tin giao hang lay tu khach hang luc nhap.
 -- Giu lich su gia lap 01/01-22/10/2026. Ngay tao tai khoan la ngay khoi tao/nhap thu nghiem, khong phai ngay khach that dang ky.
@@ -11,6 +13,7 @@
 -- Chay lai: nhap batch con thieu, sua dung batch FW-DEMO-V1 cu sang V2; batch V2 hop le duoc giu nguyen.
 -- Neu database da co V1, hay sao luu truoc: file nay se CAP NHAT cac ban ghi demo cu, khong chi INSERT.
 -- delivered_at la moc giao thanh cong; chay Spring Boot ban moi truoc khi import.
+DELIMITER ^^
 BEGIN NOT ATOMIC
   DECLARE v_lock_coolmate INT DEFAULT 0;
   DECLARE v_lock_owen INT DEFAULT 0;
@@ -11242,4 +11245,5 @@ BEGIN NOT ATOMIC
   DO RELEASE_LOCK(CONCAT('fashion-owen-v1:',MD5(DATABASE())));
   DO RELEASE_LOCK(CONCAT('fashion-demo-v1:',DATABASE()));
   SELECT IF(v_legacy,'MIGRATED_V1_TO_V2',IF(v_coolmate_exists AND v_owen_exists,'ALREADY_PRESENT','INSERTED')) AS ket_qua,70 AS san_pham,830 AS bien_the,300 AS don_hang,309 AS giao_dich,10 AS phieu_tra,4 AS giao_dich_hoan;
-END;
+END^^
+DELIMITER ;
