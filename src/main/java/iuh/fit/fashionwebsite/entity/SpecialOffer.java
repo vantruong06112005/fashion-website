@@ -55,6 +55,9 @@ public class SpecialOffer extends BaseEntity {
     @Builder.Default
     private Boolean isActive = true;
 
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
     @JsonIgnore
     @OneToMany(mappedBy = "specialOffer", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
     @Builder.Default
