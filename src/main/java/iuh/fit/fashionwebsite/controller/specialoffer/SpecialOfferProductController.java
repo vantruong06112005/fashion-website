@@ -1,6 +1,7 @@
 package iuh.fit.fashionwebsite.controller.specialoffer;
 
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
+import iuh.fit.fashionwebsite.dto.response.SpecialOfferProductResponse;
 import iuh.fit.fashionwebsite.entity.SpecialOfferProduct;
 import iuh.fit.fashionwebsite.service.offer.SpecialOfferProductService;
 import jakarta.validation.Valid;
@@ -22,17 +23,35 @@ public class SpecialOfferProductController {
 
     // Lấy danh sách tất cả sản phẩm thuộc ưu đãi
     @GetMapping
-    public ApiResponse<List<SpecialOfferProduct>> getAll() {
-        return ApiResponse.<List<SpecialOfferProduct>>builder()
+    public ApiResponse<List<SpecialOfferProductResponse>> getAll() {
+        return ApiResponse.<List<SpecialOfferProductResponse>>builder()
                 .message("Fetched special offer products successfully")
                 .data(specialOfferProductService.getAll())
                 .build();
     }
 
+    // Lấy danh sách sản phẩm thuộc một ưu đãi cụ thể (theo ID của ưu đãi)
+    @GetMapping("/offer/{offerId}")
+    public ApiResponse<List<SpecialOfferProductResponse>> getByOffer(@PathVariable Long offerId) {
+        return ApiResponse.<List<SpecialOfferProductResponse>>builder()
+                .message("Fetched products of special offer successfully")
+                .data(specialOfferProductService.getByOffer(offerId))
+                .build();
+    }
+
+    // Lấy các ưu đãi đang có hiệu lực áp dụng cho một sản phẩm, dùng để hiển thị giá giảm ở trang sản phẩm
+    @GetMapping("/product/{productId}/active")
+    public ApiResponse<List<SpecialOfferProductResponse>> getActiveByProduct(@PathVariable Long productId) {
+        return ApiResponse.<List<SpecialOfferProductResponse>>builder()
+                .message("Fetched active offers of product successfully")
+                .data(specialOfferProductService.getActiveByProduct(productId))
+                .build();
+    }
+
     // Lấy chi tiết 1 sản phẩm thuộc ưu đãi theo ID
     @GetMapping("/{id}")
-    public ApiResponse<SpecialOfferProduct> getById(@PathVariable Long id) {
-        return ApiResponse.<SpecialOfferProduct>builder()
+    public ApiResponse<SpecialOfferProductResponse> getById(@PathVariable Long id) {
+        return ApiResponse.<SpecialOfferProductResponse>builder()
                 .message("Fetched special offer product detail successfully")
                 .data(specialOfferProductService.findById(id))
                 .build();
@@ -42,10 +61,10 @@ public class SpecialOfferProductController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
-    public ApiResponse<SpecialOfferProduct> create(
+    public ApiResponse<SpecialOfferProductResponse> create(
             @RequestBody @Valid SpecialOfferProduct specialOfferProduct
     ) {
-        return ApiResponse.<SpecialOfferProduct>builder()
+        return ApiResponse.<SpecialOfferProductResponse>builder()
                 .message("Special offer product has been created successfully")
                 .data(specialOfferProductService.create(specialOfferProduct))
                 .build();
@@ -54,11 +73,11 @@ public class SpecialOfferProductController {
     // Cập nhật sản phẩm thuộc ưu đãi theo ID
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
-    public ApiResponse<SpecialOfferProduct> update(
+    public ApiResponse<SpecialOfferProductResponse> update(
             @PathVariable Long id,
             @RequestBody @Valid SpecialOfferProduct specialOfferProduct
     ) {
-        return ApiResponse.<SpecialOfferProduct>builder()
+        return ApiResponse.<SpecialOfferProductResponse>builder()
                 .message("Special offer product has been updated successfully")
                 .data(specialOfferProductService.update(id, specialOfferProduct))
                 .build();
