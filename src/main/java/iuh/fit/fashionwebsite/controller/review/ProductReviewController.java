@@ -1,6 +1,7 @@
 package iuh.fit.fashionwebsite.controller.review;
 
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
+import iuh.fit.fashionwebsite.dto.response.ProductReviewResponse;
 import iuh.fit.fashionwebsite.dto.response.ReviewSummaryResponse;
 import iuh.fit.fashionwebsite.entity.ProductReview;
 import iuh.fit.fashionwebsite.service.review.ProductReviewService;
@@ -22,13 +23,13 @@ import java.util.List;
 @RequiredArgsConstructor
 @Slf4j
 public class ProductReviewController {
-
     private final ProductReviewService productReviewService;
 
     // Lấy danh sách tất cả đánh giá sản phẩm
     @GetMapping
-    public ApiResponse<List<ProductReview>> getAll() {
-        return ApiResponse.<List<ProductReview>>builder()
+    public ApiResponse<List<ProductReviewResponse>> getAll() {
+        return ApiResponse.<List<ProductReviewResponse>>builder()
+                .code(200)
                 .message("Fetched product reviews successfully")
                 .data(productReviewService.getAll())
                 .build();
@@ -36,8 +37,8 @@ public class ProductReviewController {
 
     // Lấy chi tiết 1 đánh giá theo ID
     @GetMapping("/{id}")
-    public ApiResponse<ProductReview> getById(@PathVariable Long id) {
-        return ApiResponse.<ProductReview>builder()
+    public ApiResponse<ProductReviewResponse> getById(@PathVariable Long id) {
+        return ApiResponse.<ProductReviewResponse>builder()
                 .message("Fetched product review detail successfully")
                 .data(productReviewService.findById(id))
                 .build();
@@ -47,10 +48,10 @@ public class ProductReviewController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
-    public ApiResponse<ProductReview> create(
+    public ApiResponse<ProductReviewResponse> create(
             @RequestBody @Valid ProductReview productReview
     ) {
-        return ApiResponse.<ProductReview>builder()
+        return ApiResponse.<ProductReviewResponse>builder()
                 .message("Product review has been created successfully")
                 .data(productReviewService.create(productReview))
                 .build();
@@ -59,11 +60,11 @@ public class ProductReviewController {
     // Cập nhật đánh giá theo ID
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
-    public ApiResponse<ProductReview> update(
+    public ApiResponse<ProductReviewResponse> update(
             @PathVariable Long id,
             @RequestBody @Valid ProductReview productReview
     ) {
-        return ApiResponse.<ProductReview>builder()
+        return ApiResponse.<ProductReviewResponse>builder()
                 .message("Product review has been updated successfully")
                 .data(productReviewService.update(id, productReview))
                 .build();
@@ -82,12 +83,12 @@ public class ProductReviewController {
     // Lấy đánh giá của một sản phẩm, có phân trang (mặc định 10 đánh giá mỗi trang, mới nhất trước)
     // và có thể lọc theo số sao bằng tham số ?rating=...
     @GetMapping("/product/{productId}")
-    public ApiResponse<Page<ProductReview>> getByProduct(
+    public ApiResponse<Page<ProductReviewResponse>> getByProduct(
             @PathVariable Long productId,
             @RequestParam(required = false) Integer rating,
             @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        return ApiResponse.<Page<ProductReview>>builder()
+        return ApiResponse.<Page<ProductReviewResponse>>builder()
                 .message("Fetched product reviews successfully")
                 .data(productReviewService.getByProduct(productId, rating, pageable))
                 .build();
@@ -105,8 +106,8 @@ public class ProductReviewController {
     // Lấy danh sách đánh giá của người dùng đang đăng nhập
     @GetMapping("/me")
     @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
-    public ApiResponse<List<ProductReview>> getMyReviews() {
-        return ApiResponse.<List<ProductReview>>builder()
+    public ApiResponse<List<ProductReviewResponse>> getMyReviews() {
+        return ApiResponse.<List<ProductReviewResponse>>builder()
                 .message("Fetched my reviews successfully")
                 .data(productReviewService.getMyReviews())
                 .build();
