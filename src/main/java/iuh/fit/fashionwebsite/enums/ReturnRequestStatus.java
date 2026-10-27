@@ -4,5 +4,6 @@ public enum ReturnRequestStatus {
     PENDING,
     APPROVED,
     REJECTED,
-    COMPLETED
+    COMPLETED,
+    CANCELLED
 }

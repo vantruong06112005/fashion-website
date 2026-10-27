@@ -6,6 +6,24 @@ import org.springframework.http.HttpStatusCode;
 
 @Getter
 public enum ErrorCode implements BaseErrorCode {
+    Product_Review_NOT_FOUND(
+            404,
+            "error.order_not_found",
+            HttpStatus.NOT_FOUND
+    ),Product_Review_Image_NOT_FOUND(
+            404,
+            "error.order_not_found",
+            HttpStatus.NOT_FOUND
+    ),SpecialOffer_Product_NOT_FOUND(
+            404,
+            "error.order_not_found",
+            HttpStatus.NOT_FOUND
+    ),SpecialOffer_NOT_FOUND(
+            404,
+            "error.order_not_found",
+            HttpStatus.NOT_FOUND
+    ),
+
     ORDER_NOT_FOUND(
             404,
             "error.order_not_found",
@@ -39,7 +57,11 @@ public enum ErrorCode implements BaseErrorCode {
     PAYMENT_METHOD_CODE_DUPLICATE(
             400,
             "error.payment_method_code_duplicate",
-            HttpStatus.BAD_REQUEST
+            HttpStatus.BAD_REQUEST),
+    ADDRESS_NOT_FOUND(
+            404,
+            "error.address_not_found",
+            HttpStatus.NOT_FOUND
     ),
     TOKEN_EXPIRED(401,"error.token_expired", HttpStatus.UNAUTHORIZED),
     TOKEN_INVALID(401, "error.token_invalid", HttpStatus.UNAUTHORIZED),

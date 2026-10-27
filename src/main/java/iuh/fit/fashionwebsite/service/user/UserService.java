@@ -69,7 +69,7 @@ public class UserService {
                 passwordEncoder.encode(request.getPassword())
         );
 
-        user.setRole(RoleUser.CUSTOMER);
+        user.setRole(request.getRole() != null ? request.getRole() : RoleUser.CUSTOMER);
         user.setStatus(StatusUser.ACTIVE);
 
         if (file != null && !file.isEmpty()) {
@@ -100,11 +100,27 @@ public class UserService {
 
         userMapper.updateUser(user, request);
 
+        if (request.getRole() != null) {
+            user.setRole(request.getRole());
+        }
+
+        if (request.getStatus() != null) {
+            user.setStatus(request.getStatus());
+        }
+
+        String oldAvatar = user.getAvt();
+
         if (file != null && !file.isEmpty()) {
             String avatarUrl = cloudinaryService.uploadImage(file, "fashion_website/avatars");
             user.setAvt(avatarUrl);
-        } else if (request.getAvt() != null && !request.getAvt().isBlank()) {
+            if (oldAvatar != null && !oldAvatar.isBlank() && !oldAvatar.equals(avatarUrl)) {
+                cloudinaryService.deleteImage(oldAvatar);
+            }
+        } else if (request.getAvt() != null && !request.getAvt().isBlank() && !request.getAvt().equals(oldAvatar)) {
             user.setAvt(request.getAvt());
+            if (oldAvatar != null && !oldAvatar.isBlank()) {
+                cloudinaryService.deleteImage(oldAvatar);
+            }
         }
 
         // Chỉ ADMIN đi qua đường này (PUT /users/{id}) → cho phép reset mật khẩu.
@@ -144,12 +160,15 @@ public class UserService {
     }
 
     public void deleteUser(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(UserNotFoundException::new);
 
-        if (!userRepository.existsById(id)) {
-            throw new UserNotFoundException();
+        String oldAvatar = user.getAvt();
+        userRepository.delete(user);
+
+        if (oldAvatar != null && !oldAvatar.isBlank()) {
+            cloudinaryService.deleteImage(oldAvatar);
         }
-
-        userRepository.deleteById(id);
     }
 
     @Transactional(readOnly = true)
@@ -172,6 +191,10 @@ public class UserService {
             throw new AppException(ErrorCode.BAD_REQUEST);
         }
 
+        // Không cho phép tự đổi role hoặc trạng thái hoạt động của chính mình
+        request.setRole(null);
+        request.setStatus(null);
+
         String username = SecurityContextHolder
                 .getContext()
                 .getAuthentication()
@@ -187,10 +210,17 @@ public class UserService {
         User user = userRepository.findById(id)
                 .orElseThrow(UserNotFoundException::new);
 
+        String oldAvatar = user.getAvt();
         String avatarUrl = cloudinaryService.uploadImage(file, "fashion_website/avatars");
         user.setAvt(avatarUrl);
 
-        return userMapper.toUserResponse(userRepository.save(user));
+        User savedUser = userRepository.save(user);
+
+        if (oldAvatar != null && !oldAvatar.isBlank() && !oldAvatar.equals(avatarUrl)) {
+            cloudinaryService.deleteImage(oldAvatar);
+        }
+
+        return userMapper.toUserResponse(savedUser);
     }
 
     public UserResponse uploadCurrentAvatar(MultipartFile file) {
@@ -202,10 +232,44 @@ public class UserService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(UserNotFoundException::new);
 
+        String oldAvatar = user.getAvt();
         String avatarUrl = cloudinaryService.uploadImage(file, "fashion_website/avatars");
         user.setAvt(avatarUrl);
 
-        return userMapper.toUserResponse(userRepository.save(user));
+        User savedUser = userRepository.save(user);
+
+        if (oldAvatar != null && !oldAvatar.isBlank() && !oldAvatar.equals(avatarUrl)) {
+            cloudinaryService.deleteImage(oldAvatar);
+        }
+
+        return userMapper.toUserResponse(savedUser);
+    }
+
+    public UserResponse deleteAvatar(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(UserNotFoundException::new);
+
+        String oldAvatar = user.getAvt();
+        user.setAvt(null);
+        User savedUser = userRepository.save(user);
+
+        if (oldAvatar != null && !oldAvatar.isBlank()) {
+            cloudinaryService.deleteImage(oldAvatar);
+        }
+
+        return userMapper.toUserResponse(savedUser);
+    }
+
+    public UserResponse deleteCurrentAvatar() {
+        String username = SecurityContextHolder
+                .getContext()
+                .getAuthentication()
+                .getName();
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(UserNotFoundException::new);
+
+        return deleteAvatar(user.getId());
     }
 
     /**
