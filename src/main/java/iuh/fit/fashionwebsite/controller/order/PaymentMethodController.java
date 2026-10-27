@@ -7,6 +7,7 @@ import iuh.fit.fashionwebsite.dto.response.PaymentMethodResponse;
 import iuh.fit.fashionwebsite.service.order.PaymentMethodService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,6 +24,7 @@ public class PaymentMethodController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ApiResponse<List<PaymentMethodResponse>> getAllPaymentMethods() {
         return ApiResponse.<List<PaymentMethodResponse>>builder()
                 .code(200)
@@ -32,6 +34,7 @@ public class PaymentMethodController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ApiResponse<PaymentMethodResponse> getPaymentMethodById(
             @PathVariable @NotNull Long id
     ) {
@@ -43,6 +46,7 @@ public class PaymentMethodController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<PaymentMethodResponse> createPaymentMethod(
             @Valid @RequestBody PaymentMethodCreationRequest request
     ) {
@@ -54,6 +58,7 @@ public class PaymentMethodController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<PaymentMethodResponse> updatePaymentMethod(
             @PathVariable @NotNull Long id,
             @Valid @RequestBody PaymentMethodUpdateRequest request
@@ -66,6 +71,7 @@ public class PaymentMethodController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<Void> deletePaymentMethod(@PathVariable @NotNull Long id) {
         paymentMethodService.deletePaymentMethod(id);
         return ApiResponse.<Void>builder()

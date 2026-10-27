@@ -49,6 +49,11 @@ public enum ErrorCode implements BaseErrorCode {
             "error.user_not_found",
             HttpStatus.NOT_FOUND
     ),
+    USER_ADDRESS_NOT_FOUND(
+            404,
+            "error.user_address_not_found",
+            HttpStatus.NOT_FOUND
+    ),
     PAYMENT_METHOD_CODE_DUPLICATE(
             400,
             "error.payment_method_code_duplicate",

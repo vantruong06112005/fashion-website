@@ -4,6 +4,7 @@ import iuh.fit.fashionwebsite.dto.response.ApiResponse;
 import iuh.fit.fashionwebsite.dto.response.OrderResponse;
 import iuh.fit.fashionwebsite.service.order.OrderService;
 import jakarta.validation.constraints.NotNull;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -21,6 +22,7 @@ public class OrderController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ApiResponse<List<OrderResponse>> getAllOrders() {
         return ApiResponse.<List<OrderResponse>>builder()
                 .code(200)
@@ -30,6 +32,7 @@ public class OrderController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ApiResponse<OrderResponse> getOrderById(@PathVariable @NotNull Long id) {
         return ApiResponse.<OrderResponse>builder()
                 .code(200)
@@ -42,6 +45,7 @@ public class OrderController {
     //@PutMapping("/{id}")
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<Void> deleteOrder(@PathVariable @NotNull Long id) {
         orderService.deleteOrder(id);
         return ApiResponse.<Void>builder()
