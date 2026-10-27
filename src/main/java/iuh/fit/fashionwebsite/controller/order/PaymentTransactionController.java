@@ -4,6 +4,7 @@ import iuh.fit.fashionwebsite.dto.response.ApiResponse;
 import iuh.fit.fashionwebsite.dto.response.PaymentTransactionResponse;
 import iuh.fit.fashionwebsite.service.order.PaymentTransactionService;
 import jakarta.validation.constraints.NotNull;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,6 +21,7 @@ public class PaymentTransactionController {
     }
 
     @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<List<PaymentTransactionResponse>> getAllPaymentTransaction() {
         return ApiResponse.<List<PaymentTransactionResponse>>builder()
                 .code(200)
@@ -29,6 +31,7 @@ public class PaymentTransactionController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<PaymentTransactionResponse> getPaymentTransactionById(
             @PathVariable @NotNull Long id
     ) {
@@ -40,6 +43,7 @@ public class PaymentTransactionController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<Void> deletePaymentTransaction(@PathVariable @NotNull Long id) {
         paymentTransactionService.deletePaymentTransaction(id);
         return ApiResponse.<Void>builder()
