@@ -1,6 +1,5 @@
 package iuh.fit.fashionwebsite.util;
 
-
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -19,6 +18,7 @@ public class AppUtil {
         }
         return authentication.getName();
     }
+
     public static String generateOrderCode() {
         String datePart = LocalDate.now().format(DateTimeFormatter.ofPattern("yyMMdd"));
         String randomPart = UUID.randomUUID().toString().substring(0, 6).toUpperCase();
@@ -33,5 +33,4 @@ public class AppUtil {
         }
         return otp.toString();
     }
-
 }

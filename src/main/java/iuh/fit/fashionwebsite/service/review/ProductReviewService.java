@@ -88,7 +88,7 @@ public class ProductReviewService {
     // Lấy các đánh giá của người dùng đang đăng nhập
     @Transactional(readOnly = true)
     public List<ProductReviewResponse> getMyReviews() {
-        return productReviewRepository.findByUserId(userService.getCurrentUser().getId()).stream()
+        return productReviewRepository.findByUserId(userService.getCurrentUserEntity().getId()).stream()
                 .map(productReviewMapper::toProductReviewResponse)
                 .toList();
     }

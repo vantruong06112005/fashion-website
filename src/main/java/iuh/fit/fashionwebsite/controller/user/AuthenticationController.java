@@ -94,4 +94,22 @@ public class AuthenticationController {
                 .build();
     }
 
+    @PostMapping("/forgot-password")
+    ApiResponse<Void> forgotPassword(@RequestBody @Valid ForgotPasswordRequest request) {
+        authenticationService.forgotPassword(request);
+        return ApiResponse.<Void>builder()
+                .code(200)
+                .message("Password reset temporary code has been sent to your email")
+                .build();
+    }
+
+    @PostMapping("/reset-password")
+    ApiResponse<Void> resetPassword(@RequestBody @Valid ResetPasswordRequest request) {
+        authenticationService.resetPassword(request);
+        return ApiResponse.<Void>builder()
+                .code(200)
+                .message("Password has been reset successfully")
+                .build();
+    }
+
 }
