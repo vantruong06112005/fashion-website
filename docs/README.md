@@ -124,9 +124,9 @@ Client nhận Response (dạng DTO, không trả trực tiếp Entity)
 ## 6. Quy trình làm việc nhóm (Git)
 
 - Nhánh chính: `main` (không push trực tiếp)
-- Mỗi thành viên tạo nhánh riêng theo tính năng: `feature/ten-chuc-nang`
+- Mỗi thành viên tạo nhánh riêng `
   ```bash
-  git checkout -b feature/product-management
+  git checkout -b truong
   ```
 - Commit rõ ràng, ví dụ: `feat: add product CRUD API`, `fix: sửa lỗi validate size`
 - Tạo **Pull Request** vào `main`, cần ít nhất 1 thành viên review trước khi merge
