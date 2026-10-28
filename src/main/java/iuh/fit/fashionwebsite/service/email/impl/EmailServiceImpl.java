@@ -30,7 +30,7 @@ public class EmailServiceImpl implements EmailService {
     private String fromName;
 
     @Override
-    public void sendPasswordResetEmail(String toEmail, String tempPassword) {
+    public void sendPasswordResetEmail(String toEmail, String username, String tempPassword) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
             // Sử dụng multipart = true để đính kèm cả bản Plain-Text và bản HTML (multipart/alternative)
@@ -47,14 +47,14 @@ public class EmailServiceImpl implements EmailService {
             helper.setSentDate(new Date());
             helper.setSubject("Mã xác nhận đặt lại mật khẩu - " + fromName);
 
-            String plainTextBody = buildPasswordResetPlainText(toEmail, tempPassword);
-            String htmlBody = buildPasswordResetHtml(toEmail, tempPassword);
+            String plainTextBody = buildPasswordResetPlainText(username, tempPassword);
+            String htmlBody = buildPasswordResetHtml(username, tempPassword);
 
             // Truyền đồng thời cả plainText và htmlBody
             helper.setText(plainTextBody, htmlBody);
 
             mailSender.send(message);
-            log.info("Password reset email sent successfully to {}", toEmail);
+            log.info("Password reset email sent successfully to {} (username: {})", toEmail, username);
         } catch (MessagingException | UnsupportedEncodingException e) {
             log.error("Failed to construct or send password reset email to {}: {}", toEmail, e.getMessage(), e);
             throw new AppException(ErrorCode.EMAIL_SEND_FAILED);
@@ -64,13 +64,15 @@ public class EmailServiceImpl implements EmailService {
         }
     }
 
-    private String buildPasswordResetPlainText(String toEmail, String tempPassword) {
+    private String buildPasswordResetPlainText(String username, String tempPassword) {
         return """
                 Xin chào %s,
 
                 Hệ thống %s vừa nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn.
 
-                Mật khẩu tạm thời của bạn là: %s
+                Thông tin tài khoản của bạn:
+                - Tên đăng nhập (Username): %s
+                - Mật khẩu tạm thời: %s
 
                 Mật khẩu tạm thời này có hiệu lực trong vòng 15 phút. Vui lòng nhập mật khẩu tạm thời này cùng mật khẩu mới trên trang Đặt lại mật khẩu để hoàn tất.
 
@@ -78,10 +80,10 @@ public class EmailServiceImpl implements EmailService {
 
                 Trân trọng,
                 Đội ngũ %s
-                """.formatted(toEmail, fromName, tempPassword, fromName);
+                """.formatted(username, fromName, username, tempPassword, fromName);
     }
 
-    private String buildPasswordResetHtml(String toEmail, String tempPassword) {
+    private String buildPasswordResetHtml(String username, String tempPassword) {
         return """
                 <!DOCTYPE html>
                 <html lang="vi">
@@ -102,13 +104,18 @@ public class EmailServiceImpl implements EmailService {
                                 <p style="margin-top: 0; font-size: 15px; line-height: 1.6;">Xin chào <strong>%s</strong>,</p>
                                 <p style="font-size: 15px; line-height: 1.6;">
                                     Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn tại <strong>%s</strong>.
-                                    Dưới đây là mật khẩu tạm thời để xác nhận:
+                                    Dưới đây là thông tin đăng nhập và mật khẩu tạm thời để xác nhận:
                                 </p>
-                                <div style="margin: 24px 0; padding: 16px; background-color: #f3f4f6; border-radius: 6px; text-align: center;">
-                                    <span style="font-size: 22px; font-weight: bold; color: #111827; letter-spacing: 2px; font-family: monospace;">%s</span>
+                                <div style="margin: 24px 0; padding: 18px 20px; background-color: #f3f4f6; border-radius: 6px;">
+                                    <p style="margin: 0 0 12px 0; font-size: 14px; color: #4b5563;">
+                                        Tên đăng nhập (Username): <strong style="font-size: 16px; color: #111827; font-family: monospace;">%s</strong>
+                                    </p>
+                                    <p style="margin: 0; font-size: 14px; color: #4b5563;">
+                                        Mật khẩu tạm thời: <strong style="font-size: 20px; color: #111827; letter-spacing: 2px; font-family: monospace;">%s</strong>
+                                    </p>
                                 </div>
                                 <p style="font-size: 14px; line-height: 1.6; color: #4b5563;">
-                                    Mã này có hiệu lực trong vòng <strong>15 phút</strong>. Vui lòng nhập mật khẩu tạm thời này kèm theo mật khẩu mới của bạn để hoàn tất việc đổi mật khẩu.
+                                    Mã này có hiệu lực trong vòng <strong>15 phút</strong>. Vui lòng nhập mật khẩu tạm thời này kèm theo mật khẩu mới của bạn để hoàn tất việc đổi mật khẩu, sau đó sử dụng <strong>Username</strong> ở trên để đăng nhập.
                                 </p>
                                 <p style="font-size: 13px; line-height: 1.6; color: #6b7280; margin-top: 24px;">
                                     Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua thư này. Tài khoản của bạn vẫn an toàn.
@@ -123,6 +130,6 @@ public class EmailServiceImpl implements EmailService {
                     </table>
                 </body>
                 </html>
-                """.formatted(fromName, toEmail, fromName, tempPassword, fromName);
+                """.formatted(fromName, username, fromName, username, tempPassword, fromName);
     }
 }

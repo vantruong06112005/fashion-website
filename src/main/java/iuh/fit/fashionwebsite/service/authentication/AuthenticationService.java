@@ -362,7 +362,7 @@ public class AuthenticationService {
                 .build();
         passwordResetTokenRepository.save(resetToken);
 
-        emailService.sendPasswordResetEmail(email, tempPassword);
+        emailService.sendPasswordResetEmail(email, user.getUsername(), tempPassword);
     }
 
     public void resetPassword(ResetPasswordRequest request) {
