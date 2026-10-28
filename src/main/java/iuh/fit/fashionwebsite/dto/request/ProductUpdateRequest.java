@@ -21,7 +21,7 @@ public class ProductUpdateRequest {
 
     private String description;
 
-    @DecimalMin(value = "0.0", message = "Base price must be greater than or equal to 0")
+    @DecimalMin(value = "0.0", inclusive = false, message = "Base price must be greater than 0")
     private BigDecimal basePrice;
 
     private Long categoryId;
