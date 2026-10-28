@@ -1,12 +1,12 @@
 # TÀI LIỆU CHỨC NĂNG QUÊN MẬT KHẨU (FORGOT PASSWORD) - FASHION WEBSITE
 
-Tài liệu này mô tả chi tiết quy trình, API endpoints, cách tổ chức mã nguồn và hướng dẫn cấu hình Email SMTP (Google Gmail) cho chức năng Quên mật khẩu & Đặt lại mật khẩu.
+Tài liệu này mô tả chi tiết quy trình nghiệp vụ, API endpoints, cách tổ chức mã nguồn, cơ chế chống rơi vào Thư rác (Anti-Spam) và hướng dẫn cấu hình Email SMTP (Google Gmail) thông qua file `.env` cho chức năng Quên mật khẩu & Đặt lại mật khẩu.
 
 ---
 
 ## 1. Tổng quan & Quy trình hoạt động
 
-Quy trình đặt lại mật khẩu gồm 2 bước nhằm đảm bảo an toàn tuyệt đối và trải nghiệm thân thiện cho người dùng:
+Vì hệ thống đăng nhập (`POST /api/v1/auth/login`) sử dụng **`username`** và **`password`**, nên khi người dùng quên thông tin đăng nhập và nhập **`email`**, hệ thống sẽ gửi về email cả **Tên đăng nhập (`username`)** lẫn **Mật khẩu tạm thời (`tempPassword`)** để người dùng vừa có thể đặt lại mật khẩu mới, vừa biết `username` của mình để đăng nhập lại.
 
 ```mermaid
 sequenceDiagram
@@ -18,21 +18,21 @@ sequenceDiagram
     participant MailSvc as EmailService (fashionwebsite)
 
     Note over User, MailSvc: BƯỚC 1: YÊU CẦU CẤP MẬT KHẨU TẠM THỜI
-    User->>AuthCtrl: POST /api/v1/auth/forgot-password { email }
+    User->>AuthCtrl: POST {{baseurl}}/auth/forgot-password { email }
     AuthCtrl->>AuthSvc: forgotPassword(request)
     AuthSvc->>DB: findByEmail(email) & ensureActive(user)
     AuthSvc->>DB: invalidateAllActiveTokensByEmail(email)
     AuthSvc->>AuthSvc: Sinh mật khẩu tạm ngẫu nhiên (8 ký tự)
     AuthSvc->>DB: Lưu PasswordResetToken (hạn dùng 15 phút)
-    AuthSvc->>MailSvc: Gửi email mật khẩu tạm với tên "fashionwebsite"
-    MailSvc-->>User: Nhận email chứa mật khẩu tạm
+    AuthSvc->>MailSvc: sendPasswordResetEmail(email, username, tempPassword)
+    MailSvc-->>User: Nhận email từ "fashionwebsite" gồm: Username + Mật khẩu tạm thời
 
     Note over User, MailSvc: BƯỚC 2: NHẬP MẬT KHẨU TẠM & ĐẶT MẬT KHẨU MỚI
-    User->>AuthCtrl: POST /api/v1/auth/reset-password { email, tempPassword, newPassword, confirmPassword }
+    User->>AuthCtrl: POST {{baseurl}}/auth/reset-password { email, tempPassword, newPassword, confirmPassword }
     AuthCtrl->>AuthSvc: resetPassword(request)
     AuthSvc->>AuthSvc: Kiểm tra newPassword == confirmPassword
     AuthSvc->>DB: Kiểm tra user tồn tại & newPassword != oldPassword
-    AuthSvc->>DB: Xác thực tempPassword còn hạn & chưa qua sử dụng
+    AuthSvc->>DB: Xác thực tempPassword còn hạn (15 phút) & chưa qua sử dụng
     AuthSvc->>DB: Đánh dấu token đã dùng (used = true)
     AuthSvc->>DB: Mã hóa newPassword (BCrypt), lưu passwordChangedAt = now()
     AuthCtrl-->>User: Trả về thành công (200 OK)
@@ -42,40 +42,48 @@ sequenceDiagram
 
 ## 2. Danh sách API Endpoints
 
-### 2.1. Yêu cầu cấp lại mật khẩu (Gửi mật khẩu tạm về email)
-- **URL**: `{{baseurl}}/auth/forgot-password` (Ví dụ: `http://localhost:8080/api/v1/auth/forgot-password`)
+> **Lưu ý khi test trên Bruno / Postman**:
+> Thiết lập biến môi trường `baseurl = http://localhost:8080/api/v1`
+
+### 2.1. Yêu cầu cấp lại mật khẩu (Gửi Username & Mật khẩu tạm về email)
+- **URL**: `{{baseurl}}/auth/forgot-password`
 - **Method**: `POST`
 - **Auth**: Public (Không yêu cầu Bearer Token)
 - **Request Body** (`application/json`):
 ```json
 {
-  "email": "customer@gmail.com"
+  "email": "nguyenvantruongdz91@gmail.com"
 }
 ```
 - **Response Thành công (200 OK)**:
 ```json
 {
   "code": 200,
-  "message": "Password reset temporary code has been sent to your email",
-  "data": null
+  "message": "Password reset temporary code has been sent to your email"
 }
 ```
+- **Nội dung Email gửi về người dùng**:
+  - **Người gửi (From)**: `fashionwebsite`
+  - **Tiêu đề (Subject)**: `Mã xác nhận đặt lại mật khẩu - fashionwebsite`
+  - **Thông tin trong thư**:
+    - **Tên đăng nhập (Username)**: `<username_của_người_dùng>`
+    - **Mật khẩu tạm thời**: `<chuỗi_8_ký_tự_ngẫu_nhiên>` (Có hiệu lực trong 15 phút)
 - **Mã lỗi thường gặp**:
-  - `400 Bad Request`: Định dạng email không hợp lệ (`Email should be valid`).
+  - `400 Bad Request`: Định dạng email không hợp lệ (`email: Email should be valid`).
   - `404 Not Found`: Không tìm thấy người dùng với email này (`error.user_not_found`).
   - `403 Forbidden`: Tài khoản đang bị khóa (`error.user_inactive`).
   - `500 Internal Server Error`: Lỗi kết nối máy chủ gửi email (`error.email_send_failed`).
 
 ---
 
-### 2.2. Xác thực và đổi mật khẩu mới
-- **URL**: `{{baseurl}}/auth/reset-password` (Ví dụ: `http://localhost:8080/api/v1/auth/reset-password`)
+### 2.2. Xác thực mật khẩu tạm và đổi mật khẩu mới
+- **URL**: `{{baseurl}}/auth/reset-password`
 - **Method**: `POST`
 - **Auth**: Public (Không yêu cầu Bearer Token)
 - **Request Body** (`application/json`):
 ```json
 {
-  "email": "customer@gmail.com",
+  "email": "nguyenvantruongdz91@gmail.com",
   "tempPassword": "Xk9mP2qA",
   "newPassword": "MyNewPassword@123",
   "confirmPassword": "MyNewPassword@123"
@@ -85,8 +93,7 @@ sequenceDiagram
 ```json
 {
   "code": 200,
-  "message": "Password has been reset successfully",
-  "data": null
+  "message": "Password has been reset successfully"
 }
 ```
 - **Mã lỗi thường gặp**:
@@ -99,38 +106,44 @@ sequenceDiagram
 
 ---
 
-## 3. Hướng dẫn cấu hình Email (Gmail SMTP)
+## 3. Hướng dẫn cấu hình Email (Gmail SMTP & File `.env`)
 
-Dự án sử dụng Spring Boot Starter Mail với giao thức SMTP qua cổng TLS 587. Khi gửi email, tên người gửi hiển thị sẽ là **`fashionwebsite`**.
+Dự án sử dụng `spring-boot-starter-mail` kết hợp với cấu hình tự động nạp biến môi trường từ file `.env` thông qua dòng `spring.config.import=optional:file:.env[.properties]` trong `application.properties`.
 
 ### Bước 1: Tạo Mật khẩu ứng dụng (Google App Password)
-Do Google đã chặn tính năng "Cho phép ứng dụng kém an toàn", bạn **bắt buộc** phải tạo Mật khẩu ứng dụng (App Password) 16 ký tự:
+1. Đăng nhập vào tài khoản Google dùng làm email gửi hệ thống: [https://myaccount.google.com/](https://myaccount.google.com/)
+2. Vào mục **Bảo mật (Security)** -> Bật **Xác minh 2 bước (2-Step Verification)** (nếu chưa bật).
+3. Truy cập trang **Mật khẩu ứng dụng (App Passwords)**: [https://myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
+4. Nhập tên ứng dụng là `fashionwebsite` -> Nhấn **Tạo (Create)**.
+5. Google sẽ sinh chuỗi 16 ký tự (ví dụ: `zqem tgqr knlf cvoe`). Hãy sao chép chuỗi này.
 
-1. Đăng nhập vào tài khoản Google bạn muốn dùng làm email gửi: [https://myaccount.google.com/](https://myaccount.google.com/)
-2. Vào mục **Bảo mật (Security)** ở cột bên trái.
-3. Trong phần "Cách bạn đăng nhập vào Google", bật **Xác minh 2 bước (2-Step Verification)** (nếu chưa bật).
-4. Tìm kiếm từ khóa **"Mật khẩu ứng dụng" (App Passwords)** trên thanh tìm kiếm hoặc truy cập thẳng: [https://myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
-5. Nhập tên ứng dụng, ví dụ: `fashionwebsite` -> Nhấn **Tạo (Create)**.
-6. Google sẽ cung cấp chuỗi mật khẩu 16 chữ cái (dạng `xxxx xxxx xxxx xxxx`). Sao chép chuỗi này (không cần dấu cách).
+### Bước 2: Khai báo trong file `.env` ở thư mục gốc dự án
+Mở file `.env` (tham khảo mẫu tại `.env.example`) và thêm cấu hình sau:
 
-### Bước 2: Cấu hình vào Dự án
+```env
+# Mail Configuration (Gmail SMTP)
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=email_gui_cua_ban@gmail.com
+MAIL_PASSWORD=zqemtgqrknlfcvoe
+MAIL_FROM_NAME=fashionwebsite
+```
 
-#### Cách 1: Thiết lập Biến môi trường (Khuyên dùng - An toàn nhất)
-Đặt các biến môi trường trên máy tính hoặc file `.env` (không commit password lên Git):
+> **Lưu ý**:
+> - `MAIL_PASSWORD` nên viết liền 16 ký tự (không chứa khoảng trắng).
+> - Không commit file `.env` lên Git để bảo mật mật khẩu ứng dụng.
 
-- `MAIL_USERNAME`: Địa chỉ email Gmail của bạn (ví dụ: `shopfashionwebsite@gmail.com`).
-- `MAIL_PASSWORD`: Mật khẩu ứng dụng 16 ký tự vừa tạo ở Bước 1 (ví dụ: `abcdéfghijklmnop`).
-- `MAIL_FROM_NAME`: Tên hiển thị người gửi (mặc định là `fashionwebsite`).
-
-#### Cách 2: Điền trực tiếp vào `application.properties` (Khi test local)
-Mở file `src/main/resources/application.properties`:
+### Bước 3: Cấu hình ánh xạ trong `application.properties`
+Trong `src/main/resources/application.properties` đã được thiết lập sẵn:
 
 ```properties
+spring.config.import=optional:file:.env[.properties]
+
 # Mail Configuration (Gmail SMTP)
-spring.mail.host=smtp.gmail.com
-spring.mail.port=587
-spring.mail.username=your-gmail-account@gmail.com
-spring.mail.password=your-16-char-app-password
+spring.mail.host=${MAIL_HOST:smtp.gmail.com}
+spring.mail.port=${MAIL_PORT:587}
+spring.mail.username=${MAIL_USERNAME:}
+spring.mail.password=${MAIL_PASSWORD:}
 spring.mail.properties.mail.smtp.auth=true
 spring.mail.properties.mail.smtp.starttls.enable=true
 spring.mail.properties.mail.smtp.starttls.required=true
@@ -138,41 +151,48 @@ spring.mail.properties.mail.smtp.connectiontimeout=5000
 spring.mail.properties.mail.smtp.timeout=5000
 spring.mail.properties.mail.smtp.writetimeout=5000
 
-# Tên hiển thị email
-app.mail.from-name=fashionwebsite
+# Mail Sender Name
+app.mail.from-name=${MAIL_FROM_NAME:fashionwebsite}
 ```
 
 ---
 
-## 4. Tổ chức mã nguồn (Code Architecture)
+## 4. Cơ chế chống rơi vào Thư rác (Anti-Spam Optimization)
 
-Hệ thống được thiết kế phân tầng chuẩn Clean Architecture của Spring Boot:
+Để hạn chế tối đa việc email gửi từ Gmail cá nhân bị bộ lọc của Google đưa vào mục **Thư rác (Spam)**:
+1. **Định dạng `multipart/alternative` (Plain-Text + HTML)**: `EmailServiceImpl` sử dụng `helper.setText(plainTextBody, htmlBody)` để gửi kèm đồng thời cả phiên bản văn bản thuần và HTML, giúp vượt qua quy tắc kiểm tra `MIME_HTML_ONLY` của bộ lọc Spam.
+2. **Đầy đủ chuẩn Header RFC 5322**: Thiết lập đầy đủ `From`, `Reply-To`, `SentDate` đồng nhất với địa chỉ SMTP xác thực.
+3. **Cá nhân hóa nội dung**: Chào đúng `username` của người nhận và sử dụng bố cục HTML chuẩn giao dịch (Transactional Email).
+4. **Mẹo trên Gmail người nhận**: Ở lần gửi đầu tiên tới một email mới, nếu thư nằm trong mục **Thư rác (Spam)**, chỉ cần mở thư và nhấn **"Báo cáo không phải thư rác" (Report not spam)** 1 lần duy nhất. Từ các lần sau, Gmail sẽ đưa thẳng thư vào Hộp thư đến (Inbox).
 
-```
+---
+
+## 5. Tổ chức mã nguồn (Code Architecture)
+
+```text
 src/main/java/iuh/fit/fashionwebsite/
 ├── entity/
-│   └── PasswordResetToken.java              # Bảng password_reset_tokens lưu mã tạm thời, email, thời hạn và trạng thái
+│   └── PasswordResetToken.java              # Entity lưu bảng password_reset_tokens (email, token, expiryDate, used)
 ├── repository/
-│   ├── PasswordResetTokenRepository.java    # Truy vấn token hợp lệ và vô hiệu hóa các token cũ
-│   └── UserRepository.java                  # Bổ sung phương thức findByEmail(email)
+│   ├── PasswordResetTokenRepository.java    # Tìm token hợp lệ và vô hiệu hóa các token cũ của cùng email
+│   └── UserRepository.java                  # Bổ sung phương thức findByEmail(String email)
 ├── dto/request/
-│   ├── ForgotPasswordRequest.java           # DTO validate email đầu vào
-│   └── ResetPasswordRequest.java            # DTO validate email, tempPassword, newPassword, confirmPassword
+│   ├── ForgotPasswordRequest.java           # Validate email yêu cầu cấp lại mật khẩu
+│   └── ResetPasswordRequest.java            # Validate email, tempPassword, newPassword, confirmPassword
 ├── service/
 │   ├── email/
-│   │   ├── EmailService.java                # Interface gửi email
-│   │   └── impl/EmailServiceImpl.java       # Gửi MimeMessage HTML đẹp mắt với sender name "fashionwebsite"
+│   │   ├── EmailService.java                # Interface sendPasswordResetEmail(toEmail, username, tempPassword)
+│   │   └── impl/EmailServiceImpl.java       # Gửi email multipart (Plain-Text + HTML) với tên người gửi "fashionwebsite"
 │   └── authentication/
-│       └── AuthenticationService.java       # Logic sinh mã tạm ngẫu nhiên, xác thực mã, đổi mật khẩu và cập nhật passwordChangedAt
+│       └── AuthenticationService.java       # Logic forgotPassword(), resetPassword(), generateRandomPassword()
 ├── controller/user/
-│   └── AuthenticationController.java        # Endpoint /auth/forgot-password và /auth/reset-password
+│   └── AuthenticationController.java        # Expose POST /auth/forgot-password và POST /auth/reset-password
 └── exception/
-    └── ErrorCode.java                       # Bổ sung mã lỗi RESET_TOKEN_INVALID, RESET_TOKEN_EXPIRED, EMAIL_SEND_FAILED
+    └── ErrorCode.java                       # Mã lỗi RESET_TOKEN_INVALID, RESET_TOKEN_EXPIRED, EMAIL_SEND_FAILED
 ```
 
-### Các điểm bảo mật nổi bật:
-1. **Chống tấn công Denial-of-Service / Gián đoạn tài khoản**: Mật khẩu hiện tại của người dùng không bị thay đổi ngay khi gọi `forgot-password`. Chỉ khi người dùng thực sự nhập đúng mật khẩu tạm gửi về email ở bước `reset-password`, mật khẩu mới được cập nhật.
-2. **Thu hồi phiên đăng nhập cũ**: Sau khi đổi mật khẩu, `passwordChangedAt` được cập nhật về thời điểm hiện tại. Toàn bộ Refresh Token cũ được phát hành trước đó sẽ tự động bị từ chối đăng nhập.
-3. **Mã ngẫu nhiên an toàn**: Sử dụng `SecureRandom` để sinh mật khẩu tạm gồm 8 ký tự kết hợp chữ hoa, chữ thường và chữ số, loại bỏ các ký tự dễ gây nhầm lẫn.
-4. **Hạn sử dụng ngắn hạn**: Mỗi mã tạm thời chỉ có hiệu lực tối đa 15 phút và là mã sử dụng một lần (One-Time Password).
+### Các điểm bảo mật quan trọng:
+1. **Bảo vệ mật khẩu hiện tại của người dùng**: Khi gọi `forgot-password`, mật khẩu thật của user **chưa bị ghi đè ngay** (tránh trường hợp người khác nhập email của bạn làm bạn mất quyền đăng nhập). Mật khẩu mới chỉ được cập nhật khi xác thực đúng `tempPassword` ở bước `reset-password`.
+2. **Thu hồi phiên đăng nhập cũ**: Khi đổi mật khẩu thành công, trường `passwordChangedAt` của `User` được cập nhật về `Instant.now()`, tự động vô hiệu hóa toàn bộ các Refresh Token phát hành trước thời điểm đó.
+3. **Mật khẩu tạm an toàn & dùng 1 lần**: Sinh bằng `SecureRandom` (8 ký tự chữ hoa, chữ thường, số, loại bỏ các ký tự dễ nhìn nhầm như `0/O`, `1/l/I`), tự động hết hạn sau **15 phút** và chỉ sử dụng được **1 lần duy nhất**.
 

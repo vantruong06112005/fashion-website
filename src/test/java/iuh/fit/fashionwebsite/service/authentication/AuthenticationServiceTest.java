@@ -1,9 +1,12 @@
 package iuh.fit.fashionwebsite.service.authentication;
 
 import iuh.fit.fashionwebsite.dto.request.ForgotPasswordRequest;
+import iuh.fit.fashionwebsite.dto.request.GoogleLoginRequest;
 import iuh.fit.fashionwebsite.dto.request.ResetPasswordRequest;
+import iuh.fit.fashionwebsite.dto.response.AuthenticationResponse;
 import iuh.fit.fashionwebsite.entity.PasswordResetToken;
 import iuh.fit.fashionwebsite.entity.User;
+import iuh.fit.fashionwebsite.enums.RoleUser;
 import iuh.fit.fashionwebsite.enums.StatusUser;
 import iuh.fit.fashionwebsite.exception.AppException;
 import iuh.fit.fashionwebsite.exception.ErrorCode;
@@ -20,9 +23,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.BadJwtException;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -39,6 +47,7 @@ class AuthenticationServiceTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private PasswordResetTokenRepository passwordResetTokenRepository;
     @Mock private EmailService emailService;
+    @Mock private JwtDecoder googleJwtDecoder;
 
     private AuthenticationService authenticationService;
 
@@ -53,6 +62,12 @@ class AuthenticationServiceTest {
                 passwordResetTokenRepository,
                 emailService
         );
+        authenticationService.SIGNER_KEY = "032866f601cbcc25563a1b392701088a8aac77e7a0f62c0520ebf5426da11909bb651c087e95ebae570b776e118b5223e3889100057ac082f0d2baeecebebc9d";
+        authenticationService.ISSUER = "fashion-website";
+        authenticationService.VALID_DURATION = 900L;
+        authenticationService.REFRESHABLE_DURATION = 604800L;
+        authenticationService.googleClientId = "my-google-client-id.apps.googleusercontent.com";
+        authenticationService.googleJwtDecoder = googleJwtDecoder;
     }
 
     @Test
@@ -235,5 +250,139 @@ class AuthenticationServiceTest {
         AppException ex = assertThrows(AppException.class, () -> authenticationService.resetPassword(request));
         assertEquals(ErrorCode.RESET_TOKEN_EXPIRED, ex.getErrorCode());
     }
-}
 
+    @Test
+    void authenticateWithGoogle_NewUser_AutoRegistersAndReturnsTokens() {
+        Jwt googleJwt = new Jwt(
+                "valid-google-id-token",
+                Instant.now(),
+                Instant.now().plus(1, ChronoUnit.HOURS),
+                Map.of("alg", "RS256"),
+                Map.of(
+                        "iss", "https://accounts.google.com",
+                        "aud", List.of("my-google-client-id.apps.googleusercontent.com"),
+                        "email", "newuser@gmail.com",
+                        "email_verified", true,
+                        "name", "Nguyen Van Truong",
+                        "picture", "https://lh3.googleusercontent.com/avatar.png"
+                )
+        );
+
+        when(googleJwtDecoder.decode("valid-google-id-token")).thenReturn(googleJwt);
+        when(userRepository.findByEmail("newuser@gmail.com")).thenReturn(Optional.empty());
+        when(userRepository.existsByUsername("newuser")).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("hashedRandomPassword");
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        GoogleLoginRequest request = GoogleLoginRequest.builder()
+                .idToken("valid-google-id-token")
+                .build();
+
+        AuthenticationResponse response = authenticationService.authenticateWithGoogle(request);
+
+        assertTrue(response.isAuthenticated());
+        assertNotNull(response.getToken());
+        assertNotNull(response.getRefreshToken());
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(userCaptor.capture());
+        User createdUser = userCaptor.getValue();
+        assertEquals("newuser", createdUser.getUsername());
+        assertEquals("newuser@gmail.com", createdUser.getEmail());
+        assertEquals("Nguyen Van Truong", createdUser.getFullname());
+        assertEquals("https://lh3.googleusercontent.com/avatar.png", createdUser.getAvt());
+        assertEquals(RoleUser.CUSTOMER, createdUser.getRole());
+        assertEquals(StatusUser.ACTIVE, createdUser.getStatus());
+    }
+
+    @Test
+    void authenticateWithGoogle_ExistingUser_LinksAccountAndReturnsTokens() {
+        Jwt googleJwt = new Jwt(
+                "valid-google-id-token",
+                Instant.now(),
+                Instant.now().plus(1, ChronoUnit.HOURS),
+                Map.of("alg", "RS256"),
+                Map.of(
+                        "iss", "https://accounts.google.com",
+                        "aud", List.of("my-google-client-id.apps.googleusercontent.com"),
+                        "email", "existing@gmail.com",
+                        "email_verified", true,
+                        "name", "Existing User",
+                        "picture", "https://lh3.googleusercontent.com/new-avatar.png"
+                )
+        );
+
+        User existingUser = User.builder()
+                .id(5L)
+                .username("existing_username")
+                .email("existing@gmail.com")
+                .fullname("Old Name")
+                .avt(null)
+                .passwordHash("oldHash")
+                .role(RoleUser.CUSTOMER)
+                .status(StatusUser.ACTIVE)
+                .build();
+
+        when(googleJwtDecoder.decode("valid-google-id-token")).thenReturn(googleJwt);
+        when(userRepository.findByEmail("existing@gmail.com")).thenReturn(Optional.of(existingUser));
+        when(userRepository.save(existingUser)).thenReturn(existingUser);
+
+        GoogleLoginRequest request = GoogleLoginRequest.builder()
+                .idToken("valid-google-id-token")
+                .build();
+
+        AuthenticationResponse response = authenticationService.authenticateWithGoogle(request);
+
+        assertTrue(response.isAuthenticated());
+        assertNotNull(response.getToken());
+        // Giữ nguyên username và fullname cũ, chỉ cập nhật avt đang bị null
+        assertEquals("existing_username", existingUser.getUsername());
+        assertEquals("Old Name", existingUser.getFullname());
+        assertEquals("https://lh3.googleusercontent.com/new-avatar.png", existingUser.getAvt());
+    }
+
+    @Test
+    void authenticateWithGoogle_InactiveUser_ThrowsUserInactive() {
+        Jwt googleJwt = new Jwt(
+                "valid-google-id-token",
+                Instant.now(),
+                Instant.now().plus(1, ChronoUnit.HOURS),
+                Map.of("alg", "RS256"),
+                Map.of(
+                        "iss", "https://accounts.google.com",
+                        "aud", List.of("my-google-client-id.apps.googleusercontent.com"),
+                        "email", "locked@gmail.com",
+                        "email_verified", true
+                )
+        );
+
+        User lockedUser = User.builder()
+                .id(9L)
+                .username("locked_user")
+                .email("locked@gmail.com")
+                .status(StatusUser.INACTIVE)
+                .build();
+
+        when(googleJwtDecoder.decode("valid-google-id-token")).thenReturn(googleJwt);
+        when(userRepository.findByEmail("locked@gmail.com")).thenReturn(Optional.of(lockedUser));
+
+        GoogleLoginRequest request = GoogleLoginRequest.builder()
+                .idToken("valid-google-id-token")
+                .build();
+
+        AppException ex = assertThrows(AppException.class, () -> authenticationService.authenticateWithGoogle(request));
+        assertEquals(ErrorCode.USER_INACTIVE, ex.getErrorCode());
+    }
+
+    @Test
+    void authenticateWithGoogle_InvalidSignatureOrExpired_ThrowsTokenInvalid() {
+        when(googleJwtDecoder.decode("bad-token")).thenThrow(new BadJwtException("Invalid signature"));
+
+        GoogleLoginRequest request = GoogleLoginRequest.builder()
+                .idToken("bad-token")
+                .build();
+
+        AppException ex = assertThrows(AppException.class, () -> authenticationService.authenticateWithGoogle(request));
+        assertEquals(ErrorCode.TOKEN_INVALID, ex.getErrorCode());
+    }
+}
