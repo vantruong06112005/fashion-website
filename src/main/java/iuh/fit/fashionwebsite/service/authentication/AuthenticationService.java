@@ -25,6 +25,10 @@ import iuh.fit.fashionwebsite.exception.user.UnauthenticatedException;
 import iuh.fit.fashionwebsite.mapper.UserMapper;
 import iuh.fit.fashionwebsite.repository.InvalidatedTokenRepository;
 import iuh.fit.fashionwebsite.repository.UserRepository;
+import iuh.fit.fashionwebsite.entity.PasswordResetToken;
+import iuh.fit.fashionwebsite.repository.PasswordResetTokenRepository;
+import iuh.fit.fashionwebsite.service.email.EmailService;
+import java.security.SecureRandom;
 import iuh.fit.fashionwebsite.service.cloudinary.CloudinaryService;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.NonFinal;
@@ -61,6 +65,14 @@ public class AuthenticationService {
     private final InvalidatedTokenRepository invalidatedTokenRepository;
     private final CloudinaryService cloudinaryService;
     private final PasswordEncoder passwordEncoder;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final EmailService emailService;
+
+    private static final String LOWER = "abcdefghjkmnpqrstuvwxyz";
+    private static final String UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    private static final String DIGITS = "23456789";
+    private static final String ALL_CHARS = LOWER + UPPER + DIGITS;
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     @NonFinal
     // Đọc khóa bí mật từ biến môi trường JWT_SIGNER_KEY (qua application.properties)
@@ -330,4 +342,77 @@ public class AuthenticationService {
         );
     }
 
+
+    public void forgotPassword(ForgotPasswordRequest request) {
+        String email = request.getEmail().trim().toLowerCase();
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        ensureActive(user);
+
+        passwordResetTokenRepository.invalidateAllActiveTokensByEmail(email);
+
+        String tempPassword = generateRandomPassword();
+
+        PasswordResetToken resetToken = PasswordResetToken.builder()
+                .email(email)
+                .token(tempPassword)
+                .expiryDate(Instant.now().plus(15, ChronoUnit.MINUTES))
+                .used(false)
+                .build();
+        passwordResetTokenRepository.save(resetToken);
+
+        emailService.sendPasswordResetEmail(email, tempPassword);
+    }
+
+    public void resetPassword(ResetPasswordRequest request) {
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new AppException(ErrorCode.PASSWORD_CONFIRMATION_MISMATCH);
+        }
+
+        String email = request.getEmail().trim().toLowerCase();
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        ensureActive(user);
+
+        if (passwordEncoder.matches(request.getNewPassword(), user.getPasswordHash())) {
+            throw new AppException(ErrorCode.NEW_PASSWORD_SAME_AS_OLD);
+        }
+
+        PasswordResetToken resetToken = passwordResetTokenRepository
+                .findByEmailAndTokenAndUsedFalse(email, request.getTempPassword().trim())
+                .orElseThrow(() -> new AppException(ErrorCode.RESET_TOKEN_INVALID));
+
+        if (resetToken.getExpiryDate().isBefore(Instant.now())) {
+            throw new AppException(ErrorCode.RESET_TOKEN_EXPIRED);
+        }
+
+        resetToken.setUsed(true);
+        passwordResetTokenRepository.save(resetToken);
+
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        user.setPasswordChangedAt(Instant.now());
+        userRepository.save(user);
+
+        log.info("Password successfully reset for user {}", user.getUsername());
+    }
+
+    private String generateRandomPassword() {
+        StringBuilder sb = new StringBuilder(8);
+        sb.append(LOWER.charAt(RANDOM.nextInt(LOWER.length())));
+        sb.append(UPPER.charAt(RANDOM.nextInt(UPPER.length())));
+        sb.append(DIGITS.charAt(RANDOM.nextInt(DIGITS.length())));
+        for (int i = 3; i < 8; i++) {
+            sb.append(ALL_CHARS.charAt(RANDOM.nextInt(ALL_CHARS.length())));
+        }
+        char[] array = sb.toString().toCharArray();
+        for (int i = array.length - 1; i > 0; i--) {
+            int j = RANDOM.nextInt(i + 1);
+            char temp = array[i];
+            array[i] = array[j];
+            array[j] = temp;
+        }
+        return new String(array);
+    }
 }

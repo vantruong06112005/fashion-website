@@ -137,6 +137,24 @@ public enum ErrorCode implements BaseErrorCode {
             403,
             "error.user_inactive",
             HttpStatus.FORBIDDEN
+    ),
+
+    RESET_TOKEN_INVALID(
+            400,
+            "error.reset_token_invalid",
+            HttpStatus.BAD_REQUEST
+    ),
+
+    RESET_TOKEN_EXPIRED(
+            400,
+            "error.reset_token_expired",
+            HttpStatus.BAD_REQUEST
+    ),
+
+    EMAIL_SEND_FAILED(
+            500,
+            "error.email_send_failed",
+            HttpStatus.INTERNAL_SERVER_ERROR
     );
     private final int code;
     private final String message;
