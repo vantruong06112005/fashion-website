@@ -82,7 +82,7 @@ class AuthenticationServiceTest {
         assertFalse(savedToken.isUsed());
         assertTrue(savedToken.getExpiryDate().isAfter(Instant.now()));
 
-        verify(emailService).sendPasswordResetEmail(eq("customer1@example.com"), eq(savedToken.getToken()));
+        verify(emailService).sendPasswordResetEmail(eq("customer1@example.com"), eq("customer1"), eq(savedToken.getToken()));
     }
 
     @Test
