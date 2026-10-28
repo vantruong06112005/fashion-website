@@ -18,6 +18,8 @@ Hệ thống backend cho website bán quần áo, xây dựng theo mô hình **l
 
 ### Tài liệu chuyên đề (Chi tiết xem tại thư mục `docs/`):
 - 🔐 [SECURITY.md](SECURITY.md) — Xác thực, phân quyền JWT & OAuth2 Resource Server
+- 🌐 [GOOGLE_LOGIN.md](GOOGLE_LOGIN.md) — Đăng nhập bằng Google (OAuth2 / OIDC ID Token, Account Linking & Auto-Registration)
+- 🔑 [FORGOT_PASSWORD.md](FORGOT_PASSWORD.md) — Quên mật khẩu, đặt lại mật khẩu & cấu hình Gmail SMTP
 - ☁️ [CLOUDINARY.md](CLOUDINARY.md) — Tích hợp & quản lý hình ảnh Cloudinary (CDN, Upload, Clean-up)
 - 📋 [VALIDATION_AND_SCHEMA.md](VALIDATION_AND_SCHEMA.md) — Quy chuẩn Validation & danh mục DTO Request
 - 🔔 [NOTIFICATION.md](NOTIFICATION.md) — Thiết kế & hướng dẫn triển khai hệ thống Notification
