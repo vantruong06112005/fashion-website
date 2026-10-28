@@ -6,6 +6,13 @@ import org.springframework.http.HttpStatusCode;
 
 @Getter
 public enum ErrorCode implements BaseErrorCode {
+    CATEGORY_NOT_FOUND(404, "error.category_not_found", HttpStatus.NOT_FOUND),
+    PRODUCT_NOT_FOUND(404, "error.product_not_found", HttpStatus.NOT_FOUND),
+    CATEGORY_SLUG_DUPLICATE(409, "error.category_slug_duplicate", HttpStatus.CONFLICT),
+    PRODUCT_SLUG_DUPLICATE(409, "error.product_slug_duplicate", HttpStatus.CONFLICT),
+    CATEGORY_HAS_CHILDREN_OR_PRODUCTS(409, "error.category_has_children_or_products", HttpStatus.CONFLICT),
+    CATEGORY_PARENT_INVALID(400, "error.category_parent_invalid", HttpStatus.BAD_REQUEST),
+    CATEGORY_INACTIVE(400, "error.category_inactive", HttpStatus.BAD_REQUEST),
     Product_Review_NOT_FOUND(
             404,
             "error.order_not_found",
