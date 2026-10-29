@@ -2,6 +2,7 @@ package iuh.fit.fashionwebsite.service.product;
 
 import iuh.fit.fashionwebsite.dto.request.ProductCreationRequest;
 import iuh.fit.fashionwebsite.dto.request.ProductUpdateRequest;
+import iuh.fit.fashionwebsite.dto.request.ProductFilterRequest;
 import iuh.fit.fashionwebsite.dto.response.ProductResponse;
 import iuh.fit.fashionwebsite.entity.Category;
 import iuh.fit.fashionwebsite.entity.Product;
@@ -16,6 +17,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
+import org.springframework.data.domain.Sort;
 
 @Service
 @RequiredArgsConstructor
@@ -45,6 +49,54 @@ public class ProductServiceImpl implements ProductService {
                 : (categoryId == null ? productRepository.findAllByIsActiveTrueAndCategoryIsActiveTrue()
                 : productRepository.findAllByCategoryIdAndIsActiveTrueAndCategoryIsActiveTrue(categoryId));
         return products.stream().map(mapper::toResponse).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProductResponse> search(ProductFilterRequest filter) {
+        String order = ProductSpecifications.hasText(filter.getSort()) ? filter.getSort() : "newest";
+        if ((filter.getCategoryId() != null && filter.getCategoryId() < 1)
+                || (filter.getNewWithinDays() != null && (filter.getNewWithinDays() < 1 || filter.getNewWithinDays() > 365))
+                || (filter.getCategoryIds() != null && filter.getCategoryIds().stream().anyMatch(id -> id == null || id < 1))
+                || (filter.getMinPrice() != null && filter.getMinPrice().signum() < 0)
+                || (filter.getMaxPrice() != null && filter.getMaxPrice().signum() < 0)
+                || (filter.getMinPrice() != null && filter.getMaxPrice() != null
+                    && filter.getMinPrice().compareTo(filter.getMaxPrice()) > 0)
+                || !Set.of("newest", "price-asc", "price-desc", "name").contains(order)) {
+            throw new AppException(ErrorCode.INVALID_PRODUCT_FILTER);
+        }
+        Set<Long> categoryIds = null;
+        boolean manager = isManager();
+        if (filter.getCategoryId() != null || (filter.getCategoryIds() != null && !filter.getCategoryIds().isEmpty())) {
+            categoryIds = new HashSet<>();
+            if (filter.getCategoryId() != null) categoryIds.add(filter.getCategoryId());
+            if (filter.getCategoryIds() != null) categoryIds.addAll(filter.getCategoryIds());
+            var categories = manager ? categoryRepository.findAll() : categoryRepository.findAllByIsActiveTrue();
+            boolean added;
+            do {
+                added = false;
+                for (Category category : categories) {
+                    if (category.getParentCategory() != null && categoryIds.contains(category.getParentCategory().getId())) {
+                        added |= categoryIds.add(category.getId());
+                    }
+                }
+            } while (added);
+        }
+        Sort sort = switch (order) {
+            case "price-asc" -> Sort.by("basePrice").ascending();
+            case "price-desc" -> Sort.by("basePrice").descending();
+            case "name" -> Sort.by("name").ascending();
+            default -> Sort.by("createdAt").descending();
+        };
+        return productRepository.findAll(ProductSpecifications.matching(filter, categoryIds, manager),
+                sort.and(Sort.by("id").descending())).stream().map(mapper::toResponse).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProductResponse> getNew(ProductFilterRequest filter, int days) {
+        filter.setNewWithinDays(days);
+        return search(filter);
     }
 
     @Override

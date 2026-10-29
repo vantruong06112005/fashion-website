@@ -38,7 +38,7 @@ public class CartServiceImpl implements CartService {
         User user = userService.getCurrentUserEntity();
         return cartRepository.findByUserId(user.getId())
                 .map(this::toResponse)
-                .orElseGet(() -> emptyCart(user.getId()));
+                .orElseGet(this::emptyCart);
     }
 
     @Override
@@ -87,7 +87,7 @@ public class CartServiceImpl implements CartService {
             cartItemRepository.deleteAllByCartId(cart.getId());
             cartItemRepository.flush();
             return toResponse(cart);
-        }).orElseGet(() -> emptyCart(user.getId()));
+          }).orElseGet(this::emptyCart);
     }
 
     private Cart getCart(Long userId) {
@@ -121,12 +121,12 @@ public class CartServiceImpl implements CartService {
         int totalQuantity = items.stream().mapToInt(CartItemResponse::getQuantity).sum();
         BigDecimal totalPrice = items.stream().map(CartItemResponse::getSubtotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        return CartResponse.builder().id(cart.getId()).userId(cart.getUser().getId())
+        return CartResponse.builder()
                 .items(items).totalQuantity(totalQuantity).totalPrice(totalPrice).build();
     }
 
-    private CartResponse emptyCart(Long userId) {
-        return CartResponse.builder().userId(userId).items(List.of())
+    private CartResponse emptyCart() {
+        return CartResponse.builder().items(List.of())
                 .totalQuantity(0).totalPrice(BigDecimal.ZERO).build();
     }
 }

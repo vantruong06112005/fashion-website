@@ -3,11 +3,12 @@ package iuh.fit.fashionwebsite.repository;
 import iuh.fit.fashionwebsite.entity.Product;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import java.util.List;
 import java.util.Optional;
 
-public interface ProductRepository extends JpaRepository<Product, Long> {
+public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpecificationExecutor<Product> {
     @Query(value = "SELECT COUNT(*) FROM products WHERE slug = ?1", nativeQuery = true)
     long countAllBySlugIncludingDeleted(String slug);
 
