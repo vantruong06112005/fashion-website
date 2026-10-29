@@ -2,6 +2,7 @@ package iuh.fit.fashionwebsite.dto.response;
 
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Getter
@@ -18,6 +19,10 @@ public class ReturnRequestItemResponse {
     private String variantInfo;
     private Integer quantity;
     private Integer acceptedQuantity;
+    private Integer restockedQuantity;
+    private Boolean isRestocked;
+    private String inspectionNote;
+    private BigDecimal itemRefundAmount;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

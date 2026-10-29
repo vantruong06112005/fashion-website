@@ -1,5 +1,8 @@
 package iuh.fit.fashionwebsite.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import iuh.fit.fashionwebsite.exception.AppException;
+import iuh.fit.fashionwebsite.exception.returns.ReturnRequestErrorCode;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -20,4 +23,8 @@ public class ReturnRequestItemRequest {
     @Min(value = 1, message = "Số lượng cần trả phải ít nhất là 1.")
     private Integer quantity;
 
+    @JsonAnySetter
+    public void rejectUnknownField(String name, Object value) {
+        throw new AppException(ReturnRequestErrorCode.UNSUPPORTED_FIELD);
+    }
 }
