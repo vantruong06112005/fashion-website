@@ -15,4 +15,5 @@ public class ProductFilterRequest {
     private String size;
     private String color;
     private String sort;
+    private Integer newWithinDays;
 }

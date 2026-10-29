@@ -8,6 +8,10 @@ import iuh.fit.fashionwebsite.security.CustomJwtDecoder;
 import iuh.fit.fashionwebsite.service.category.CategoryService;
 import iuh.fit.fashionwebsite.service.product.ProductService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -29,6 +33,48 @@ class ProductFilterControllerTest {
     @MockitoBean ProductService products;
     @MockitoBean CategoryService categories;
     @MockitoBean CustomJwtDecoder decoder;
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ADMIN", "STAFF"})
+    void managersCanCreateAndEditProductsAndCategories(String role) throws Exception {
+        var identity = jwt().authorities(new SimpleGrantedAuthority("ROLE_" + role));
+        String product = "{\"name\":\"Test\",\"basePrice\":100000,\"categoryId\":42}";
+        String category = "{\"name\":\"Test category\"}";
+        mvc.perform(post("/products").with(identity).contentType("application/json").content(product)).andExpect(status().isCreated());
+        mvc.perform(put("/products/42").with(identity).contentType("application/json").content(product)).andExpect(status().isOk());
+        mvc.perform(post("/categories").with(identity).contentType("application/json").content(category)).andExpect(status().isCreated());
+        mvc.perform(put("/categories/42").with(identity).contentType("application/json").content(category)).andExpect(status().isOk());
+    }
+
+    @Test
+    void staffCannotDeleteButAdminCan() throws Exception {
+        var staff = jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF"));
+        var admin = jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"));
+        mvc.perform(delete("/products/42").with(staff)).andExpect(status().isForbidden());
+        mvc.perform(delete("/categories/42").with(staff)).andExpect(status().isForbidden());
+        verifyNoInteractions(products, categories);
+        mvc.perform(delete("/products/42").with(admin)).andExpect(status().isOk());
+        mvc.perform(delete("/categories/42").with(admin)).andExpect(status().isOk());
+    }
+
+    @Test
+    void customerCannotManageCatalog() throws Exception {
+        var customer = jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER"));
+        mvc.perform(post("/products").with(customer).contentType("application/json")
+                .content("{\"name\":\"Test\",\"basePrice\":100000,\"categoryId\":42}")).andExpect(status().isForbidden());
+        mvc.perform(post("/categories").with(customer).contentType("application/json").content("{\"name\":\"Test\"}"))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(products, categories);
+    }
+
+    @Test
+    void newProductEndpointIsPublicAndPreservesFilters() throws Exception {
+        when(products.getNew(any(),eq(30))).thenReturn(List.of());
+        mvc.perform(get("/products/new").param("color","Đen")).andExpect(status().isOk()).andExpect(jsonPath("data").isEmpty());
+        var request=ArgumentCaptor.forClass(ProductFilterRequest.class);
+        verify(products).getNew(request.capture(),eq(30));
+        assertEquals("Đen",request.getValue().getColor());
+    }
 
     @Test
     void anonymousCanReadCatalogAndQueryParametersReachService() throws Exception {

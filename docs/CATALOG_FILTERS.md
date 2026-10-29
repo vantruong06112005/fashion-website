@@ -1,7 +1,7 @@
 # Bộ lọc danh mục sản phẩm
 
 Base URL: `http://localhost:8080/api/v1`. GET sản phẩm và danh mục là công khai;
-thêm/sửa/xóa vẫn yêu cầu quyền ADMIN. Khách chỉ nhận sản phẩm và danh mục đang hoạt động.
+thêm/sửa dành cho ADMIN và STAFF; xóa mềm dành cho ADMIN. Khách chỉ nhận sản phẩm và danh mục đang hoạt động.
 
 `GET /products` giữ cấu trúc `ApiResponse<ProductResponse[]>` và nhận:
 
@@ -19,7 +19,8 @@ Các nhóm điều kiện kết hợp bằng AND; các ID danh mục kết hợp
 Khoảng giá sai, ID không dương hoặc sort không hỗ trợ trả HTTP 400. Không khớp trả `data: []`.
 
 ProductResponse bổ sung `productImages` và `variants` bằng DTO, không trả Entity hoặc quan hệ ngược.
-Không thay đổi schema database. Các thuộc tính tay áo, cổ áo, form và chất liệu chưa có trong schema,
+Riêng bộ lọc không thay đổi schema. Xóa mềm danh mục bổ sung `categories.deleted_at` theo tài liệu CATALOG_PERMISSIONS.
+Các thuộc tính tay áo, cổ áo, form và chất liệu chưa có trong schema,
 nên chưa cung cấp bộ lọc này. Ưu đãi cần luồng khuyến mãi riêng; không giả lập danh sách giảm giá.
 
 Frontend lấy danh mục và các lựa chọn size/màu từ dữ liệu API, gửi điều kiện lên backend,

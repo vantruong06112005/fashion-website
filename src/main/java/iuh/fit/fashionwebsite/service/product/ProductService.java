@@ -10,6 +10,7 @@ public interface ProductService {
     ProductResponse create(ProductCreationRequest request);
     List<ProductResponse> getAll(Long categoryId);
     List<ProductResponse> search(ProductFilterRequest filter);
+    List<ProductResponse> getNew(ProductFilterRequest filter, int days);
     ProductResponse getById(Long id);
     ProductResponse update(Long id, ProductUpdateRequest request);
     void delete(Long id);

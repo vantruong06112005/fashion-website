@@ -21,7 +21,7 @@ public class ProductController {
     private final ProductService productService;
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ResponseEntity<ApiResponse<ProductResponse>> create(@Valid @RequestBody ProductCreationRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.<ProductResponse>builder()
                 .code(201).message("Product created successfully").data(productService.create(request)).build());
@@ -39,8 +39,15 @@ public class ProductController {
                 .data(productService.getById(id)).build();
     }
 
+    @GetMapping("/new")
+    public ApiResponse<List<ProductResponse>> getNew(@ModelAttribute ProductFilterRequest filter,
+            @RequestParam(defaultValue = "30") int days) {
+        return ApiResponse.<List<ProductResponse>>builder().code(200)
+                .data(productService.getNew(filter, days)).build();
+    }
+
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ApiResponse<ProductResponse> update(@PathVariable Long id,
             @Valid @RequestBody ProductUpdateRequest request) {
         return ApiResponse.<ProductResponse>builder().code(200)

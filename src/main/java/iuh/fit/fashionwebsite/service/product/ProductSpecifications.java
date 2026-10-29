@@ -8,16 +8,22 @@ import org.springframework.data.jpa.domain.Specification;
 import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Set;
+import java.time.LocalDateTime;
 
 final class ProductSpecifications {
     private ProductSpecifications() {}
 
     static Specification<Product> matching(ProductFilterRequest filter, Set<Long> categoryIds, boolean manager) {
+        LocalDateTime now = LocalDateTime.now();
         return (root, query, cb) -> {
             var conditions = new ArrayList<Predicate>();
-            if (!manager) {
+            if (!manager || filter.getNewWithinDays() != null) {
                 conditions.add(cb.isTrue(root.get("isActive")));
                 conditions.add(cb.isTrue(root.get("category").get("isActive")));
+            }
+            if (filter.getNewWithinDays() != null) {
+                conditions.add(cb.greaterThanOrEqualTo(root.get("createdAt"), now.minusDays(filter.getNewWithinDays())));
+                conditions.add(cb.lessThanOrEqualTo(root.get("createdAt"), now));
             }
             if (categoryIds != null) conditions.add(root.get("category").get("id").in(categoryIds));
             if (hasText(filter.getKeyword())) {

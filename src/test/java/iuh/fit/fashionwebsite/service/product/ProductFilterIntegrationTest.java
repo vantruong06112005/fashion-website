@@ -3,6 +3,11 @@ package iuh.fit.fashionwebsite.service.product;
 import iuh.fit.fashionwebsite.dto.request.ProductFilterRequest;
 import iuh.fit.fashionwebsite.entity.*;
 import iuh.fit.fashionwebsite.mapper.ProductMapperImpl;
+import iuh.fit.fashionwebsite.mapper.CategoryMapperImpl;
+import iuh.fit.fashionwebsite.service.category.CategoryService;
+import iuh.fit.fashionwebsite.service.category.CategoryServiceImpl;
+import iuh.fit.fashionwebsite.dto.request.CategoryCreationRequest;
+import iuh.fit.fashionwebsite.dto.request.CategoryUpdateRequest;
 import iuh.fit.fashionwebsite.repository.CategoryRepository;
 import iuh.fit.fashionwebsite.repository.ProductRepository;
 import jakarta.persistence.EntityManager;
@@ -21,15 +26,45 @@ import static org.junit.jupiter.api.Assertions.*;
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.jpa.show-sql=false"
 }, showSql = false)
-@Import({ProductServiceImpl.class, ProductMapperImpl.class})
+@Import({ProductServiceImpl.class, ProductMapperImpl.class, CategoryServiceImpl.class, CategoryMapperImpl.class})
 class ProductFilterIntegrationTest {
     @Autowired EntityManager em;
     @Autowired ProductService service;
     @Autowired ProductRepository products;
     @Autowired CategoryRepository categories;
+    @Autowired CategoryService categoryService;
     Category parent;
     Category child;
     Product shirt;
+
+    @Test
+    void newProductsUseCreatedAtWindowAndExcludeInactiveOrFutureProducts() {
+        var old = product("Old", "old", 100000, child, true);
+        var future = product("Future", "future", 100000, child, true);
+        var now = java.time.LocalDateTime.now();
+        em.createNativeQuery("UPDATE products SET created_at=:date WHERE id=:id")
+                .setParameter("date",now.minusDays(31)).setParameter("id",old.getId()).executeUpdate();
+        em.createNativeQuery("UPDATE products SET created_at=:date WHERE id=:id")
+                .setParameter("date",now.plusDays(1)).setParameter("id",future.getId()).executeUpdate();
+        em.clear();
+        var result=service.getNew(new ProductFilterRequest(),30);
+        assertEquals(1,result.size()); assertEquals(shirt.getId(),result.getFirst().getId());
+        assertThrows(iuh.fit.fashionwebsite.exception.AppException.class,()->service.getNew(new ProductFilterRequest(),0));
+        assertThrows(iuh.fit.fashionwebsite.exception.AppException.class,()->service.getNew(new ProductFilterRequest(),366));
+    }
+
+    @Test
+    void categoryDeleteKeepsRowAndSlugAndCannotBeReactivatedThroughUpdate() {
+        Category empty=categories.save(Category.builder().name("Archive").slug("archive-category").isActive(true).build());
+        Long id=empty.getId(); categoryService.delete(id); em.flush(); em.clear();
+        assertTrue(categories.findById(id).isEmpty());
+        assertEquals(1L,((Number)em.createNativeQuery("SELECT COUNT(*) FROM categories WHERE id=:id AND deleted_at IS NOT NULL AND is_active=false")
+                .setParameter("id",id).getSingleResult()).longValue());
+        CategoryCreationRequest duplicate=CategoryCreationRequest.builder().name("Another").slug("archive-category").build();
+        assertThrows(iuh.fit.fashionwebsite.exception.AppException.class,()->categoryService.create(duplicate));
+        var request=new CategoryUpdateRequest(); request.setIsActive(true);
+        assertThrows(iuh.fit.fashionwebsite.exception.AppException.class,()->categoryService.update(id,request));
+    }
 
     @BeforeEach
     void setup() {

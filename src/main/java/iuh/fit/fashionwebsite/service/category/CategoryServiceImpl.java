@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
+import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
@@ -76,7 +77,9 @@ public class CategoryServiceImpl implements CategoryService {
                 || productRepository.countAllByCategoryIdIncludingDeleted(id) > 0) {
             throw new AppException(ErrorCode.CATEGORY_HAS_CHILDREN_OR_PRODUCTS);
         }
-        categoryRepository.delete(category);
+        category.setDeletedAt(LocalDateTime.now());
+        category.setIsActive(false);
+        categoryRepository.save(category);
     }
 
     private Category getCategory(Long id) {
@@ -85,8 +88,8 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     private void checkSlug(String slug, Long id) {
-        if (slug != null && (id == null ? categoryRepository.existsBySlug(slug)
-                : categoryRepository.existsBySlugAndIdNot(slug, id))) {
+        if (slug != null && (id == null ? categoryRepository.countAllBySlugIncludingDeleted(slug) > 0
+                : categoryRepository.countAllBySlugAndIdNotIncludingDeleted(slug, id) > 0)) {
             throw new AppException(ErrorCode.CATEGORY_SLUG_DUPLICATE);
         }
     }

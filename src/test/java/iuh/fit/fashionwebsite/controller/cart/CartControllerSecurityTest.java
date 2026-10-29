@@ -19,6 +19,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import iuh.fit.fashionwebsite.dto.response.CartResponse;
+import iuh.fit.fashionwebsite.dto.response.CartItemResponse;
+import java.util.List;
 
 @WebMvcTest(controllers = CartController.class, properties = "app.cors.allowed-origins=http://localhost")
 @ContextConfiguration(classes = {CartController.class, SecurityConfig.class, GlobalExceptionHandler.class})
@@ -26,6 +30,16 @@ class CartControllerSecurityTest {
     @Autowired private MockMvc mvc;
     @MockitoBean private CartService cartService;
     @MockitoBean private CustomJwtDecoder customJwtDecoder;
+
+    @Test
+    void cartOmitsInternalIdentityButKeepsItemIdentifiers() throws Exception {
+        when(cartService.getMyCart()).thenReturn(CartResponse.builder().items(List.of(
+                CartItemResponse.builder().id(5L).variantId(42L).productId(70L).build())).build());
+        mvc.perform(get("/cart").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER"))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.id").doesNotExist())
+                .andExpect(jsonPath("$.data.userId").doesNotExist()).andExpect(jsonPath("$.data.items[0].id").value(5))
+                .andExpect(jsonPath("$.data.items[0].variantId").value(42)).andExpect(jsonPath("$.data.items[0].productId").value(70));
+    }
 
     @Test
     void customerCanViewOwnCart() throws Exception {

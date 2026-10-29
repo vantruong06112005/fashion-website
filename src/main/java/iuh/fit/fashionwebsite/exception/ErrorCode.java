@@ -6,7 +6,7 @@ import org.springframework.http.HttpStatusCode;
 
 @Getter
 public enum ErrorCode implements BaseErrorCode {
-    INVALID_PRODUCT_FILTER(400, "Bộ lọc không hợp lệ: kiểm tra danh mục, khoảng giá và cách sắp xếp", HttpStatus.BAD_REQUEST),
+    INVALID_PRODUCT_FILTER(400, "Bộ lọc không hợp lệ: kiểm tra danh mục, khoảng giá, cách sắp xếp và số ngày hàng mới (1–365)", HttpStatus.BAD_REQUEST),
     CATEGORY_NOT_FOUND(404, "error.category_not_found", HttpStatus.NOT_FOUND),
     PRODUCT_NOT_FOUND(404, "error.product_not_found", HttpStatus.NOT_FOUND),
     CATEGORY_SLUG_DUPLICATE(409, "error.category_slug_duplicate", HttpStatus.CONFLICT),

@@ -12,6 +12,7 @@ public interface CategoryMapper {
     @Mapping(target = "parentCategory", ignore = true)
     @Mapping(target = "subCategories", ignore = true)
     @Mapping(target = "products", ignore = true)
+    @Mapping(target = "deletedAt", ignore = true)
     Category toEntity(CategoryCreationRequest request);
 
     @Mapping(target = "parentId", source = "parentCategory.id")
@@ -24,5 +25,6 @@ public interface CategoryMapper {
     @Mapping(target = "products", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "deletedAt", ignore = true)
     void update(@MappingTarget Category category, CategoryUpdateRequest request);
 }

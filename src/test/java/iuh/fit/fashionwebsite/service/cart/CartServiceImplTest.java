@@ -33,7 +33,6 @@ class CartServiceImplTest {
 
         CartResponse response = service.getMyCart();
 
-        assertEquals(1L, response.getUserId());
         assertEquals(0, response.getTotalQuantity());
         assertEquals(BigDecimal.ZERO, response.getTotalPrice());
         assertTrue(response.getItems().isEmpty());

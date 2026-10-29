@@ -56,6 +56,7 @@ public class ProductServiceImpl implements ProductService {
     public List<ProductResponse> search(ProductFilterRequest filter) {
         String order = ProductSpecifications.hasText(filter.getSort()) ? filter.getSort() : "newest";
         if ((filter.getCategoryId() != null && filter.getCategoryId() < 1)
+                || (filter.getNewWithinDays() != null && (filter.getNewWithinDays() < 1 || filter.getNewWithinDays() > 365))
                 || (filter.getCategoryIds() != null && filter.getCategoryIds().stream().anyMatch(id -> id == null || id < 1))
                 || (filter.getMinPrice() != null && filter.getMinPrice().signum() < 0)
                 || (filter.getMaxPrice() != null && filter.getMaxPrice().signum() < 0)
@@ -89,6 +90,13 @@ public class ProductServiceImpl implements ProductService {
         };
         return productRepository.findAll(ProductSpecifications.matching(filter, categoryIds, manager),
                 sort.and(Sort.by("id").descending())).stream().map(mapper::toResponse).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProductResponse> getNew(ProductFilterRequest filter, int days) {
+        filter.setNewWithinDays(days);
+        return search(filter);
     }
 
     @Override
