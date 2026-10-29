@@ -15,13 +15,12 @@ package iuh.fit.fashionwebsite.controller.user;
 
 
 import iuh.fit.fashionwebsite.dto.request.ChangePasswordRequest;
-import iuh.fit.fashionwebsite.dto.request.UserCreationRequest;
-import iuh.fit.fashionwebsite.dto.request.UserUpdateRequest;
+import iuh.fit.fashionwebsite.dto.request.user.UserCreationRequest;
+import iuh.fit.fashionwebsite.dto.request.user.UserUpdateRequest;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
-import iuh.fit.fashionwebsite.dto.response.UserResponse;
+import iuh.fit.fashionwebsite.dto.response.user.UserResponse;
 import iuh.fit.fashionwebsite.service.user.UserService;
 import jakarta.validation.Valid;
-import jakarta.websocket.server.PathParam;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 

@@ -166,6 +166,12 @@ public enum ErrorCode implements BaseErrorCode {
             500,
             "error.email_send_failed",
             HttpStatus.INTERNAL_SERVER_ERROR
+    ),
+
+    RESET_PASSWORD_COOLDOWN(
+            429,
+            "error.reset_password_cooldown",
+            HttpStatus.TOO_MANY_REQUESTS
     );
     private final int code;
     private final String message;

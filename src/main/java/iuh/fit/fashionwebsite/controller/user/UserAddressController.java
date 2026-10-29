@@ -1,9 +1,9 @@
 package iuh.fit.fashionwebsite.controller.user;
 
-import iuh.fit.fashionwebsite.dto.request.UserAddressCreationRequest;
-import iuh.fit.fashionwebsite.dto.request.UserAddressUpdateRequest;
+import iuh.fit.fashionwebsite.dto.request.user.UserAddressCreationRequest;
+import iuh.fit.fashionwebsite.dto.request.user.UserAddressUpdateRequest;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
-import iuh.fit.fashionwebsite.dto.response.UserAddressResponse;
+import iuh.fit.fashionwebsite.dto.response.user.UserAddressResponse;
 import iuh.fit.fashionwebsite.service.user.UserAddressService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

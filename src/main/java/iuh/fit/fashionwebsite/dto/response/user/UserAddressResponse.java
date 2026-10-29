@@ -1,4 +1,4 @@
-package iuh.fit.fashionwebsite.dto.response;
+package iuh.fit.fashionwebsite.dto.response.user;
 
 import iuh.fit.fashionwebsite.enums.AddressType;
 import lombok.*;
@@ -16,6 +16,4 @@ public class UserAddressResponse {
     private AddressType addressType;
     private Boolean isDefault;
     private Long userId;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
 }

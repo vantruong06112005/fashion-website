@@ -7,15 +7,21 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.Optional;
 
 @Repository
 public interface PasswordResetTokenRepository extends JpaRepository<PasswordResetToken, Long> {
 
+    Optional<PasswordResetToken> findTopByEmailOrderByExpiryDateDesc(String email);
+
     Optional<PasswordResetToken> findByEmailAndTokenAndUsedFalse(String email, String token);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("UPDATE PasswordResetToken t SET t.used = true WHERE t.email = :email AND t.used = false")
-    int invalidateAllActiveTokensByEmail(@Param("email") String email);
-}
+    @Query("DELETE FROM PasswordResetToken t WHERE t.email = :email")
+    int deleteAllByEmail(@Param("email") String email);
 
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM PasswordResetToken t WHERE t.expiryDate <= :now OR t.used = true")
+    int deleteAllExpired(@Param("now") Instant now);
+}

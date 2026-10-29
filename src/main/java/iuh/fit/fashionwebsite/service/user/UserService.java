@@ -6,9 +6,9 @@
 package iuh.fit.fashionwebsite.service.user;
 
 import iuh.fit.fashionwebsite.dto.request.ChangePasswordRequest;
-import iuh.fit.fashionwebsite.dto.request.UserCreationRequest;
-import iuh.fit.fashionwebsite.dto.request.UserUpdateRequest;
-import iuh.fit.fashionwebsite.dto.response.UserResponse;
+import iuh.fit.fashionwebsite.dto.request.user.UserCreationRequest;
+import iuh.fit.fashionwebsite.dto.request.user.UserUpdateRequest;
+import iuh.fit.fashionwebsite.dto.response.user.UserResponse;
 import iuh.fit.fashionwebsite.entity.User;
 import iuh.fit.fashionwebsite.enums.RoleUser;
 import iuh.fit.fashionwebsite.enums.StatusUser;

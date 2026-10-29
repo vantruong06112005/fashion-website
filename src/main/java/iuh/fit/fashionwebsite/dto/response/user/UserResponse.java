@@ -1,8 +1,7 @@
-package iuh.fit.fashionwebsite.dto.response;
+package iuh.fit.fashionwebsite.dto.response.user;
 
 import iuh.fit.fashionwebsite.enums.RoleUser;
 import lombok.*;
-import java.util.Set;
 
 @AllArgsConstructor
 @NoArgsConstructor
@@ -14,7 +13,7 @@ public class UserResponse {
     private String username;
     private String email;
     private String phone;
-//    private String address;
+    private String address;
     private RoleUser role;
     private String avt;
 }

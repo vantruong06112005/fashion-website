@@ -6,9 +6,9 @@
 package iuh.fit.fashionwebsite.mapper;
 
 
-import iuh.fit.fashionwebsite.dto.request.UserCreationRequest;
-import iuh.fit.fashionwebsite.dto.request.UserUpdateRequest;
-import iuh.fit.fashionwebsite.dto.response.UserResponse;
+import iuh.fit.fashionwebsite.dto.request.user.UserCreationRequest;
+import iuh.fit.fashionwebsite.dto.request.user.UserUpdateRequest;
+import iuh.fit.fashionwebsite.dto.response.user.UserResponse;
 import iuh.fit.fashionwebsite.entity.User;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;

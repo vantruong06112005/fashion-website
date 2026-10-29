@@ -5,10 +5,12 @@ package iuh.fit.fashionwebsite.controller.user;/*
  */
 
 import iuh.fit.fashionwebsite.dto.request.*;
-import iuh.fit.fashionwebsite.dto.response.UserResponse;
+import iuh.fit.fashionwebsite.dto.request.auth.AuthenticationRequest;
+import iuh.fit.fashionwebsite.dto.request.user.UserCreationRequest;
+import iuh.fit.fashionwebsite.dto.response.user.UserResponse;
 import jakarta.validation.Valid;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
-import iuh.fit.fashionwebsite.dto.response.AuthenticationResponse;
+import iuh.fit.fashionwebsite.dto.response.auth.AuthenticationResponse;
 import iuh.fit.fashionwebsite.dto.response.IntrospectResponse;
 import iuh.fit.fashionwebsite.enums.AuthResponseCode;
 import iuh.fit.fashionwebsite.service.authentication.AuthenticationService;
