@@ -34,6 +34,8 @@ build/
 
 ### Antigravity Local Agents & Skills ###
 .agents/
+.archify/
+archify/
 .env
 ### Local Documents ###
 tài liệu/
