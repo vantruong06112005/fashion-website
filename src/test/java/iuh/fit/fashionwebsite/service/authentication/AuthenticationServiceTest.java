@@ -3,7 +3,7 @@ package iuh.fit.fashionwebsite.service.authentication;
 import iuh.fit.fashionwebsite.dto.request.ForgotPasswordRequest;
 import iuh.fit.fashionwebsite.dto.request.GoogleLoginRequest;
 import iuh.fit.fashionwebsite.dto.request.ResetPasswordRequest;
-import iuh.fit.fashionwebsite.dto.response.AuthenticationResponse;
+import iuh.fit.fashionwebsite.dto.response.auth.AuthenticationResponse;
 import iuh.fit.fashionwebsite.entity.PasswordResetToken;
 import iuh.fit.fashionwebsite.entity.User;
 import iuh.fit.fashionwebsite.enums.RoleUser;
@@ -80,6 +80,8 @@ class AuthenticationServiceTest {
                 .build();
 
         when(userRepository.findByEmail("customer1@example.com")).thenReturn(Optional.of(user));
+        when(passwordResetTokenRepository.findTopByEmailOrderByExpiryDateDesc("customer1@example.com"))
+                .thenReturn(Optional.empty());
 
         ForgotPasswordRequest request = ForgotPasswordRequest.builder()
                 .email("customer1@example.com")
@@ -87,7 +89,7 @@ class AuthenticationServiceTest {
 
         authenticationService.forgotPassword(request);
 
-        verify(passwordResetTokenRepository).invalidateAllActiveTokensByEmail("customer1@example.com");
+        verify(passwordResetTokenRepository).deleteAllByEmail("customer1@example.com");
 
         ArgumentCaptor<PasswordResetToken> tokenCaptor = ArgumentCaptor.forClass(PasswordResetToken.class);
         verify(passwordResetTokenRepository).save(tokenCaptor.capture());
@@ -98,6 +100,34 @@ class AuthenticationServiceTest {
         assertTrue(savedToken.getExpiryDate().isAfter(Instant.now()));
 
         verify(emailService).sendPasswordResetEmail(eq("customer1@example.com"), eq("customer1"), eq(savedToken.getToken()));
+    }
+
+    @Test
+    void forgotPassword_Cooldown_ThrowsTooManyRequests() {
+        User user = User.builder()
+                .id(1L)
+                .username("customer1")
+                .email("customer1@example.com")
+                .status(StatusUser.ACTIVE)
+                .build();
+
+        PasswordResetToken recentToken = PasswordResetToken.builder()
+                .email("customer1@example.com")
+                .token("Recent12")
+                .expiryDate(Instant.now().plus(14, ChronoUnit.MINUTES).plus(30, ChronoUnit.SECONDS))
+                .build();
+
+        when(userRepository.findByEmail("customer1@example.com")).thenReturn(Optional.of(user));
+        when(passwordResetTokenRepository.findTopByEmailOrderByExpiryDateDesc("customer1@example.com"))
+                .thenReturn(Optional.of(recentToken));
+
+        ForgotPasswordRequest request = ForgotPasswordRequest.builder()
+                .email("customer1@example.com")
+                .build();
+
+        AppException ex = assertThrows(AppException.class, () -> authenticationService.forgotPassword(request));
+        assertEquals(ErrorCode.RESET_PASSWORD_COOLDOWN, ex.getErrorCode());
+        verifyNoInteractions(emailService);
     }
 
     @Test
@@ -146,8 +176,7 @@ class AuthenticationServiceTest {
 
         authenticationService.resetPassword(request);
 
-        assertTrue(token.isUsed());
-        verify(passwordResetTokenRepository).save(token);
+        verify(passwordResetTokenRepository).delete(token);
         assertEquals("newHashedPassword", user.getPasswordHash());
         assertNotNull(user.getPasswordChangedAt());
         verify(userRepository).save(user);

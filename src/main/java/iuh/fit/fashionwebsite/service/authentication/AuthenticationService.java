@@ -12,9 +12,11 @@ import com.nimbusds.jose.crypto.MACVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import iuh.fit.fashionwebsite.dto.request.*;
-import iuh.fit.fashionwebsite.dto.response.AuthenticationResponse;
+import iuh.fit.fashionwebsite.dto.request.auth.AuthenticationRequest;
+import iuh.fit.fashionwebsite.dto.request.user.UserCreationRequest;
+import iuh.fit.fashionwebsite.dto.response.auth.AuthenticationResponse;
 import iuh.fit.fashionwebsite.dto.response.IntrospectResponse;
-import iuh.fit.fashionwebsite.dto.response.UserResponse;
+import iuh.fit.fashionwebsite.dto.response.user.UserResponse;
 import iuh.fit.fashionwebsite.entity.PasswordResetToken;
 import iuh.fit.fashionwebsite.entity.User;
 import iuh.fit.fashionwebsite.enums.RoleUser;
@@ -67,6 +69,7 @@ import java.util.stream.Collectors;
 public class AuthenticationService {
     private static final String CLAIM_TYPE = "type";
     private static final String CLAIM_SCOPE = "scope";
+    private static final String CLAIM_USER_ID = "userId";
     private static final String GOOGLE_JWK_SET_URI = "https://www.googleapis.com/oauth2/v3/certs";
     private static final Set<String> VALID_GOOGLE_ISSUERS = Set.of(
             "https://accounts.google.com",
@@ -306,6 +309,9 @@ public class AuthenticationService {
                 .jwtID(UUID.randomUUID().toString())
                 // Loại token: ACCESS / REFRESH
                 .claim(CLAIM_TYPE, type.name());
+        if (user.getId() != null) {
+            claimsBuilder.claim(CLAIM_USER_ID, user.getId());
+        }
         // Chỉ access token mới mang quyền
         if (type == TokenType.ACCESS) {
             claimsBuilder.claim(CLAIM_SCOPE, buildScope(user));
@@ -371,14 +377,25 @@ public class AuthenticationService {
 
         ensureActive(user);
 
-        passwordResetTokenRepository.invalidateAllActiveTokensByEmail(email);
+        Instant now = Instant.now();
+        // Chống spam (Rate-limiting / Cooldown 60 giây):
+        // Mỗi mã có hạn 15 phút → nếu hạn còn > 14 phút nghĩa là mã vừa được tạo chưa đầy 60 giây
+        passwordResetTokenRepository.findTopByEmailOrderByExpiryDateDesc(email)
+                .ifPresent(existingToken -> {
+                    if (existingToken.getExpiryDate().minus(14, ChronoUnit.MINUTES).isAfter(now)) {
+                        throw new AppException(ErrorCode.RESET_PASSWORD_COOLDOWN);
+                    }
+                });
+
+        // Xóa cứng toàn bộ mã đặt lại mật khẩu cũ của email này để tránh phình bảng DB
+        passwordResetTokenRepository.deleteAllByEmail(email);
 
         String tempPassword = generateRandomPassword();
 
         PasswordResetToken resetToken = PasswordResetToken.builder()
                 .email(email)
                 .token(tempPassword)
-                .expiryDate(Instant.now().plus(15, ChronoUnit.MINUTES))
+                .expiryDate(now.plus(15, ChronoUnit.MINUTES))
                 .used(false)
                 .build();
         passwordResetTokenRepository.save(resetToken);
@@ -406,11 +423,13 @@ public class AuthenticationService {
                 .orElseThrow(() -> new AppException(ErrorCode.RESET_TOKEN_INVALID));
 
         if (resetToken.getExpiryDate().isBefore(Instant.now())) {
+            // Xóa luôn mã đã hết hạn khỏi DB
+            passwordResetTokenRepository.delete(resetToken);
             throw new AppException(ErrorCode.RESET_TOKEN_EXPIRED);
         }
 
-        resetToken.setUsed(true);
-        passwordResetTokenRepository.save(resetToken);
+        // Xóa cứng mã tạm ngay sau khi sử dụng thành công để bảng luôn gọn nhẹ
+        passwordResetTokenRepository.delete(resetToken);
 
         user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
         user.setPasswordChangedAt(Instant.now());

@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
-public class ProductResponse {
+public class  ProductResponse {
     private Long id;
     private String name;
     private String slug;
