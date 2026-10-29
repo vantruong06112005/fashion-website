@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
@@ -145,8 +146,7 @@ public class ReturnRequestController {
                 .build());
     }
 
-    @PostMapping("/{id}/bank-account")
-    @PatchMapping("/{id}/bank-account")
+    @RequestMapping(value = "/{id}/bank-account", method = {RequestMethod.POST, RequestMethod.PATCH})
     @PreAuthorize("hasRole('CUSTOMER')")
     public ResponseEntity<ApiResponse<ReturnRequestResponse>> provideBankAccount(
             @PathVariable
