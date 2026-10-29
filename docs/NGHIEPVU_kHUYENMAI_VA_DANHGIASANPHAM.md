@@ -51,10 +51,6 @@ trả bớt nhưng vẫn giữ mức giảm cao.
 Hủy đơn trước khi giao thì hoàn tiền đầy đủ và trả lại lượt dùng mã cho khách. Trả hàng một phần sau khi nhận thì không hoàn 
 lượt dùng. Các trường hợp biên như giao thất bại, khách từ chối nhận COD, hoặc trả hàng do lỗi của shop cần quy định riêng.
 
-### Liên hệ với các nghiệp vụ khác
-Khuyến mãi gắn chặt với tồn kho (xả theo biến thể), đổi trả (phân bổ tiền giảm) và vận chuyển (freeship). Ngoài ra, nên tách 
-ưu đãi khuyến mãi khỏi ưu đãi thưởng cho review để không chồng chéo điều kiện.
-
 ---
 
 ## 2. Review sản phẩm
