@@ -27,14 +27,12 @@ public class ProductController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
     public ApiResponse<List<ProductResponse>> getAll(@RequestParam(required = false) Long categoryId) {
         return ApiResponse.<List<ProductResponse>>builder().code(200)
                 .data(productService.getAll(categoryId)).build();
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
     public ApiResponse<ProductResponse> getById(@PathVariable Long id) {
         return ApiResponse.<ProductResponse>builder().code(200)
                 .data(productService.getById(id)).build();

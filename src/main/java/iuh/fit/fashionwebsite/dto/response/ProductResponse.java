@@ -15,6 +15,4 @@ public class  ProductResponse {
     private Integer reviewCount;
     private Boolean isActive;
     private Long categoryId;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
 }
