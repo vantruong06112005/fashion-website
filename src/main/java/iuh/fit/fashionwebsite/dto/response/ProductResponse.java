@@ -15,6 +15,7 @@ public class ProductResponse {
     private BigDecimal averageRating;
     private Integer reviewCount;
     private Boolean isActive;
+    private Boolean isNew;
     private Long categoryId;
     private List<ProductImageResponse> productImages;
     private List<ProductVariantResponse> variants;

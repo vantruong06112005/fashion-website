@@ -49,6 +49,9 @@ class ProductFilterIntegrationTest {
         em.clear();
         var result=service.getNew(new ProductFilterRequest(),30);
         assertEquals(1,result.size()); assertEquals(shirt.getId(),result.getFirst().getId());
+        assertTrue(result.getFirst().getIsNew());
+        assertFalse(service.getById(old.getId()).getIsNew());
+        assertFalse(service.getById(future.getId()).getIsNew());
         assertThrows(iuh.fit.fashionwebsite.exception.AppException.class,()->service.getNew(new ProductFilterRequest(),0));
         assertThrows(iuh.fit.fashionwebsite.exception.AppException.class,()->service.getNew(new ProductFilterRequest(),366));
     }
