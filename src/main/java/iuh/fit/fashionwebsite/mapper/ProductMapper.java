@@ -16,6 +16,7 @@ public interface ProductMapper {
     Product toEntity(ProductCreationRequest request);
 
     @Mapping(target = "categoryId", source = "category.id")
+    @Mapping(target = "productImages", source = "images")
     ProductResponse toResponse(Product product);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)

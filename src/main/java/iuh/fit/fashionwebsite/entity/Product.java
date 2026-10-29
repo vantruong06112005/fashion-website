@@ -62,6 +62,7 @@ public class Product extends BaseEntity {
 
     @JsonIgnore
     @OneToMany(mappedBy = "product", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OrderBy("isMain DESC, displayOrder ASC")
     @Builder.Default
     private List<ProductImage> images = new ArrayList<>();
 
