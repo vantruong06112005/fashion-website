@@ -2,6 +2,7 @@ package iuh.fit.fashionwebsite.controller.product;
 
 import iuh.fit.fashionwebsite.dto.request.ProductCreationRequest;
 import iuh.fit.fashionwebsite.dto.request.ProductUpdateRequest;
+import iuh.fit.fashionwebsite.dto.request.ProductFilterRequest;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
 import iuh.fit.fashionwebsite.dto.response.ProductResponse;
 import iuh.fit.fashionwebsite.service.product.ProductService;
@@ -27,14 +28,12 @@ public class ProductController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
-    public ApiResponse<List<ProductResponse>> getAll(@RequestParam(required = false) Long categoryId) {
+    public ApiResponse<List<ProductResponse>> getAll(@ModelAttribute ProductFilterRequest filter) {
         return ApiResponse.<List<ProductResponse>>builder().code(200)
-                .data(productService.getAll(categoryId)).build();
+                .data(productService.search(filter)).build();
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
     public ApiResponse<ProductResponse> getById(@PathVariable Long id) {
         return ApiResponse.<ProductResponse>builder().code(200)
                 .data(productService.getById(id)).build();

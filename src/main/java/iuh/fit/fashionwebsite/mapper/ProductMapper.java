@@ -4,6 +4,8 @@ import iuh.fit.fashionwebsite.dto.request.ProductCreationRequest;
 import iuh.fit.fashionwebsite.dto.request.ProductUpdateRequest;
 import iuh.fit.fashionwebsite.dto.response.ProductResponse;
 import iuh.fit.fashionwebsite.entity.Product;
+import iuh.fit.fashionwebsite.entity.ProductImage;
+import iuh.fit.fashionwebsite.dto.response.ProductImageResponse;
 import org.mapstruct.*;
 
 @Mapper(componentModel = "spring")
@@ -16,7 +18,11 @@ public interface ProductMapper {
     Product toEntity(ProductCreationRequest request);
 
     @Mapping(target = "categoryId", source = "category.id")
+    @Mapping(target = "productImages", source = "images")
     ProductResponse toResponse(Product product);
+
+    @Mapping(target = "variantId", source = "productVariant.id")
+    ProductImageResponse toImageResponse(ProductImage image);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     @Mapping(target = "id", ignore = true)

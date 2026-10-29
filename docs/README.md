@@ -17,6 +17,7 @@ Hệ thống backend cho website bán quần áo, xây dựng theo mô hình **l
 - **Maven** — quản lý dependency
 
 ### Tài liệu chuyên đề (Chi tiết xem tại thư mục `docs/`):
+- [CATALOG_FILTERS.md](CATALOG_FILTERS.md) — API lọc danh mục, giá, size/màu và quy tắc tồn kho.
 - 🔐 [SECURITY.md](SECURITY.md) — Xác thực, phân quyền JWT & OAuth2 Resource Server
 - ☁️ [CLOUDINARY.md](CLOUDINARY.md) — Tích hợp & quản lý hình ảnh Cloudinary (CDN, Upload, Clean-up)
 - 📋 [VALIDATION_AND_SCHEMA.md](VALIDATION_AND_SCHEMA.md) — Quy chuẩn Validation & danh mục DTO Request

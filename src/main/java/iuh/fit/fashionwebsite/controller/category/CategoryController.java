@@ -27,14 +27,12 @@ public class CategoryController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
     public ApiResponse<List<CategoryResponse>> getAll() {
         return ApiResponse.<List<CategoryResponse>>builder().code(200)
                 .data(categoryService.getAll()).build();
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
     public ApiResponse<CategoryResponse> getById(@PathVariable Long id) {
         return ApiResponse.<CategoryResponse>builder().code(200)
                 .data(categoryService.getById(id)).build();
