@@ -34,7 +34,7 @@ import java.util.List;
 public class SecurityConfig {
     private final CustomJwtDecoder customJwtDecoder;
 
-    // Danh sách origin frontend được phép gọi API (cấu hình qua CORS_ALLOWED_ORIGINS)
+    // D    anh sách origin frontend được phép gọi API (cấu hình qua CORS_ALLOWED_ORIGINS)
     private final List<String> allowedOrigins;
 
     public SecurityConfig(CustomJwtDecoder customJwtDecoder,
