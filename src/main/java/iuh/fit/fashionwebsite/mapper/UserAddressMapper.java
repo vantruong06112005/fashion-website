@@ -1,8 +1,8 @@
 package iuh.fit.fashionwebsite.mapper;
 
-import iuh.fit.fashionwebsite.dto.request.UserAddressCreationRequest;
-import iuh.fit.fashionwebsite.dto.request.UserAddressUpdateRequest;
-import iuh.fit.fashionwebsite.dto.response.UserAddressResponse;
+import iuh.fit.fashionwebsite.dto.request.user.UserAddressCreationRequest;
+import iuh.fit.fashionwebsite.dto.request.user.UserAddressUpdateRequest;
+import iuh.fit.fashionwebsite.dto.response.user.UserAddressResponse;
 import iuh.fit.fashionwebsite.entity.UserAddress;
 import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;

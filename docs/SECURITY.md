@@ -303,15 +303,17 @@ CREATE TABLE invalidated_tokens (
 File: `src/main/java/iuh/fit/fashionwebsite/config/InvalidatedTokenCleanup.java`.
 
 * Khi một token đã vượt qua thời điểm `expiry_time`, bản thân nó đã tự động bị Nimbus từ chối vì hết hạn, không cần giữ lại trong bảng blacklist nữa.
-* Hệ thống cấu hình cron job chạy tự động vào đầu mỗi giờ (`@Scheduled(cron = "0 0 * * * *")`):
+* Hệ thống cấu hình cron job chạy tự động vào đầu mỗi giờ (`@Scheduled(cron = "0 0 * * * *")`) để dọn sạch đồng thời cả `invalidated_tokens` và `password_reset_tokens` đã hết hạn:
   ```java
   @Scheduled(cron = "0 0 * * * *")
   @Transactional
   public void purgeExpiredTokens() {
-      invalidatedTokenRepository.deleteAllExpired(Instant.now());
+      Instant now = Instant.now();
+      invalidatedTokenRepository.deleteAllExpired(now);
+      passwordResetTokenRepository.deleteAllExpired(now);
   }
   ```
-* **Kết quả:** Bảng `invalidated_tokens` luôn được duy trì kích thước nhỏ gọn, tốc độ tra cứu `existsById(jti)` luôn đạt $O(1)$ mà **không bao giờ sợ phình to dữ liệu**.
+* **Kết quả:** Cả hai bảng `invalidated_tokens` và `password_reset_tokens` luôn được duy trì kích thước nhỏ gọn, tốc độ tra cứu `existsById(jti)` luôn đạt `O(1)` mà **không bao giờ sợ phình to dữ liệu**.
 
 ---
 

@@ -19,12 +19,15 @@ Hệ thống backend cho website bán quần áo, xây dựng theo mô hình **l
 ### Tài liệu chuyên đề (Chi tiết xem tại thư mục `docs/`):
 - [CATALOG_FILTERS.md](CATALOG_FILTERS.md) — API lọc danh mục, giá, size/màu và quy tắc tồn kho.
 - 🔐 [SECURITY.md](SECURITY.md) — Xác thực, phân quyền JWT & OAuth2 Resource Server
+- 🌐 [GOOGLE_LOGIN.md](GOOGLE_LOGIN.md) — Đăng nhập bằng Google (OAuth2 / OIDC ID Token, Account Linking & Auto-Registration)
+- 🔑 [FORGOT_PASSWORD.md](FORGOT_PASSWORD.md) — Quên mật khẩu, đặt lại mật khẩu & cấu hình Gmail SMTP
 - ☁️ [CLOUDINARY.md](CLOUDINARY.md) — Tích hợp & quản lý hình ảnh Cloudinary (CDN, Upload, Clean-up)
 - 📋 [VALIDATION_AND_SCHEMA.md](VALIDATION_AND_SCHEMA.md) — Quy chuẩn Validation & danh mục DTO Request
 - 🔔 [NOTIFICATION.md](NOTIFICATION.md) — Thiết kế & hướng dẫn triển khai hệ thống Notification
 - 🔄 [NGHIEP_VU_DOI_TRA_HANG_THUC_TE.md](NGHIEP_VU_DOI_TRA_HANG_THUC_TE.md) — Phân tích nghiệp vụ đổi trả hàng thời trang
 - ⚠️ [ExceptionDocs.md](ExceptionDocs.md) — Bảng mã lỗi & xử lý ngoại lệ tập trung
 - 🎨 [UI_DESIGN_SYSTEM.md](UI_DESIGN_SYSTEM.md) — Hướng dẫn phong cách thiết kế UI/UX
+- 🚀 [FRONTEND_GUIDE_AND_PROMPT.md](FRONTEND_GUIDE_AND_PROMPT.md) — Tổng hợp API (`Auth`, `Users`, `Products`), cấu hình `.env` Frontend & Master Prompt để Antigravity code Frontend
 
 ---
 <!--  -->
@@ -125,9 +128,9 @@ Client nhận Response (dạng DTO, không trả trực tiếp Entity)
 ## 6. Quy trình làm việc nhóm (Git)
 
 - Nhánh chính: `main` (không push trực tiếp)
-- Mỗi thành viên tạo nhánh riêng theo tính năng: `feature/ten-chuc-nang`
+- Mỗi thành viên tạo nhánh riêng `
   ```bash
-  git checkout -b feature/product-management
+  git checkout -b truong
   ```
 - Commit rõ ràng, ví dụ: `feat: add product CRUD API`, `fix: sửa lỗi validate size`
 - Tạo **Pull Request** vào `main`, cần ít nhất 1 thành viên review trước khi merge

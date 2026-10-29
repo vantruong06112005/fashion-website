@@ -1,4 +1,4 @@
-package iuh.fit.fashionwebsite.dto.request;
+package iuh.fit.fashionwebsite.dto.request.user;
 
 import iuh.fit.fashionwebsite.enums.AddressType;
 import jakarta.validation.constraints.NotBlank;

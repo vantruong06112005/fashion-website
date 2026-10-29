@@ -1,5 +1,6 @@
 package iuh.fit.fashionwebsite.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -25,11 +26,17 @@ public class ProductImage extends BaseEntity {
     @Column(name = "display_order", columnDefinition = "int default 0")
     private Integer displayOrder;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "variant_id")
     private ProductVariant productVariant;
+
+    public Long getVariantId() {
+        return productVariant != null ? productVariant.getId() : null;
+    }
 }

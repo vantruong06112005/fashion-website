@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2026 IUH. All rights reserved.
  */
-package iuh.fit.fashionwebsite.dto.request;
+package iuh.fit.fashionwebsite.dto.request.auth;
 
 
 import com.fasterxml.jackson.annotation.JsonAlias;

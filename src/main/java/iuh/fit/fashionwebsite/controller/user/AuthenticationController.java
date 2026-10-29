@@ -5,10 +5,12 @@ package iuh.fit.fashionwebsite.controller.user;/*
  */
 
 import iuh.fit.fashionwebsite.dto.request.*;
-import iuh.fit.fashionwebsite.dto.response.UserResponse;
+import iuh.fit.fashionwebsite.dto.request.auth.AuthenticationRequest;
+import iuh.fit.fashionwebsite.dto.request.user.UserCreationRequest;
+import iuh.fit.fashionwebsite.dto.response.user.UserResponse;
 import jakarta.validation.Valid;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
-import iuh.fit.fashionwebsite.dto.response.AuthenticationResponse;
+import iuh.fit.fashionwebsite.dto.response.auth.AuthenticationResponse;
 import iuh.fit.fashionwebsite.dto.response.IntrospectResponse;
 import iuh.fit.fashionwebsite.enums.AuthResponseCode;
 import iuh.fit.fashionwebsite.service.authentication.AuthenticationService;
@@ -90,6 +92,34 @@ public class AuthenticationController {
         return ApiResponse.<UserResponse>builder()
                 .code(AuthResponseCode.REGISTER_SUCCESS.getCode())
                 .message("Register successfully")
+                .data(response)
+                .build();
+    }
+
+    @PostMapping("/forgot-password")
+    ApiResponse<Void> forgotPassword(@RequestBody @Valid ForgotPasswordRequest request) {
+        authenticationService.forgotPassword(request);
+        return ApiResponse.<Void>builder()
+                .code(200)
+                .message("Password reset temporary code has been sent to your email")
+                .build();
+    }
+
+    @PostMapping("/reset-password")
+    ApiResponse<Void> resetPassword(@RequestBody @Valid ResetPasswordRequest request) {
+        authenticationService.resetPassword(request);
+        return ApiResponse.<Void>builder()
+                .code(200)
+                .message("Password has been reset successfully")
+                .build();
+    }
+
+    @PostMapping("/google")
+    ApiResponse<AuthenticationResponse> loginWithGoogle(@RequestBody @Valid GoogleLoginRequest request) {
+        AuthenticationResponse response = authenticationService.authenticateWithGoogle(request);
+        return ApiResponse.<AuthenticationResponse>builder()
+                .code(AuthResponseCode.LOGIN_SUCCESS.getCode())
+                .message("Google login successfully")
                 .data(response)
                 .build();
     }

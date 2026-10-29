@@ -12,9 +12,12 @@ import com.nimbusds.jose.crypto.MACVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import iuh.fit.fashionwebsite.dto.request.*;
-import iuh.fit.fashionwebsite.dto.response.AuthenticationResponse;
+import iuh.fit.fashionwebsite.dto.request.auth.AuthenticationRequest;
+import iuh.fit.fashionwebsite.dto.request.user.UserCreationRequest;
+import iuh.fit.fashionwebsite.dto.response.auth.AuthenticationResponse;
 import iuh.fit.fashionwebsite.dto.response.IntrospectResponse;
-import iuh.fit.fashionwebsite.dto.response.UserResponse;
+import iuh.fit.fashionwebsite.dto.response.user.UserResponse;
+import iuh.fit.fashionwebsite.entity.PasswordResetToken;
 import iuh.fit.fashionwebsite.entity.User;
 import iuh.fit.fashionwebsite.enums.RoleUser;
 import iuh.fit.fashionwebsite.enums.StatusUser;
@@ -24,23 +27,34 @@ import iuh.fit.fashionwebsite.exception.ErrorCode;
 import iuh.fit.fashionwebsite.exception.user.UnauthenticatedException;
 import iuh.fit.fashionwebsite.mapper.UserMapper;
 import iuh.fit.fashionwebsite.repository.InvalidatedTokenRepository;
+import iuh.fit.fashionwebsite.repository.PasswordResetTokenRepository;
 import iuh.fit.fashionwebsite.repository.UserRepository;
 import iuh.fit.fashionwebsite.service.cloudinary.CloudinaryService;
+import iuh.fit.fashionwebsite.service.email.EmailService;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.text.ParseException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.Date;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /*
  * @description
@@ -55,12 +69,26 @@ import java.util.UUID;
 public class AuthenticationService {
     private static final String CLAIM_TYPE = "type";
     private static final String CLAIM_SCOPE = "scope";
+    private static final String CLAIM_USER_ID = "userId";
+    private static final String GOOGLE_JWK_SET_URI = "https://www.googleapis.com/oauth2/v3/certs";
+    private static final Set<String> VALID_GOOGLE_ISSUERS = Set.of(
+            "https://accounts.google.com",
+            "accounts.google.com"
+    );
 
     private final UserRepository userRepository;
     private final UserMapper userMapper;
     private final InvalidatedTokenRepository invalidatedTokenRepository;
     private final CloudinaryService cloudinaryService;
     private final PasswordEncoder passwordEncoder;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final EmailService emailService;
+
+    private static final String LOWER = "abcdefghjkmnpqrstuvwxyz";
+    private static final String UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    private static final String DIGITS = "23456789";
+    private static final String ALL_CHARS = LOWER + UPPER + DIGITS;
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     @NonFinal
     // Đọc khóa bí mật từ biến môi trường JWT_SIGNER_KEY (qua application.properties)
@@ -81,6 +109,14 @@ public class AuthenticationService {
     // Thời gian sống của refresh token (giây)
     @Value("${jwt.refreshable-duration:604800}")
     protected long REFRESHABLE_DURATION;
+
+    @NonFinal
+    // Danh sách Google Client ID hợp lệ (cách nhau bởi dấu phẩy nếu có nhiều môi trường Web / Playground)
+    @Value("${google.client-id:}")
+    protected String googleClientId;
+
+    @NonFinal
+    protected volatile JwtDecoder googleJwtDecoder;
 
     /**
      * Xác thực đăng nhập
@@ -273,6 +309,9 @@ public class AuthenticationService {
                 .jwtID(UUID.randomUUID().toString())
                 // Loại token: ACCESS / REFRESH
                 .claim(CLAIM_TYPE, type.name());
+        if (user.getId() != null) {
+            claimsBuilder.claim(CLAIM_USER_ID, user.getId());
+        }
         // Chỉ access token mới mang quyền
         if (type == TokenType.ACCESS) {
             claimsBuilder.claim(CLAIM_SCOPE, buildScope(user));
@@ -300,6 +339,7 @@ public class AuthenticationService {
         }
         return user.getRole().name();
     }
+
     public UserResponse register(UserCreationRequest request, MultipartFile file) {
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new AppException(ErrorCode.USER_EXISTED);
@@ -330,4 +370,198 @@ public class AuthenticationService {
         );
     }
 
+    public void forgotPassword(ForgotPasswordRequest request) {
+        String email = request.getEmail().trim().toLowerCase();
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        ensureActive(user);
+
+        Instant now = Instant.now();
+        // Chống spam (Rate-limiting / Cooldown 60 giây):
+        // Mỗi mã có hạn 15 phút → nếu hạn còn > 14 phút nghĩa là mã vừa được tạo chưa đầy 60 giây
+        passwordResetTokenRepository.findTopByEmailOrderByExpiryDateDesc(email)
+                .ifPresent(existingToken -> {
+                    if (existingToken.getExpiryDate().minus(14, ChronoUnit.MINUTES).isAfter(now)) {
+                        throw new AppException(ErrorCode.RESET_PASSWORD_COOLDOWN);
+                    }
+                });
+
+        // Xóa cứng toàn bộ mã đặt lại mật khẩu cũ của email này để tránh phình bảng DB
+        passwordResetTokenRepository.deleteAllByEmail(email);
+
+        String tempPassword = generateRandomPassword();
+
+        PasswordResetToken resetToken = PasswordResetToken.builder()
+                .email(email)
+                .token(tempPassword)
+                .expiryDate(now.plus(15, ChronoUnit.MINUTES))
+                .used(false)
+                .build();
+        passwordResetTokenRepository.save(resetToken);
+
+        emailService.sendPasswordResetEmail(email, user.getUsername(), tempPassword);
+    }
+
+    public void resetPassword(ResetPasswordRequest request) {
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new AppException(ErrorCode.PASSWORD_CONFIRMATION_MISMATCH);
+        }
+
+        String email = request.getEmail().trim().toLowerCase();
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        ensureActive(user);
+
+        if (passwordEncoder.matches(request.getNewPassword(), user.getPasswordHash())) {
+            throw new AppException(ErrorCode.NEW_PASSWORD_SAME_AS_OLD);
+        }
+
+        PasswordResetToken resetToken = passwordResetTokenRepository
+                .findByEmailAndTokenAndUsedFalse(email, request.getTempPassword().trim())
+                .orElseThrow(() -> new AppException(ErrorCode.RESET_TOKEN_INVALID));
+
+        if (resetToken.getExpiryDate().isBefore(Instant.now())) {
+            // Xóa luôn mã đã hết hạn khỏi DB
+            passwordResetTokenRepository.delete(resetToken);
+            throw new AppException(ErrorCode.RESET_TOKEN_EXPIRED);
+        }
+
+        // Xóa cứng mã tạm ngay sau khi sử dụng thành công để bảng luôn gọn nhẹ
+        passwordResetTokenRepository.delete(resetToken);
+
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        user.setPasswordChangedAt(Instant.now());
+        userRepository.save(user);
+
+        log.info("Password successfully reset for user {}", user.getUsername());
+    }
+
+    /**
+     * Đăng nhập hoặc tự động đăng ký / liên kết tài khoản qua Google ID Token (OAuth2 / OIDC)
+     */
+    public AuthenticationResponse authenticateWithGoogle(GoogleLoginRequest request) {
+        Jwt googleJwt = verifyGoogleIdToken(request.getIdToken());
+
+        String email = googleJwt.getClaimAsString("email");
+        Boolean emailVerified = googleJwt.getClaimAsBoolean("email_verified");
+        if (email == null || email.isBlank() || !Boolean.TRUE.equals(emailVerified)) {
+            throw new AppException(ErrorCode.UNAUTHENTICATED);
+        }
+
+        String normalizedEmail = email.trim().toLowerCase();
+        String fullName = googleJwt.getClaimAsString("name");
+        String picture = googleJwt.getClaimAsString("picture");
+
+        User user = userRepository.findByEmail(normalizedEmail)
+                .map(existingUser -> {
+                    // Nếu tài khoản đã tồn tại nhưng bị Admin khóa thì từ chối đăng nhập
+                    ensureActive(existingUser);
+                    boolean updated = false;
+                    // Bổ sung ảnh đại diện từ Google nếu tài khoản cũ chưa có avatar
+                    if ((existingUser.getAvt() == null || existingUser.getAvt().isBlank())
+                            && picture != null && !picture.isBlank()) {
+                        existingUser.setAvt(picture);
+                        updated = true;
+                    }
+                    // Bổ sung họ tên từ Google nếu tài khoản cũ chưa có fullname
+                    if ((existingUser.getFullname() == null || existingUser.getFullname().isBlank())
+                            && fullName != null && !fullName.isBlank()) {
+                        existingUser.setFullname(fullName);
+                        updated = true;
+                    }
+                    return updated ? userRepository.save(existingUser) : existingUser;
+                })
+                .orElseGet(() -> createGoogleUser(normalizedEmail, fullName, picture));
+
+        return buildAuthenticationResponse(user);
+    }
+
+    private Jwt verifyGoogleIdToken(String idToken) {
+        if (idToken == null || idToken.isBlank()) {
+            throw new AppException(ErrorCode.TOKEN_INVALID);
+        }
+        if (idToken.startsWith("Bearer ")) {
+            idToken = idToken.substring(7).trim();
+        }
+        try {
+            Jwt jwt = getGoogleJwtDecoder().decode(idToken);
+
+            String issuer = jwt.getIssuer() != null ? jwt.getIssuer().toString() : jwt.getClaimAsString("iss");
+            if (issuer == null || !VALID_GOOGLE_ISSUERS.contains(issuer)) {
+                throw new AppException(ErrorCode.TOKEN_INVALID);
+            }
+
+            if (googleClientId != null && !googleClientId.isBlank()) {
+                Set<String> allowedClientIds = Arrays.stream(googleClientId.split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .collect(Collectors.toSet());
+                List<String> audience = jwt.getAudience();
+                if (!allowedClientIds.isEmpty()
+                        && (audience == null || audience.stream().noneMatch(allowedClientIds::contains))) {
+                    throw new AppException(ErrorCode.TOKEN_INVALID);
+                }
+            }
+
+            return jwt;
+        } catch (JwtException e) {
+            log.warn("Google ID token verification failed: {}", e.getMessage());
+            throw new AppException(ErrorCode.TOKEN_INVALID);
+        }
+    }
+
+    private JwtDecoder getGoogleJwtDecoder() {
+        if (googleJwtDecoder == null) {
+            synchronized (this) {
+                if (googleJwtDecoder == null) {
+                    googleJwtDecoder = NimbusJwtDecoder
+                            .withJwkSetUri(GOOGLE_JWK_SET_URI)
+                            .build();
+                }
+            }
+        }
+        return googleJwtDecoder;
+    }
+
+    private User createGoogleUser(String email, String fullName, String picture) {
+        String baseUsername = email.split("@")[0].replaceAll("[^a-zA-Z0-9._-]", "");
+        if (baseUsername.isBlank()) {
+            baseUsername = "user";
+        }
+        String username = baseUsername;
+        while (userRepository.existsByUsername(username)) {
+            username = baseUsername + "_" + (100 + RANDOM.nextInt(900));
+        }
+
+        User newUser = User.builder()
+                .username(username)
+                .email(email)
+                .fullname(fullName != null && !fullName.isBlank() ? fullName : username)
+                .avt(picture)
+                .passwordHash(passwordEncoder.encode(UUID.randomUUID().toString()))
+                .role(RoleUser.CUSTOMER)
+                .status(StatusUser.ACTIVE)
+                .build();
+        return userRepository.save(newUser);
+    }
+
+    private String generateRandomPassword() {
+        StringBuilder sb = new StringBuilder(8);
+        sb.append(LOWER.charAt(RANDOM.nextInt(LOWER.length())));
+        sb.append(UPPER.charAt(RANDOM.nextInt(UPPER.length())));
+        sb.append(DIGITS.charAt(RANDOM.nextInt(DIGITS.length())));
+        for (int i = 3; i < 8; i++) {
+            sb.append(ALL_CHARS.charAt(RANDOM.nextInt(ALL_CHARS.length())));
+        }
+        char[] array = sb.toString().toCharArray();
+        for (int i = array.length - 1; i > 0; i--) {
+            int j = RANDOM.nextInt(i + 1);
+            char temp = array[i];
+            array[i] = array[j];
+            array[j] = temp;
+        }
+        return new String(array);
+    }
 }
