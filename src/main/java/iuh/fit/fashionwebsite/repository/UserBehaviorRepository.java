@@ -32,6 +32,7 @@ public interface UserBehaviorRepository extends JpaRepository<UserBehavior, Long
         SELECT product_id AS productId,
                SUM(CASE type
                      WHEN 'VIEW' THEN 1
+                     WHEN 'SELECT_VARIANT' THEN 2
                      WHEN 'ADD_TO_CART' THEN 5
                      WHEN 'REMOVE_FROM_CART' THEN -2
                      WHEN 'PURCHASE' THEN 10

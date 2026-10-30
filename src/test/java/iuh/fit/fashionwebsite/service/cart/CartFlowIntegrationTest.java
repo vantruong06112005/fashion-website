@@ -8,6 +8,7 @@ import iuh.fit.fashionwebsite.enums.StatusUser;
 import iuh.fit.fashionwebsite.exception.AppException;
 import iuh.fit.fashionwebsite.exception.ErrorCode;
 import iuh.fit.fashionwebsite.mapper.CartItemMapperImpl;
+import iuh.fit.fashionwebsite.service.user.UserBehaviorService;
 import iuh.fit.fashionwebsite.service.user.UserService;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +28,7 @@ class CartFlowIntegrationTest {
     @Autowired EntityManager em;
     @Autowired CartService service;
     @MockitoBean UserService users;
+    @MockitoBean UserBehaviorService behaviorService;
     User customer;
     User otherCustomer;
     ProductVariant variant;
