@@ -17,6 +17,8 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+// Gợi ý sản phẩm cho khách: lấy sản phẩm quan tâm nhất từ hành vi,
+// đưa vào prompt cho AI trả lời
 public class RecommendationService {
 
     private static final int TOP_LIMIT = 5;
@@ -24,6 +26,7 @@ public class RecommendationService {
     private final ProductRepository productRepository;
     private final ChatClient chatClient;
 
+    // Trả lời câu hỏi của khách, kèm danh sách sản phẩm khách quan tâm (nếu có) làm ngữ cảnh
     public String recommend(Long userId, String userMessage) {
         List<ProductScoreResponse> scores = userBehaviorService.topProducts(userId, TOP_LIMIT);
 
@@ -39,6 +42,7 @@ public class RecommendationService {
                 .content();
     }
 
+    // Đổi danh sách điểm thành chuỗi tên sản phẩm, giữ thứ tự điểm và bỏ sản phẩm đã xóa hoặc ngừng bán
     private String buildInterests(List<ProductScoreResponse> scores) {
         if (scores.isEmpty()) {
             return "";
@@ -52,6 +56,7 @@ public class RecommendationService {
         return scores.stream()
                 .map(s -> products.get(s.productId()))
                 .filter(p -> p != null)                       // sản phẩm đã bị xóa mềm sẽ không có
+                .filter(p -> Boolean.TRUE.equals(p.getIsActive())) // không gợi ý sản phẩm đã ngừng bán
                 .map(Product::getName)                        // thêm danh mục nếu entity có
                 .collect(Collectors.joining(", "));
     }
