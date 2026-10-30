@@ -112,25 +112,24 @@
             <artifactId>mapstruct-processor</artifactId>
             <version>1.6.3</version>
         </dependency>
-<!--        security-oauth2-resource-server-->
-        <!-- Source: https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-oauth2-resource-server -->
+        <!-- security-oauth2-resource-server -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
             <scope>compile</scope>
         </dependency>
 
-<dependency>
-    <groupId>com.cloudinary</groupId>
-    <artifactId>cloudinary-http5</artifactId>
-    <version>2.0.0</version>
-</dependency>
+        <dependency>
+            <groupId>com.cloudinary</groupId>
+            <artifactId>cloudinary-http5</artifactId>
+            <version>2.0.0</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-            <dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
@@ -139,11 +138,21 @@
             <artifactId>spring-ai-starter-model-google-genai</artifactId>
         </dependency>
 
-
-        <!--        <dependency>-->
-<!--            <groupId>org.springframework.ai</groupId>-->
-<!--            <artifactId>spring-ai-starter-model-anthropic</artifactId> &lt;!&ndash; hoặc ...-openai, ...-ollama &ndash;&gt;-->
-<!--        </dependency>-->
+        <!--
+            =========================================================================
+            MODULE CẤU HÌNH THƯ VIỆN SPRING AI EMBEDDING (TẦNG 3: AI UNDERSTANDING ENGINE)
+            - Chức năng: Tích hợp bộ công cụ Spring AI kết nối với mô hình Google Gemini Embedding.
+            - Ý tưởng logic cốt lõi: Cung cấp bean EmbeddingModel tự động (Auto-Configuration)
+              để chuyển đổi văn bản tiếng Việt (sản phẩm, sở thích người dùng) thành mảng Vector số thực.
+            - Đầu vào (Parameters): Đọc cấu hình API Key, tên model (text-embedding-004) và số chiều (768)
+              từ file application.properties.
+            - Đầu ra (Return): Khởi tạo sẵn đối tượng EmbeddingModel trong Spring Context để tiêm (Inject) vào Service.
+            =========================================================================
+        -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-google-genai-embedding</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
