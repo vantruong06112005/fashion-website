@@ -9,14 +9,17 @@ import iuh.fit.fashionwebsite.entity.CartItem;
 import iuh.fit.fashionwebsite.entity.Product;
 import iuh.fit.fashionwebsite.entity.ProductVariant;
 import iuh.fit.fashionwebsite.entity.User;
+import iuh.fit.fashionwebsite.enums.BehaviorType;
 import iuh.fit.fashionwebsite.exception.AppException;
 import iuh.fit.fashionwebsite.exception.ErrorCode;
 import iuh.fit.fashionwebsite.mapper.CartItemMapper;
 import iuh.fit.fashionwebsite.repository.CartItemRepository;
 import iuh.fit.fashionwebsite.repository.CartRepository;
 import iuh.fit.fashionwebsite.repository.ProductVariantRepository;
+import iuh.fit.fashionwebsite.service.user.UserBehaviorService;
 import iuh.fit.fashionwebsite.service.user.UserService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
@@ -25,12 +28,14 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 public class CartServiceImpl implements CartService {
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;
     private final ProductVariantRepository variantRepository;
     private final UserService userService;
     private final CartItemMapper itemMapper;
+    private final UserBehaviorService behaviorService;
 
     @Override
     @Transactional(readOnly = true)
@@ -56,6 +61,7 @@ public class CartServiceImpl implements CartService {
         checkStock(variant, newQuantity);
         item.setQuantity((int) newQuantity);
         cartItemRepository.save(item);
+        trackBehavior(user.getId(), variant, BehaviorType.ADD_TO_CART);
         return toResponse(cart);
     }
 
@@ -75,8 +81,11 @@ public class CartServiceImpl implements CartService {
     public CartResponse removeItem(Long itemId) {
         User user = userService.getCurrentUserEntity();
         Cart cart = getCart(user.getId());
-        cartItemRepository.delete(getItem(cart.getId(), itemId));
+        CartItem item = getItem(cart.getId(), itemId);
+        ProductVariant removedVariant = item.getProductVariant();
+        cartItemRepository.delete(item);
         cartItemRepository.flush();
+        trackBehavior(user.getId(), removedVariant, BehaviorType.REMOVE_FROM_CART);
         return toResponse(cart);
     }
 
@@ -88,6 +97,17 @@ public class CartServiceImpl implements CartService {
             cartItemRepository.flush();
             return toResponse(cart);
           }).orElseGet(this::emptyCart);
+    }
+
+    // Ghi hành vi giỏ hàng; lỗi theo dõi không được làm hỏng nghiệp vụ giỏ hàng
+    private void trackBehavior(Long userId, ProductVariant variant, BehaviorType type) {
+        try {
+            if (variant != null && variant.getProduct() != null) {
+                behaviorService.track(userId, variant.getProduct().getId(), variant.getId(), type);
+            }
+        } catch (RuntimeException e) {
+            log.warn("Không ghi được hành vi {} của user {}", type, userId, e);
+        }
     }
 
     private Cart getCart(Long userId) {

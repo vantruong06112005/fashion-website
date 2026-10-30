@@ -169,6 +169,18 @@ public enum ErrorCode implements BaseErrorCode {
             HttpStatus.INTERNAL_SERVER_ERROR
     ),
 
+    AI_QUOTA_EXCEEDED(
+            429,
+            "Trợ lý AI đang quá tải hoặc đã hết lượt sử dụng. Vui lòng thử lại sau ít phút.",
+            HttpStatus.TOO_MANY_REQUESTS
+    ),
+
+    AI_UNAVAILABLE(
+            503,
+            "Trợ lý AI tạm thời không phản hồi được. Vui lòng thử lại sau.",
+            HttpStatus.SERVICE_UNAVAILABLE
+    ),
+
     RESET_PASSWORD_COOLDOWN(
             429,
             "error.reset_password_cooldown",
