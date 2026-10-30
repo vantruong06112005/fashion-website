@@ -19,6 +19,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
@@ -47,51 +48,85 @@ class ReturnRequestMapperTest {
     void creationMapsOnlyReturnDataAndLeavesRelationsForService() {
         var request = validRequest();
         request.setImageUrls(List.of("/images/return-evidence.jpg"));
+        request.setBankName("Vietcombank");
+        request.setBankAccountNumber("0123456789");
+        request.setBankAccountHolder("NGUYEN VAN A");
 
         ReturnRequest entity = mapper.toReturnRequest(request);
 
         assertEquals(ReturnRequestType.RETURN, entity.getRequestType());
-        assertEquals(ReturnRequestStatus.PENDING, entity.getStatus());
+        assertEquals(ReturnRequestStatus.PENDING_APPROVAL, entity.getStatus());
+        assertEquals("Vietcombank", entity.getBankName());
+        assertEquals("0123456789", entity.getAccountNumber());
+        assertEquals("NGUYEN VAN A", entity.getAccountHolderName());
         assertEquals(1, entity.getItems().getFirst().getQuantity());
-        assertEquals("/images/return-evidence.jpg", entity.getImages().getFirst().getImageUrl());
+        assertEquals(0, entity.getItems().getFirst().getRestockedQuantity());
+        assertFalse(entity.getItems().getFirst().getIsRestocked());
+        assertTrue(entity.getImages().isEmpty());
         // ID khách gửi không được biến thành entity chưa được kiểm tra quyền sở hữu.
         assertNull(entity.getOrder());
         assertNull(entity.getUser());
         assertNull(entity.getReturnCode());
         assertNull(entity.getItems().getFirst().getOrderItem());
         assertNull(entity.getItems().getFirst().getReturnRequest());
-        assertNull(entity.getItems().getFirst().getNewVariant());
-        assertNull(entity.getImages().getFirst().getReturnRequest());
         assertNull(entity.getCreatedAt());
     }
 
     @Test
-    void responseUsesOrderSnapshotAndDoesNotIncludeParentEntities() {
+    void responseUsesOrderSnapshotAndMapsStageTwoTrackingAndFinancialFields() {
         var user = User.builder().id(7L).build();
         var order = Order.builder().id(10L).orderCode("ORDER-10").build();
         var variant = ProductVariant.builder().id(8L).build();
         var orderItem = OrderItem.builder().id(101L).productVariant(variant)
                 .productName("Áo lúc mua").variantInfo("Đỏ - M").build();
-        var item = ReturnRequestItem.builder().id(2L).orderItem(orderItem).quantity(1).build();
+        var item = ReturnRequestItem.builder().id(2L).orderItem(orderItem).quantity(2)
+                .acceptedQuantity(1).restockedQuantity(1).isRestocked(true)
+                .inspectionNote("1 chiếc đạt chuẩn")
+                .itemRefundAmount(new BigDecimal("180000")).build();
         var image = ReturnRequestImage.builder().id(3L).imageUrl("/images/evidence.png").build();
+        LocalDateTime now = LocalDateTime.of(2026, 10, 25, 10, 0);
         var entity = ReturnRequest.builder().id(1L).returnCode("RETURN-1")
-                .user(user).order(order).reason("Hàng lỗi")
-                .status(ReturnRequestStatus.PENDING).items(List.of(item)).images(List.of(image)).build();
+                .user(user).order(order).reason("CHANGE_OF_MIND")
+                .status(ReturnRequestStatus.REFUNDED)
+                .approvedAt(now.plusHours(2))
+                .handoverDeadline(now.plusDays(7))
+                .handedOverAt(now.plusDays(1))
+                .receivedAt(now.plusDays(2))
+                .inspectedAt(now.plusDays(3))
+                .refundEligibleAt(now.plusDays(3).plusHours(2))
+                .refundedAt(now.plusDays(4))
+                .resolvedAt(now.plusDays(4))
+                .completedAt(now.plusDays(4))
+                .itemsRefundAmount(new BigDecimal("180000"))
+                .returnShippingFee(new BigDecimal("25000"))
+                .refundAmount(new BigDecimal("155000"))
+                .bankName("Vietcombank")
+                .accountNumber("0123456789")
+                .accountHolderName("NGUYEN VAN A")
+                .refundTransactionCode("TXN-999")
+                .items(List.of(item)).images(List.of(image)).build();
         item.setReturnRequest(entity);
         image.setReturnRequest(entity);
-        LocalDateTime createdAt = LocalDateTime.of(2026, 10, 25, 10, 0);
-        entity.setCreatedAt(createdAt);
+        entity.setCreatedAt(now);
 
         var response = mapper.toReturnRequestResponse(entity);
 
         assertEquals(7L, response.getUserId());
         assertEquals(10L, response.getOrderId());
         assertEquals("ORDER-10", response.getOrderCode());
-        assertEquals(createdAt, response.getCreatedAt());
+        assertEquals(now, response.getCreatedAt());
+        assertEquals(now.plusDays(1), response.getHandedOverAt());
+        assertEquals(now.plusDays(4), response.getResolvedAt());
+        assertEquals(new BigDecimal("155000"), response.getRefundAmount());
+        assertEquals("0123456789", response.getBankAccountNumber());
+        assertEquals("NGUYEN VAN A", response.getBankAccountHolder());
+        assertEquals("TXN-999", response.getRefundTransactionCode());
         assertEquals(101L, response.getItems().getFirst().getOrderItemId());
         assertEquals(8L, response.getItems().getFirst().getProductVariantId());
         assertEquals("Áo lúc mua", response.getItems().getFirst().getProductName());
         assertEquals("Đỏ - M", response.getItems().getFirst().getVariantInfo());
+        assertEquals(1, response.getItems().getFirst().getRestockedQuantity());
+        assertTrue(response.getItems().getFirst().getIsRestocked());
         assertEquals("/images/evidence.png", response.getImages().getFirst().getImageUrl());
     }
 
