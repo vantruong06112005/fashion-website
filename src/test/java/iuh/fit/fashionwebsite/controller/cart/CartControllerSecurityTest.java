@@ -15,7 +15,14 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import iuh.fit.fashionwebsite.dto.response.CartResponse;
+import iuh.fit.fashionwebsite.dto.response.CartItemResponse;
+import java.util.List;
 
 @WebMvcTest(controllers = CartController.class, properties = "app.cors.allowed-origins=http://localhost")
 @ContextConfiguration(classes = {CartController.class, SecurityConfig.class, GlobalExceptionHandler.class})
@@ -23,6 +30,16 @@ class CartControllerSecurityTest {
     @Autowired private MockMvc mvc;
     @MockitoBean private CartService cartService;
     @MockitoBean private CustomJwtDecoder customJwtDecoder;
+
+    @Test
+    void cartOmitsInternalIdentityButKeepsItemIdentifiers() throws Exception {
+        when(cartService.getMyCart()).thenReturn(CartResponse.builder().items(List.of(
+                CartItemResponse.builder().id(5L).variantId(42L).productId(70L).build())).build());
+        mvc.perform(get("/cart").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER"))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.id").doesNotExist())
+                .andExpect(jsonPath("$.data.userId").doesNotExist()).andExpect(jsonPath("$.data.items[0].id").value(5))
+                .andExpect(jsonPath("$.data.items[0].variantId").value(42)).andExpect(jsonPath("$.data.items[0].productId").value(70));
+    }
 
     @Test
     void customerCanViewOwnCart() throws Exception {
@@ -43,5 +60,37 @@ class CartControllerSecurityTest {
         mvc.perform(get("/cart").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isForbidden());
         verifyNoInteractions(cartService);
+    }
+
+    @Test
+    void guestCannotReadOrWriteCart() throws Exception {
+        mvc.perform(get("/cart")).andExpect(status().isUnauthorized());
+        mvc.perform(post("/cart/items").contentType("application/json").content("{\"variantId\":1,\"quantity\":1}"))
+                .andExpect(status().isUnauthorized());
+        verifyNoInteractions(cartService);
+    }
+
+    @Test
+    void invalidQuantitiesNeverReachService() throws Exception {
+        mvc.perform(post("/cart/items").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER")))
+                .contentType("application/json").content("{\"variantId\":1,\"quantity\":0}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(put("/cart/items/1").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER")))
+                .contentType("application/json").content("{\"quantity\":-1}"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(cartService);
+    }
+
+    @Test
+    void customerCanAddUpdateAndRemove() throws Exception {
+        mvc.perform(post("/cart/items").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER")))
+                .contentType("application/json").content("{\"variantId\":1,\"quantity\":2}"))
+                .andExpect(status().isOk());
+        mvc.perform(put("/cart/items/5").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER")))
+                .contentType("application/json").content("{\"quantity\":3}"))
+                .andExpect(status().isOk());
+        mvc.perform(delete("/cart/items/5").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER"))))
+                .andExpect(status().isOk());
+        verify(cartService).addItem(any()); verify(cartService).updateItem(eq(5L),any()); verify(cartService).removeItem(5L);
     }
 }

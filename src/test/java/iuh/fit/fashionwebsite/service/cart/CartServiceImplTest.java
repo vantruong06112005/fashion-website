@@ -10,6 +10,7 @@ import iuh.fit.fashionwebsite.mapper.CartItemMapper;
 import iuh.fit.fashionwebsite.repository.CartItemRepository;
 import iuh.fit.fashionwebsite.repository.CartRepository;
 import iuh.fit.fashionwebsite.repository.ProductVariantRepository;
+import iuh.fit.fashionwebsite.service.user.UserBehaviorService;
 import iuh.fit.fashionwebsite.service.user.UserService;
 import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
@@ -23,7 +24,7 @@ class CartServiceImplTest {
     private final CartItemRepository items = mock(CartItemRepository.class);
     private final ProductVariantRepository variants = mock(ProductVariantRepository.class);
     private final UserService users = mock(UserService.class);
-    private final CartServiceImpl service = new CartServiceImpl(carts, items, variants, users, mock(CartItemMapper.class));
+    private final CartServiceImpl service = new CartServiceImpl(carts, items, variants, users, mock(CartItemMapper.class), mock(UserBehaviorService.class));
 
     @Test
     void readingMissingCartReturnsEmptyWithoutWriting() {
@@ -33,7 +34,6 @@ class CartServiceImplTest {
 
         CartResponse response = service.getMyCart();
 
-        assertEquals(1L, response.getUserId());
         assertEquals(0, response.getTotalQuantity());
         assertEquals(BigDecimal.ZERO, response.getTotalPrice());
         assertTrue(response.getItems().isEmpty());
