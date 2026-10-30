@@ -1,8 +1,10 @@
 package iuh.fit.fashionwebsite.service.product;
 
+import iuh.fit.fashionwebsite.dto.response.CategoryScoreResponse;
 import iuh.fit.fashionwebsite.dto.response.ProductScoreResponse;
-import iuh.fit.fashionwebsite.entity.Product;                       // sửa theo entity của bạn
-import iuh.fit.fashionwebsite.repository.ProductRepository;         // sửa theo repository của bạn
+import iuh.fit.fashionwebsite.dto.response.UserPreferenceProfileResponse;
+import iuh.fit.fashionwebsite.entity.Product;
+import iuh.fit.fashionwebsite.repository.ProductRepository;
 import iuh.fit.fashionwebsite.service.user.UserBehaviorService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,47 +19,73 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-// Gợi ý sản phẩm cho khách: lấy sản phẩm quan tâm nhất từ hành vi,
+// Gợi ý sản phẩm cho khách: lấy hồ sơ sở thích từ hành vi (Feature Store),
 // đưa vào prompt cho AI trả lời
 public class RecommendationService {
 
-    private static final int TOP_LIMIT = 5;
     private final UserBehaviorService userBehaviorService;
     private final ProductRepository productRepository;
     private final ChatClient chatClient;
 
-    // Trả lời câu hỏi của khách, kèm danh sách sản phẩm khách quan tâm (nếu có) làm ngữ cảnh
+    // Trả lời câu hỏi của khách, kèm hồ sơ sở thích khách hàng (nếu có) làm ngữ cảnh
     public String recommend(Long userId, String userMessage) {
-        List<ProductScoreResponse> scores = userBehaviorService.topProducts(userId, TOP_LIMIT);
-
-        String interests = buildInterests(scores);
-        String prompt = interests.isEmpty()
+        String userContext = buildUserContext(userId);
+        String prompt = userContext.isEmpty()
                 ? userMessage
-                : "Sản phẩm khách quan tâm gần đây (xếp từ cao xuống thấp): " + interests
-                + "\n\nCâu hỏi của khách: " + userMessage;
-        log.debug("Gợi ý cho user {} với {} sản phẩm quan tâm", userId, scores.size());
+                : userContext + "\n\nCâu hỏi của khách: " + userMessage;
+        log.debug("Gợi ý cho user {}", userId);
         return chatClient.prompt()
                 .user(prompt)
                 .call()
                 .content();
     }
 
-    // Đổi danh sách điểm thành chuỗi tên sản phẩm, giữ thứ tự điểm và bỏ sản phẩm đã xóa hoặc ngừng bán
-    private String buildInterests(List<ProductScoreResponse> scores) {
-        if (scores.isEmpty()) {
+    // Xây dựng ngữ cảnh sở thích của khách: Sản phẩm, Danh mục, Màu sắc, Size
+    public String buildUserContext(Long userId) {
+        if (userId == null) {
             return "";
         }
-        List<Long> ids = scores.stream().map(ProductScoreResponse::productId).toList();
+        UserPreferenceProfileResponse profile = userBehaviorService.getPreferenceProfile(userId);
+        StringBuilder sb = new StringBuilder();
 
-        // findAllById không đảm bảo thứ tự, nên đưa vào Map rồi duyệt lại theo thứ tự điểm
-        Map<Long, Product> products = productRepository.findAllById(ids).stream()
-                .collect(Collectors.toMap(Product::getId, Function.identity()));
+        // 1. Sản phẩm quan tâm
+        if (profile.topProducts() != null && !profile.topProducts().isEmpty()) {
+            List<Long> ids = profile.topProducts().stream().map(ProductScoreResponse::productId).toList();
+            Map<Long, Product> products = productRepository.findAllById(ids).stream()
+                    .collect(Collectors.toMap(Product::getId, Function.identity()));
+            String productNames = profile.topProducts().stream()
+                    .map(s -> products.get(s.productId()))
+                    .filter(p -> p != null && Boolean.TRUE.equals(p.getIsActive()))
+                    .map(Product::getName)
+                    .collect(Collectors.joining(", "));
+            if (!productNames.isBlank()) {
+                sb.append("- Sản phẩm quan tâm gần đây: ").append(productNames).append("\n");
+            }
+        }
 
-        return scores.stream()
-                .map(s -> products.get(s.productId()))
-                .filter(p -> p != null)                       // sản phẩm đã bị xóa mềm sẽ không có
-                .filter(p -> Boolean.TRUE.equals(p.getIsActive())) // không gợi ý sản phẩm đã ngừng bán
-                .map(Product::getName)                        // thêm danh mục nếu entity có
-                .collect(Collectors.joining(", "));
+        // 2. Danh mục ưa thích
+        if (profile.topCategories() != null && !profile.topCategories().isEmpty()) {
+            String categoryNames = profile.topCategories().stream()
+                    .map(CategoryScoreResponse::categoryName)
+                    .collect(Collectors.joining(", "));
+            if (!categoryNames.isBlank()) {
+                sb.append("- Danh mục ưa thích: ").append(categoryNames).append("\n");
+            }
+        }
+
+        // 3. Màu sắc thường chọn
+        if (profile.topColors() != null && !profile.topColors().isEmpty()) {
+            sb.append("- Màu sắc thường chọn: ").append(String.join(", ", profile.topColors())).append("\n");
+        }
+
+        // 4. Kích cỡ thường chọn
+        if (profile.topSizes() != null && !profile.topSizes().isEmpty()) {
+            sb.append("- Kích cỡ thường chọn: ").append(String.join(", ", profile.topSizes())).append("\n");
+        }
+
+        if (sb.length() == 0) {
+            return "";
+        }
+        return "Thông tin sở thích khách hàng:\n" + sb.toString().trim();
     }
 }

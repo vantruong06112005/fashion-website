@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-// Nhật ký hành vi người dùng (xem, thêm giỏ, mua...), chỉ ghi thêm, không sửa hoặc xóa mềm
+// Nhật ký hành vi người dùng (xem, chọn biến thể, thêm giỏ, mua...)
 public class UserBehavior {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -38,13 +38,15 @@ public class UserBehavior {
     @Column(nullable = false, length = 30)
     private BehaviorType type;
 
-    // Thời điểm xảy ra hành vi, dùng để chống spam VIEW và tính điểm giảm dần theo ngày
-    @Column(name = "created_at", nullable = false, updatable = false)
+    // Thời điểm xảy ra hành vi, dùng để chống spam và tính điểm giảm dần theo ngày
+    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
-    // Tự gán thời điểm hiện tại ngay trước khi lưu lần đầu
+    // Tự gán thời điểm hiện tại ngay trước khi lưu lần đầu nếu chưa có
     @PrePersist
     void onCreate() {
-        createdAt = LocalDateTime.now(); }
-
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+    }
 }

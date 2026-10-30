@@ -29,6 +29,7 @@ Hệ thống backend cho website bán quần áo, xây dựng theo mô hình **l
 - 🔄 [NGHIEP_VU_DOI_TRA_HANG_THUC_TE.md](NGHIEP_VU_DOI_TRA_HANG_THUC_TE.md) — Phân tích nghiệp vụ đổi trả hàng thời trang
 - ⚠️ [ExceptionDocs.md](ExceptionDocs.md) — Bảng mã lỗi & xử lý ngoại lệ tập trung
 - 🎨 [UI_DESIGN_SYSTEM.md](UI_DESIGN_SYSTEM.md) — Hướng dẫn phong cách thiết kế UI/UX
+- 🧠 [USER_BEHAVIOR_FEATURE_STORE.md](USER_BEHAVIOR_FEATURE_STORE.md) — Kiến trúc Ingestion, Feature Store chống phình DB & Spring AI Advisor
 - 🚀 [FRONTEND_GUIDE_AND_PROMPT.md](FRONTEND_GUIDE_AND_PROMPT.md) — Tổng hợp API (`Auth`, `Users`, `Products`), cấu hình `.env` Frontend & Master Prompt để Antigravity code Frontend
 
 ---
