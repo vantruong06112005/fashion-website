@@ -8,7 +8,8 @@ import lombok.RequiredArgsConstructor;
 public enum BehaviorType {
 
     VIEW(1),
-    SELECT_VARIANT(2),
+    DWELL_15S(2),
+    SELECT_VARIANT(3),
     ADD_TO_CART(5),
     PURCHASE(10),
     REMOVE_FROM_CART(-2)

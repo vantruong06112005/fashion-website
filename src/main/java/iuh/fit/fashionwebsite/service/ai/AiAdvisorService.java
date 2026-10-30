@@ -3,6 +3,7 @@ package iuh.fit.fashionwebsite.service.ai;
 import com.google.genai.errors.ApiException;
 import iuh.fit.fashionwebsite.exception.AppException;
 import iuh.fit.fashionwebsite.exception.ErrorCode;
+import iuh.fit.fashionwebsite.service.product.RecommendationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -10,27 +11,30 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 /**
- * Tư vấn sản phẩm bằng AI (bản cấu hình ban đầu: chỉ chuyển câu hỏi của khách tới Gemini).
- * Việc lọc sản phẩm từ database đưa vào prompt sẽ bổ sung sau.
+ * Tư vấn sản phẩm bằng Spring AI kết hợp hồ sơ sở thích người dùng (Feature Store).
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class AiAdvisorService {
 
-    private static final String USER_PROMPT = """
-            Câu hỏi của khách: {question}
-            """;
-
     private final ChatClient chatClient;
+    private final RecommendationService recommendationService;
 
-    // Hàm gọi đồng bộ truyền thống (chờ lấy hết câu trả lời rồi mới trả về)
+    // Giữ overload cũ để tương thích
     public String advise(String question) {
+        return advise(question, null);
+    }
+
+    // Hàm gọi đồng bộ truyền thống có nạp ngữ cảnh sở thích khách hàng
+    public String advise(String question, Long userId) {
         String answer;
         try {
-            log.info("Đang gửi câu hỏi tới Gemini (Sync): {}", question);
+            log.info("Đang gửi câu hỏi tới Gemini (Sync) - userId: {}, question: {}", userId, question);
+            String fullPrompt = buildFullPrompt(question, userId);
+
             answer = chatClient.prompt()
-                    .user(u -> u.text(USER_PROMPT).param("question", question.trim()))
+                    .user(fullPrompt)
                     .call()
                     .content();
         } catch (RuntimeException e) {
@@ -44,19 +48,24 @@ public class AiAdvisorService {
         return answer.trim();
     }
 
-    // Hàm gọi dạng Streaming (trả về từng chữ ngay lập tức để tối ưu tốc độ)
+    // Giữ overload cũ để tương thích
     public Flux<String> adviseStream(String question) {
-        log.info("Đang gửi câu hỏi tới Gemini (Stream): {}", question);
+        return adviseStream(question, null);
+    }
+
+    // Hàm gọi dạng Streaming có nạp ngữ cảnh sở thích khách hàng
+    public Flux<String> adviseStream(String question, Long userId) {
+        log.info("Đang gửi câu hỏi tới Gemini (Stream) - userId: {}, question: {}", userId, question);
+        String fullPrompt = buildFullPrompt(question, userId);
+
         return chatClient.prompt()
-                .user(u -> u.text(USER_PROMPT).param("question", question.trim()))
+                .user(fullPrompt)
                 .stream()
                 .content()
-                // Nếu Gemini trả về luồng rỗng hoàn toàn
                 .switchIfEmpty(Flux.defer(() -> {
-                    log.warn("Gemini trả về nội dung rỗng (stream)");
+                    log.warn("Gemini trả về luồng rỗng (stream)");
                     return Flux.error(new AppException(ErrorCode.AI_UNAVAILABLE));
                 }))
-                // Bắt lỗi phát sinh trong quá trình stream và chuyển thành AppException
                 .onErrorMap(Throwable.class, e -> {
                     if (e instanceof AppException appEx) {
                         return appEx;
@@ -68,7 +77,15 @@ public class AiAdvisorService {
                 });
     }
 
-    // Ghi log chi tiết ở server, chỉ trả thông báo thân thiện cho client (không lộ stack trace)
+    private String buildFullPrompt(String question, Long userId) {
+        String userContext = recommendationService.buildUserContext(userId);
+        if (userContext.isBlank()) {
+            return "Câu hỏi của khách: " + question.trim();
+        }
+        return userContext + "\n\nCâu hỏi của khách: " + question.trim();
+    }
+
+    // Ghi log chi tiết ở server, chỉ trả thông báo thân thiện cho client
     private AppException translate(RuntimeException e) {
         if (isQuotaExceeded(e)) {
             log.warn("Gemini hết hạn mức hoặc bị giới hạn tốc độ (429): {}", e.getMessage());
@@ -78,7 +95,6 @@ public class AiAdvisorService {
         return new AppException(ErrorCode.AI_UNAVAILABLE);
     }
 
-    // SDK Gemini có thể bị bọc nhiều lớp, nên duyệt cả chuỗi cause
     private boolean isQuotaExceeded(Throwable error) {
         Throwable current = error;
         for (int depth = 0; current != null && depth < 10; depth++) {
