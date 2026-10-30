@@ -45,7 +45,7 @@ class ProductServiceImplTest {
         assertNotNull(product.getDeletedAt());
         assertFalse(product.getIsActive());
         verify(products).save(product);
-        verify(products, never()).delete(any());
+        verify(products, never()).delete(any(Product.class));
     }
 
     @Test

@@ -6,6 +6,9 @@ import lombok.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.time.LocalDateTime;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 
 @Entity
 @Table(name = "categories")
@@ -14,6 +17,8 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@SQLDelete(sql = "UPDATE categories SET deleted_at = CURRENT_TIMESTAMP, is_active = false WHERE id = ?")
+@SQLRestriction("deleted_at IS NULL")
 public class Category extends BaseEntity {
 
     @Id
@@ -28,6 +33,9 @@ public class Category extends BaseEntity {
 
     @Column(name = "is_active", columnDefinition = "boolean default true")
     private Boolean isActive;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "parent_id")

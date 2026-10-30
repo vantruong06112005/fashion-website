@@ -20,28 +20,26 @@ public class CategoryController {
     private final CategoryService categoryService;
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ResponseEntity<ApiResponse<CategoryResponse>> create(@Valid @RequestBody CategoryCreationRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.<CategoryResponse>builder()
                 .code(201).message("Category created successfully").data(categoryService.create(request)).build());
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
     public ApiResponse<List<CategoryResponse>> getAll() {
         return ApiResponse.<List<CategoryResponse>>builder().code(200)
                 .data(categoryService.getAll()).build();
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
     public ApiResponse<CategoryResponse> getById(@PathVariable Long id) {
         return ApiResponse.<CategoryResponse>builder().code(200)
                 .data(categoryService.getById(id)).build();
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ApiResponse<CategoryResponse> update(@PathVariable Long id,
             @Valid @RequestBody CategoryUpdateRequest request) {
         return ApiResponse.<CategoryResponse>builder().code(200)

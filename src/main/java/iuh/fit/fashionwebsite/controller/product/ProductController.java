@@ -2,6 +2,7 @@ package iuh.fit.fashionwebsite.controller.product;
 
 import iuh.fit.fashionwebsite.dto.request.ProductCreationRequest;
 import iuh.fit.fashionwebsite.dto.request.ProductUpdateRequest;
+import iuh.fit.fashionwebsite.dto.request.ProductFilterRequest;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
 import iuh.fit.fashionwebsite.dto.response.ProductResponse;
 import iuh.fit.fashionwebsite.service.product.ProductService;
@@ -20,16 +21,16 @@ public class ProductController {
     private final ProductService productService;
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ResponseEntity<ApiResponse<ProductResponse>> create(@Valid @RequestBody ProductCreationRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.<ProductResponse>builder()
                 .code(201).message("Product created successfully").data(productService.create(request)).build());
     }
 
     @GetMapping
-    public ApiResponse<List<ProductResponse>> getAll(@RequestParam(required = false) Long categoryId) {
+    public ApiResponse<List<ProductResponse>> getAll(@ModelAttribute ProductFilterRequest filter) {
         return ApiResponse.<List<ProductResponse>>builder().code(200)
-                .data(productService.getAll(categoryId)).build();
+                .data(productService.search(filter)).build();
     }
 
     @GetMapping("/{id}")
@@ -38,8 +39,15 @@ public class ProductController {
                 .data(productService.getById(id)).build();
     }
 
+    @GetMapping("/new")
+    public ApiResponse<List<ProductResponse>> getNew(@ModelAttribute ProductFilterRequest filter,
+            @RequestParam(defaultValue = "30") int days) {
+        return ApiResponse.<List<ProductResponse>>builder().code(200)
+                .data(productService.getNew(filter, days)).build();
+    }
+
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ApiResponse<ProductResponse> update(@PathVariable Long id,
             @Valid @RequestBody ProductUpdateRequest request) {
         return ApiResponse.<ProductResponse>builder().code(200)
