@@ -1,12 +1,14 @@
 package iuh.fit.fashionwebsite.service.ai.impl;
 
 import iuh.fit.fashionwebsite.dto.response.ProductScoreResponse;
+import iuh.fit.fashionwebsite.dto.response.ProductResponse;
 import iuh.fit.fashionwebsite.dto.response.ai.ProductAiMetadataResponse;
 import iuh.fit.fashionwebsite.dto.response.ai.RecommendedProductAiResponse;
 import iuh.fit.fashionwebsite.dto.response.ai.UserAiProfileResponse;
 import iuh.fit.fashionwebsite.entity.*;
 import iuh.fit.fashionwebsite.exception.AppException;
 import iuh.fit.fashionwebsite.exception.ErrorCode;
+import iuh.fit.fashionwebsite.mapper.ProductMapper;
 import iuh.fit.fashionwebsite.repository.*;
 import iuh.fit.fashionwebsite.service.ai.UserUnderstandingService;
 import iuh.fit.fashionwebsite.service.user.UserBehaviorService;
@@ -45,6 +47,7 @@ public class UserUnderstandingServiceImpl implements UserUnderstandingService {
     private final UserBehaviorRepository userBehaviorRepository;
     private final ProductRepository productRepository;
     private final ProductVariantRepository productVariantRepository;
+    private final ProductMapper productMapper;
     private final CartRepository cartRepository;
     private final UserAiProfileRepository userAiProfileRepository;
     private final ProductAiMetadataRepository productAiMetadataRepository;
@@ -285,12 +288,12 @@ public class UserUnderstandingServiceImpl implements UserUnderstandingService {
 
     /**
      * - Chức năng: Gợi ý danh sách sản phẩm cá nhân hóa hợp gu nhất cho khách hàng bằng độ tương đồng Cosine.
-     * - Ý tưởng logic cốt lõi: Thực hiện tuần tự 4 bước:
-     *   + Bước 1: Đọc User Vector 768 chiều của khách hàng (tự động tạo nếu chưa có).
-     *   + Bước 2: Lấy danh sách toàn bộ sản phẩm đang mở bán đã có Product Vector (tự động đồng bộ kho nếu chưa có).
-     *   + Bước 3: Duyệt qua từng sản phẩm, tính điểm `VectorUtils.cosineSimilarity(userVector, productVector)`
+     * - Ý tưởng logic cốt lõi: Mỗi lần gọi, tính lại Persona từ hành vi mới nhất rồi tạo lại User Vector 768 chiều.
+     *   Sau đó thực hiện:
+     *   + Bước 1: Lấy danh sách toàn bộ sản phẩm đang mở bán đã có Product Vector (tự động đồng bộ kho nếu chưa có).
+     *   + Bước 2: Duyệt qua từng sản phẩm, tính điểm `VectorUtils.cosineSimilarity(userVector, productVector)`
      *     và quy đổi ra tỷ lệ phần trăm hợp gu (`matchPercentage`).
-     *   + Bước 4: Sắp xếp danh sách giảm dần theo điểm tương đồng và cắt lấy Top `limit` sản phẩm cao điểm nhất.
+     *   + Bước 3: Sắp xếp danh sách giảm dần theo điểm tương đồng và cắt lấy Top `limit` sản phẩm cao điểm nhất.
      *
      * @param userId ID của khách hàng cần gợi ý sản phẩm.
      * @param limit  Số lượng sản phẩm muốn lấy (được chuẩn hóa an toàn trong đoạn [1, 50]).
@@ -301,25 +304,23 @@ public class UserUnderstandingServiceImpl implements UserUnderstandingService {
     public List<RecommendedProductAiResponse> recommendPersonalizedProducts(Long userId, int limit) {
         int safeLimit = Math.max(1, Math.min(limit, 50));
 
-        // Bước 1: Đảm bảo User đã có hồ sơ và Vector Embedding
-        Optional<UserAiProfile> profileOpt = userAiProfileRepository.findByUserId(userId);
-        if (profileOpt.isEmpty() || profileOpt.get().getEmbeddingVector() == null) {
-            updateUserEmbedding(userId);
-            profileOpt = userAiProfileRepository.findByUserId(userId);
-        }
+        // Làm mới Persona theo hành vi hiện tại và tạo lại vector trước khi tính gợi ý.
+        buildOrUpdatePersona(userId);
+        updateUserEmbedding(userId);
 
-        UserAiProfile profile = profileOpt
+        UserAiProfile profile = userAiProfileRepository.findByUserId(userId)
+                .filter(existing -> existing.getEmbeddingVector() != null)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
         float[] userVector = VectorUtils.fromJson(profile.getEmbeddingVector());
 
-        // Bước 2: Lấy danh sách các sản phẩm đang bán đã có Vector
+        // Lấy danh sách các sản phẩm đang bán đã có Vector
         List<ProductAiMetadata> productMetaList = productAiMetadataRepository.findAllActiveWithEmbedding();
         if (productMetaList.isEmpty()) {
             syncAllProductsEmbedding();
             productMetaList = productAiMetadataRepository.findAllActiveWithEmbedding();
         }
 
-        // Bước 3: Tính điểm tương đồng Cosine cho từng sản phẩm
+        // Tính điểm tương đồng Cosine cho từng sản phẩm
         List<RecommendedProductAiResponse> results = new ArrayList<>();
 
         for (ProductAiMetadata meta : productMetaList) {
@@ -333,19 +334,22 @@ public class UserUnderstandingServiceImpl implements UserUnderstandingService {
             double matchPercent = Math.max(0.0, Math.min(100.0, similarity * 100.0));
 
             Product product = meta.getProduct();
+            ProductResponse productResponse = productMapper.toResponse(product);
             results.add(RecommendedProductAiResponse.builder()
                     .productId(product.getId())
                     .name(product.getName())
                     .slug(product.getSlug())
                     .basePrice(product.getBasePrice())
                     .categoryName(product.getCategory() != null ? product.getCategory().getName() : null)
+                    .productImages(productResponse.getProductImages())
+                    .variants(productResponse.getVariants())
                     .detectedStyle(meta.getDetectedStyle())
                     .similarityScore(roundedScore)
                     .matchPercentage(String.format(Locale.US, "%.1f%%", matchPercent))
                     .build());
         }
 
-        // Bước 4: Sắp xếp giảm dần theo điểm tương đồng và lấy Top N sản phẩm
+        // Sắp xếp giảm dần theo điểm tương đồng và lấy Top N sản phẩm
         results.sort((a, b) -> Double.compare(b.getSimilarityScore(), a.getSimilarityScore()));
 
         if (results.size() > safeLimit) {
