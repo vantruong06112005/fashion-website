@@ -20,6 +20,7 @@ public class AiAdvisorService {
 
     private final ChatClient chatClient;
     private final RecommendationService recommendationService;
+    private final UserUnderstandingService userUnderstandingService;
 
     // Giữ overload cũ để tương thích
     public String advise(String question) {
@@ -31,10 +32,12 @@ public class AiAdvisorService {
         String answer;
         try {
             log.info("Đang gửi câu hỏi tới Gemini (Sync) - userId: {}, question: {}", userId, question);
-            String fullPrompt = buildFullPrompt(question, userId);
+            String systemPrompt = buildSystemPrompt(userId);
 
+            // Tách chỉ dẫn và hồ sơ khách hàng khỏi câu hỏi để Gemini dùng đúng vai trò ngữ cảnh.
             answer = chatClient.prompt()
-                    .user(fullPrompt)
+                    .system(systemPrompt)
+                    .user(question.trim())
                     .call()
                     .content();
         } catch (RuntimeException e) {
@@ -48,41 +51,32 @@ public class AiAdvisorService {
         return answer.trim();
     }
 
-    // Giữ overload cũ để tương thích
-    public Flux<String> adviseStream(String question) {
-        return adviseStream(question, null);
-    }
+    // Xây dựng prompt gửi cho AI dựa vào Persona người dùng
+    private String buildSystemPrompt(Long userId) {
+        StringBuilder systemPrompt = new StringBuilder("""
+                Bạn là Stylist thời trang cá nhân của Fashion Website.
+                Tư vấn súc tích, tinh tế bằng tiếng Việt; ưu tiên phong cách, kích cỡ và tầm giá phù hợp với khách hàng.
+                """);
 
-    // Hàm gọi dạng Streaming có nạp ngữ cảnh sở thích khách hàng
-    public Flux<String> adviseStream(String question, Long userId) {
-        log.info("Đang gửi câu hỏi tới Gemini (Stream) - userId: {}, question: {}", userId, question);
-        String fullPrompt = buildFullPrompt(question, userId);
-
-        return chatClient.prompt()
-                .user(fullPrompt)
-                .stream()
-                .content()
-                .switchIfEmpty(Flux.defer(() -> {
-                    log.warn("Gemini trả về luồng rỗng (stream)");
-                    return Flux.error(new AppException(ErrorCode.AI_UNAVAILABLE));
-                }))
-                .onErrorMap(Throwable.class, e -> {
-                    if (e instanceof AppException appEx) {
-                        return appEx;
-                    }
-                    if (e instanceof RuntimeException runtimeEx) {
-                        return translate(runtimeEx);
-                    }
-                    return translate(new RuntimeException(e));
-                });
-    }
-
-    private String buildFullPrompt(String question, Long userId) {
-        String userContext = recommendationService.buildUserContext(userId);
-        if (userContext.isBlank()) {
-            return "Câu hỏi của khách: " + question.trim();
+        // Khách chưa đăng nhập không có userId; dùng hướng dẫn chung và bỏ qua dữ liệu cá nhân.
+        if (userId == null) {
+            return systemPrompt.toString().trim();
         }
-        return userContext + "\n\nCâu hỏi của khách: " + question.trim();
+
+        // Tự tạo Persona mặc định nếu người dùng chưa có lịch sử hoặc hồ sơ.
+        String personaContext = userUnderstandingService.getPersonaContext(userId);
+        if (personaContext != null && !personaContext.isBlank()) {
+            systemPrompt.append("\n\nHồ sơ sở thích của khách hàng:\n")
+                    .append(personaContext.trim());
+        }
+
+        // Giữ thêm dữ liệu hành vi cũ (nếu có) như ngữ cảnh bổ sung cho Persona.
+        String userContext = recommendationService.buildUserContext(userId);
+        if (userContext != null && !userContext.isBlank()) {
+            systemPrompt.append("\n\nThông tin hành vi bổ sung:\n")
+                    .append(userContext.trim());
+        }
+        return systemPrompt.toString().trim();
     }
 
     // Ghi log chi tiết ở server, chỉ trả thông báo thân thiện cho client

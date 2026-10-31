@@ -11,6 +11,7 @@ import iuh.fit.fashionwebsite.exception.ErrorCode;
 import iuh.fit.fashionwebsite.mapper.ProductMapper;
 import iuh.fit.fashionwebsite.repository.CategoryRepository;
 import iuh.fit.fashionwebsite.repository.ProductRepository;
+import iuh.fit.fashionwebsite.service.ai.UserUnderstandingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -28,6 +29,7 @@ public class ProductServiceImpl implements ProductService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final ProductMapper mapper;
+    private final UserUnderstandingService userUnderstandingService;
 
     @Override
     public ProductResponse create(ProductCreationRequest request) {
@@ -38,7 +40,10 @@ public class ProductServiceImpl implements ProductService {
         product.setIsActive(request.getIsActive() == null || request.getIsActive());
         product.setAverageRating(java.math.BigDecimal.ZERO);
         product.setReviewCount(0);
-        return mapper.toResponse(productRepository.save(product));
+        Product savedProduct = productRepository.save(product);
+        // build vector cho sản phẩm vừa thêm vào
+        userUnderstandingService.syncProductEmbedding(savedProduct.getId());
+        return mapper.toResponse(savedProduct);
     }
 
     @Override
@@ -118,7 +123,10 @@ public class ProductServiceImpl implements ProductService {
             product.setCategory(getActiveCategory(request.getCategoryId()));
         }
         mapper.update(product, request);
-        return mapper.toResponse(productRepository.save(product));
+        Product savedProduct = productRepository.save(product);
+        // build lại vector cho sản phẩm vừa cập nhật
+        userUnderstandingService.syncProductEmbedding(savedProduct.getId());
+        return mapper.toResponse(savedProduct);
     }
 
     @Override
