@@ -34,4 +34,14 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
 
     @EntityGraph(attributePaths = {"images", "category"})
     List<Product> findAllByCategoryIdAndIsActiveTrueAndCategoryIsActiveTrue(Long categoryId);
+
+    @EntityGraph(attributePaths = {"category", "variants"})
+    @Query("""
+            SELECT product
+            FROM Product product
+            WHERE product.isActive = true
+              AND product.deletedAt IS NULL
+              AND (product.category IS NULL OR product.category.isActive = true)
+            """)
+    List<Product> findAllActiveForAiCatalog();
 }

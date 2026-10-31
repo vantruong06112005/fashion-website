@@ -306,7 +306,7 @@ public class UserUnderstandingServiceImpl implements UserUnderstandingService {
 
         // Làm mới Persona theo hành vi hiện tại và tạo lại vector trước khi tính gợi ý.
         buildOrUpdatePersona(userId);
-        updateUserEmbedding(userId);
+        // updateUserEmbedding(userId);
 
         UserAiProfile profile = userAiProfileRepository.findByUserId(userId)
                 .filter(existing -> existing.getEmbeddingVector() != null)

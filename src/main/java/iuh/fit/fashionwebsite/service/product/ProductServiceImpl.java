@@ -11,6 +11,7 @@ import iuh.fit.fashionwebsite.exception.ErrorCode;
 import iuh.fit.fashionwebsite.mapper.ProductMapper;
 import iuh.fit.fashionwebsite.repository.CategoryRepository;
 import iuh.fit.fashionwebsite.repository.ProductRepository;
+import iuh.fit.fashionwebsite.service.ai.ProductCatalogCache;
 import iuh.fit.fashionwebsite.service.ai.UserUnderstandingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -30,6 +31,7 @@ public class ProductServiceImpl implements ProductService {
     private final CategoryRepository categoryRepository;
     private final ProductMapper mapper;
     private final UserUnderstandingService userUnderstandingService;
+    private final ProductCatalogCache productCatalogCache;
 
     @Override
     public ProductResponse create(ProductCreationRequest request) {
@@ -43,6 +45,7 @@ public class ProductServiceImpl implements ProductService {
         Product savedProduct = productRepository.save(product);
         // build vector cho sản phẩm vừa thêm vào
         userUnderstandingService.syncProductEmbedding(savedProduct.getId());
+        productCatalogCache.refreshAfterCommit();
         return mapper.toResponse(savedProduct);
     }
 
@@ -126,6 +129,7 @@ public class ProductServiceImpl implements ProductService {
         Product savedProduct = productRepository.save(product);
         // build lại vector cho sản phẩm vừa cập nhật
         userUnderstandingService.syncProductEmbedding(savedProduct.getId());
+        productCatalogCache.refreshAfterCommit();
         return mapper.toResponse(savedProduct);
     }
 
@@ -135,6 +139,7 @@ public class ProductServiceImpl implements ProductService {
         product.setDeletedAt(LocalDateTime.now());
         product.setIsActive(false);
         productRepository.save(product);
+        productCatalogCache.refreshAfterCommit();
     }
 
     private Product getProduct(Long id) {

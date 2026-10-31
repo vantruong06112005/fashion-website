@@ -9,6 +9,7 @@ import iuh.fit.fashionwebsite.exception.ErrorCode;
 import iuh.fit.fashionwebsite.mapper.ProductMapper;
 import iuh.fit.fashionwebsite.repository.CategoryRepository;
 import iuh.fit.fashionwebsite.repository.ProductRepository;
+import iuh.fit.fashionwebsite.service.ai.ProductCatalogCache;
 import iuh.fit.fashionwebsite.service.ai.UserUnderstandingService;
 import org.junit.jupiter.api.Test;
 import java.util.Optional;
@@ -21,8 +22,9 @@ class ProductServiceImplTest {
     private final CategoryRepository categories = mock(CategoryRepository.class);
     private final ProductMapper mapper = mock(ProductMapper.class);
     private final UserUnderstandingService userUnderstandingService = mock(UserUnderstandingService.class);
+    private final ProductCatalogCache productCatalogCache = mock(ProductCatalogCache.class);
     private final ProductServiceImpl service =
-            new ProductServiceImpl(products, categories, mapper, userUnderstandingService);
+            new ProductServiceImpl(products, categories, mapper, userUnderstandingService, productCatalogCache);
 
     @Test
     void createSyncsEmbeddingForSavedProduct() {
