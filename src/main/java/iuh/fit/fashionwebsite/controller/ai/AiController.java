@@ -20,19 +20,12 @@ public class AiController {
 
     private final AiAdvisorService aiAdvisorService;
 
-    // 1. Endpoint trả về toàn bộ JSON một lần (URL: POST /api/v1/ai/advise)
+    // Endpoint trả về toàn bộ JSON một lần (URL: POST /api/v1/ai/advise)
     @PostMapping("/advise")
     public AiAdviseResponse advise(@Valid @RequestBody AiAdviseRequest request) {
         Long userId = AppUtil.getIdCurrentUser();
         return AiAdviseResponse.builder()
                 .answer(aiAdvisorService.advise(request.getQuestion(), userId))
                 .build();
-    }
-
-    // 2. Endpoint trả về từng chữ tốc độ cao (URL: POST /api/v1/ai/advise-stream)
-    @PostMapping(value = "/advise-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> adviseStream(@Valid @RequestBody AiAdviseRequest request) {
-        Long userId = AppUtil.getIdCurrentUser();
-        return aiAdvisorService.adviseStream(request.getQuestion(), userId);
     }
 }

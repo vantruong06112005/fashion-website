@@ -51,35 +51,7 @@ public class AiAdvisorService {
         return answer.trim();
     }
 
-    // Giữ overload cũ để tương thích
-    public Flux<String> adviseStream(String question) {
-        return adviseStream(question, null);
-    }
-
-    // Hàm gọi dạng Streaming có nạp ngữ cảnh sở thích khách hàng
-    public Flux<String> adviseStream(String question, Long userId) {
-        log.info("Đang gửi câu hỏi tới Gemini (Stream) - userId: {}, question: {}", userId, question);
-        // Chỉ tạo prompt khi luồng được subscribe, đúng thời điểm thực sự bắt đầu gọi Gemini.
-        return Flux.defer(() -> chatClient.prompt()
-                .system(buildSystemPrompt(userId))
-                .user(question.trim())
-                .stream()
-                .content())
-                .switchIfEmpty(Flux.defer(() -> {
-                    log.warn("Gemini trả về luồng rỗng (stream)");
-                    return Flux.error(new AppException(ErrorCode.AI_UNAVAILABLE));
-                }))
-                .onErrorMap(Throwable.class, e -> {
-                    if (e instanceof AppException appEx) {
-                        return appEx;
-                    }
-                    if (e instanceof RuntimeException runtimeEx) {
-                        return translate(runtimeEx);
-                    }
-                    return translate(new RuntimeException(e));
-                });
-    }
-
+    // Xây dựng prompt gửi cho AI dựa vào Persona người dùng
     private String buildSystemPrompt(Long userId) {
         StringBuilder systemPrompt = new StringBuilder("""
                 Bạn là Stylist thời trang cá nhân của Fashion Website.
