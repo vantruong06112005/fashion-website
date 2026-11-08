@@ -23,6 +23,12 @@ public class PaymentTransaction extends BaseEntity {
     @Column(name = "transaction_code", length = 100, unique = true, nullable = false)
     private String transactionCode;
 
+    @Column(name = "request_id", length = 100, unique = true)
+    private String requestId;
+
+    @Column(name = "pay_url", columnDefinition = "TEXT")
+    private String payUrl;
+
     @Column(name = "amount", nullable = false)
     private BigDecimal amount;
 

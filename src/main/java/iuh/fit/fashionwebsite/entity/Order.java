@@ -3,6 +3,7 @@ package iuh.fit.fashionwebsite.entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import iuh.fit.fashionwebsite.enums.OrderStatus;
 import iuh.fit.fashionwebsite.enums.PaymentStatus;
+import iuh.fit.fashionwebsite.enums.ShippingProvider;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -41,6 +42,13 @@ public class Order extends BaseEntity {
 
     @Column(name = "shipping_address", length = 500, nullable = false)
     private String shippingAddress;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "shipping_provider", length = 50)
+    private ShippingProvider shippingProvider;
+
+    @Column(name = "tracking_code", length = 100)
+    private String trackingCode;
 
     @Column(name = "subtotal", nullable = false)
     private BigDecimal subtotal;

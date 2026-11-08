@@ -36,6 +36,18 @@ public class ProductVariant extends BaseEntity {
     @Column(name = "stock_quantity", columnDefinition = "int default 0")
     private Integer stockQuantity;
 
+    @Column(name = "weight")
+    private Integer weight;
+
+    @Column(name = "length")
+    private Integer length;
+
+    @Column(name = "width")
+    private Integer width;
+
+    @Column(name = "height")
+    private Integer height;
+
     @Column(name = "is_active", columnDefinition = "boolean default true")
     private Boolean isActive;
 
