@@ -152,6 +152,8 @@ public class InitData implements CommandLineRunner {
         userAddressRepository.save(UserAddress.builder()
                 .user(truong01)
                 .fullAddress("12 Nguyễn Văn Bảo, Phường 4, Quận Gò Vấp, TP. Hồ Chí Minh")
+                .provinceName("Hồ Chí Minh")
+                .wardName("Phường Bến Thành")
                 .addressType(AddressType.HOME)
                 .isDefault(true)
                 .build());
@@ -159,6 +161,8 @@ public class InitData implements CommandLineRunner {
         userAddressRepository.save(UserAddress.builder()
                 .user(truong01)
                 .fullAddress("Tòa nhà Bitexco, 2 Hải Triều, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh")
+                .provinceName("Hồ Chí Minh")
+                .wardName("Phường Bến Thành")
                 .addressType(AddressType.OFFICE)
                 .isDefault(false)
                 .build());
@@ -166,6 +170,8 @@ public class InitData implements CommandLineRunner {
         userAddressRepository.save(UserAddress.builder()
                 .user(an01)
                 .fullAddress("45 Lê Lợi, Phường Bến Thành, Quận 1, TP. Hồ Chí Minh")
+                .provinceName("Hồ Chí Minh")
+                .wardName("Phường Bến Thành")
                 .addressType(AddressType.HOME)
                 .isDefault(true)
                 .build());
@@ -173,6 +179,8 @@ public class InitData implements CommandLineRunner {
         userAddressRepository.save(UserAddress.builder()
                 .user(binh01)
                 .fullAddress("123 Quang Trung, Phường 10, Quận Gò Vấp, TP. Hồ Chí Minh")
+                .provinceName("Hồ Chí Minh")
+                .wardName("Phường An Phú")
                 .addressType(AddressType.HOME)
                 .isDefault(true)
                 .build());
@@ -180,6 +188,8 @@ public class InitData implements CommandLineRunner {
         userAddressRepository.save(UserAddress.builder()
                 .user(staff01)
                 .fullAddress("Văn phòng Fashion Shop, 80 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh")
+                .provinceName("Hồ Chí Minh")
+                .wardName("Phường Bến Thành")
                 .addressType(AddressType.OFFICE)
                 .isDefault(true)
                 .build());

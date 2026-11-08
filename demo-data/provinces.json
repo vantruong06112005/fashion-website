@@ -1,0 +1,526 @@
+{
+  "code": 200,
+  "message": "Success",
+  "data": [
+    {
+      "_id": 1000033,
+      "name": "Lạng Sơn",
+      "extension_names": [
+        "lạng sơn",
+        "tỉnh lạng sơn",
+        "t.lạng sơn",
+        "t lạng sơn",
+        "langson"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000032,
+      "name": "Cao Bằng",
+      "extension_names": [
+        "cao bằng",
+        "tỉnh cao bằng",
+        "t.cao bằng",
+        "t cao bằng",
+        "caobang"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000031,
+      "name": "Nghệ An",
+      "extension_names": [
+        "nghệ an",
+        "tỉnh nghệ an",
+        "t.nghệ an",
+        "t nghệ an",
+        "nghean"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000030,
+      "name": "Thanh Hóa",
+      "extension_names": [
+        "thanh hóa",
+        "tỉnh thanh hóa",
+        "t.thanh hóa",
+        "t thanh hóa",
+        "thanhhoa"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000029,
+      "name": "Hà Tĩnh",
+      "extension_names": [
+        "hà tĩnh",
+        "tỉnh hà tĩnh",
+        "t.hà tĩnh",
+        "t hà tĩnh",
+        "hatinh"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000028,
+      "name": "Quảng Ninh",
+      "extension_names": [
+        "quảng ninh",
+        "tỉnh quảng ninh",
+        "t.quảng ninh",
+        "t quảng ninh",
+        "quangninh"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000027,
+      "name": "Sơn La",
+      "extension_names": [
+        "sơn la",
+        "tỉnh sơn la",
+        "t.sơn la",
+        "t sơn la",
+        "sonla"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000026,
+      "name": "Điện Biên",
+      "extension_names": [
+        "điện biên",
+        "tỉnh điện biên",
+        "t.điện biên",
+        "t điện biên",
+        "dienbien"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000025,
+      "name": "Lai Châu",
+      "extension_names": [
+        "lai châu",
+        "tỉnh lai châu",
+        "t.lai châu",
+        "t lai châu",
+        "laichau"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000024,
+      "name": "Lào Cai",
+      "extension_names": [
+        "lào cai",
+        "tỉnh lào cai",
+        "t.lào cai",
+        "t lào cai",
+        "lao cai",
+        "tinh lao cai"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000023,
+      "name": "Hưng Yên",
+      "extension_names": [
+        "hưng yên",
+        "tỉnh hưng yên",
+        "t.hưng yên",
+        "t hưng yên",
+        "hung yen",
+        "tinh hung yen"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000022,
+      "name": "Cà Mau",
+      "extension_names": [
+        "cà mau",
+        "tỉnh cà mau",
+        "t.cà mau",
+        "t cà mau",
+        "ca mau",
+        "ca mau",
+        "cà mau",
+        "cà mau",
+        "tinh ca mau"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000021,
+      "name": "Bắc Ninh",
+      "extension_names": [
+        "bắc ninh",
+        "tỉnh bắc ninh",
+        "t.bắc ninh",
+        "t bắc ninh",
+        "bac ninh",
+        "tinh bac ninh"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000020,
+      "name": "Thái Nguyên",
+      "extension_names": [
+        "thái nguyên",
+        "tỉnh thái nguyên",
+        "t.thái nguyên",
+        "t thái nguyên",
+        "thai nguyen",
+        "tinh thai nguyen"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000019,
+      "name": "Quảng Ngãi",
+      "extension_names": [
+        "quảng ngãi",
+        "tỉnh quảng ngãi",
+        "t.quảng ngãi",
+        "t quảng ngãi",
+        "quang ngai",
+        "tinh quang ngai"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000018,
+      "name": "Tây Ninh",
+      "extension_names": [
+        "tây ninh",
+        "tỉnh tây ninh",
+        "t.tây ninh",
+        "t tây ninh",
+        "tay ninh",
+        "tinh tay ninh"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000017,
+      "name": "Quảng Trị",
+      "extension_names": [
+        "quảng trị",
+        "tỉnh quảng trị",
+        "t.quảng trị",
+        "t quảng trị",
+        "quang tri",
+        "tinh quang tri"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000016,
+      "name": "Ninh Bình",
+      "extension_names": [
+        "ninh bình",
+        "tỉnh ninh bình",
+        "t.ninh bình",
+        "t ninh bình",
+        "ninh binh",
+        "tinh ninh binh"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000015,
+      "name": "Phú Thọ",
+      "extension_names": [
+        "phú thọ",
+        "tỉnh phú thọ",
+        "t.phú thọ",
+        "t phú thọ",
+        "phu tho",
+        "tinh phu tho"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000014,
+      "name": "Tuyên Quang",
+      "extension_names": [
+        "tuyên quang",
+        "tỉnh tuyên quang",
+        "t.tuyên quang",
+        "t tuyên quang",
+        "tuyen quang",
+        "tinh tuyen quang"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000013,
+      "name": "An Giang",
+      "extension_names": [
+        "an giang",
+        "tỉnh an giang",
+        "t.an giang",
+        "t an giang",
+        "tinh an giang"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000012,
+      "name": "Đồng Tháp",
+      "extension_names": [
+        "đồng tháp",
+        "tỉnh đồng tháp",
+        "t.đồng tháp",
+        "t đồng tháp",
+        "dong thap",
+        "tinh dong thap"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000011,
+      "name": "Vĩnh Long",
+      "extension_names": [
+        "vĩnh long",
+        "tỉnh vĩnh long",
+        "t.vĩnh long",
+        "t vĩnh long",
+        "vinh long",
+        "tinh vinh long"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000010,
+      "name": "Đắk Lắk",
+      "extension_names": [
+        "đắk lắk",
+        "tỉnh đắk lắk",
+        "t.đắk lắk",
+        "t đắk lắk",
+        "dak lak",
+        "tinh dak lak",
+        "daklak",
+        "daklak",
+        "tinh daklak",
+        "tinh daklak"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000009,
+      "name": "Lâm Đồng",
+      "extension_names": [
+        "lâm đồng",
+        "tỉnh lâm đồng",
+        "t.lâm đồng",
+        "t lâm đồng",
+        "lam dong",
+        "tinh lam dong"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000008,
+      "name": "Khánh Hòa",
+      "extension_names": [
+        "khánh hòa",
+        "tỉnh khánh hòa",
+        "t.khánh hòa",
+        "t khánh hòa",
+        "khanh hoa",
+        "tinh khanh hoa"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000007,
+      "name": "Gia Lai",
+      "extension_names": [
+        "gia lai",
+        "tỉnh gia lai",
+        "t.gia lai",
+        "t gia lai",
+        "tinh gia lai"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000006,
+      "name": "Đồng Nai",
+      "extension_names": [
+        "đồng nai",
+        "tỉnh đồng nai",
+        "t.đồng nai",
+        "t đồng nai",
+        "dong nai",
+        "tinh dong nai"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000005,
+      "name": "Cần Thơ",
+      "extension_names": [
+        "cần thơ",
+        "tp.cần thơ",
+        "tp. cần thơ",
+        "tp cần thơ",
+        "thành phố cần thơ",
+        "can tho",
+        "thanh pho can tho"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000004,
+      "name": "Hải Phòng",
+      "extension_names": [
+        "hải phòng",
+        "tp.hải phòng",
+        "tp. hải phòng",
+        "tp hải phòng",
+        "thành phố hải phòng",
+        "hai phong",
+        "thanh pho hai phong"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000003,
+      "name": "Đà Nẵng",
+      "extension_names": [
+        "đà nẵng",
+        "tp.đà nẵng",
+        "tp. đà nẵng",
+        "tp đà nẵng",
+        "thành phố đà nẵng",
+        "da nang",
+        "thanh pho da nang"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000002,
+      "name": "Huế",
+      "extension_names": [
+        "thừa thiên huế",
+        "thừa thiên - huế",
+        "tỉnh thừa thiên - huế",
+        "t.thừa thiên - huế",
+        "t thừa thiên - huế",
+        "hue",
+        "thuathienhue",
+        "tỉnh thừa thiên huế",
+        "thanh pho hue",
+        "thành phố huế",
+        "tp huế"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000001,
+      "name": "Hồ Chí Minh",
+      "extension_names": [
+        "hồ chí minh",
+        "tp.hồ chí minh",
+        "tp. hồ chí minh",
+        "tp hồ chí minh",
+        "thành phố hồ chí minh",
+        "hcm",
+        "hcm",
+        "hcm",
+        "ho chi minh",
+        "thanh pho ho chi minh"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    },
+    {
+      "_id": 1000000,
+      "name": "Hà Nội",
+      "extension_names": [
+        "hà nội",
+        "tp.hà nội",
+        "tp. hà nội",
+        "tp hà nội",
+        "thành phố hà nội",
+        "hanoi",
+        "hn",
+        "ha noi"
+      ],
+      "type": "province",
+      "parent_id": 1,
+      "status": 1
+    }
+  ]
+}
