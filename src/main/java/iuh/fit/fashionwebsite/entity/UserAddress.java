@@ -20,6 +20,12 @@ public class UserAddress extends BaseEntity {
     @Column(name = "full_address", columnDefinition = "TEXT", nullable = false)
     private String fullAddress;
 
+    @Column(name = "province_name", length = 100)
+    private String provinceName;
+
+    @Column(name = "ward_name", length = 100)
+    private String wardName;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "address_type")
     private AddressType addressType;
