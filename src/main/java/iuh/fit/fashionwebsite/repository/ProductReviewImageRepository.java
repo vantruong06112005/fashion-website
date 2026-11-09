@@ -5,9 +5,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ProductReviewImageRepository extends JpaRepository<ProductReviewImage, Long> {
+    Optional<ProductReviewImage> findFirstByProductReviewIdAndDisplayOrder(Long productReviewId, Integer displayOrder);
     // Lấy tất cả ảnh thuộc một đánh giá (theo ID của đánh giá)
     List<ProductReviewImage> findByProductReviewId(Long reviewId);
 
