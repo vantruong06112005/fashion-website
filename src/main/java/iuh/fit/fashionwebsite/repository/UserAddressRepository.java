@@ -18,6 +18,8 @@ public interface UserAddressRepository extends JpaRepository<UserAddress, Long> 
 
     Optional<UserAddress> findByUserIdAndIsDefaultTrue(Long userId);
 
+    Optional<UserAddress> findFirstByUserIdAndFullAddress(Long userId, String fullAddress);
+
     boolean existsByUserId(Long userId);
 
     @Modifying

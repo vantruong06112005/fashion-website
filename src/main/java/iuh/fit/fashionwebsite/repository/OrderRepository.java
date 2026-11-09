@@ -13,6 +13,8 @@ import java.util.Optional;
 @Repository
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
+    Optional<Order> findByOrderCode(String orderCode);
+
     // Khóa đơn đến khi tạo phiếu xong, tránh hai yêu cầu cùng dùng số lượng còn lại.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select o from Order o where o.id = :orderId and o.user.id = :userId")

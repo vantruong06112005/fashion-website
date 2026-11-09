@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpecificationExecutor<Product> {
+    Optional<Product> findBySlug(String slug);
     @Query(value = "SELECT COUNT(*) FROM products WHERE slug = ?1", nativeQuery = true)
     long countAllBySlugIncludingDeleted(String slug);
 

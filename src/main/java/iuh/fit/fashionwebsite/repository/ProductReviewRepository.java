@@ -9,9 +9,11 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ProductReviewRepository extends JpaRepository<ProductReview, Long> {
+    Optional<ProductReview> findFirstByOrderItemIdAndProductId(Long orderItemId, Long productId);
     // Lấy đánh giá của một sản phẩm, có phân trang
     Page<ProductReview> findByProductId(Long productId, Pageable pageable);
 

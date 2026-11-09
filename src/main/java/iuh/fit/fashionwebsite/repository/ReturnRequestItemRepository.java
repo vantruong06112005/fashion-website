@@ -9,9 +9,12 @@ import org.springframework.stereotype.Repository;
 import jakarta.persistence.LockModeType;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ReturnRequestItemRepository extends JpaRepository<ReturnRequestItem, Long> {
+
+    Optional<ReturnRequestItem> findFirstByReturnRequestIdAndOrderItemId(Long returnRequestId, Long orderItemId);
 
     // Lấy các dòng yêu cầu trả liên quan đến một dòng hàng đã mua.
     List<ReturnRequestItem> findByOrderItemId(Long orderItemId);

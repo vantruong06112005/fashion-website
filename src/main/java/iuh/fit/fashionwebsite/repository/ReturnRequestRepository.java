@@ -28,4 +28,6 @@ public interface ReturnRequestRepository extends JpaRepository<ReturnRequest, Lo
 
     // Kiểm tra mã phiếu trả hàng đã tồn tại hay chưa.
     boolean existsByReturnCode(String returnCode);
+
+    Optional<ReturnRequest> findByReturnCode(String returnCode);
 }
