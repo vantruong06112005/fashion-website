@@ -1,4 +1,4 @@
-package iuh.fit.fashionwebsite.dto.request;
+package iuh.fit.fashionwebsite.dto.request.checkout;
 
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;

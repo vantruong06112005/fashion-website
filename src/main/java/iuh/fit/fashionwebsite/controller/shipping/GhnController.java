@@ -1,14 +1,14 @@
 package iuh.fit.fashionwebsite.controller.shipping;
 
+import iuh.fit.fashionwebsite.dto.request.checkout.OrderCreationRequest;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
+import iuh.fit.fashionwebsite.dto.response.shipping.GhnOrderPreviewResponse;
 import iuh.fit.fashionwebsite.dto.response.shipping.GhnProvinceDto;
 import iuh.fit.fashionwebsite.dto.response.shipping.GhnWardDto;
 import iuh.fit.fashionwebsite.service.shipping.GhnService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -36,6 +36,17 @@ public class GhnController {
                 .code(200)
                 .message("Fetched wards successfully")
                 .data(ghnService.getWardsByProvinceId(provinceId))
+                .build();
+    }
+
+    @PostMapping("/order-preview")
+    public ApiResponse<GhnOrderPreviewResponse> getGhnOrderPreview(
+            @Valid @RequestBody OrderCreationRequest request
+    ) {
+        return ApiResponse.<GhnOrderPreviewResponse>builder()
+                .code(200)
+                .message("Fetched GHN order preview successfully")
+                .data(ghnService.getGhnOrderPreview(request))
                 .build();
     }
 }

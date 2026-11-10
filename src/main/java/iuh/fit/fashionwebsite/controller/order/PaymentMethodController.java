@@ -1,7 +1,7 @@
 package iuh.fit.fashionwebsite.controller.order;
 
-import iuh.fit.fashionwebsite.dto.request.PaymentMethodCreationRequest;
-import iuh.fit.fashionwebsite.dto.request.PaymentMethodUpdateRequest;
+import iuh.fit.fashionwebsite.dto.request.checkout.PaymentMethodCreationRequest;
+import iuh.fit.fashionwebsite.dto.request.checkout.PaymentMethodUpdateRequest;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
 import iuh.fit.fashionwebsite.dto.response.PaymentMethodResponse;
 import iuh.fit.fashionwebsite.service.order.PaymentMethodService;
