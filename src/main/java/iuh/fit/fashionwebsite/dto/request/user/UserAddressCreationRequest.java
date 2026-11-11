@@ -17,6 +17,14 @@ public class UserAddressCreationRequest {
     @Size(max = 500, message = "Full address must be less than 500 characters")
     private String fullAddress;
 
+    @NotBlank(message = "Province name is required")
+    @Size(max = 100, message = "Province name must be less than 100 characters")
+    private String provinceName;
+
+    @NotBlank(message = "Ward name is required")
+    @Size(max = 100, message = "Ward name must be less than 100 characters")
+    private String wardName;
+
     @NotNull(message = "Address type is required (HOME, OFFICE, OTHER)")
     private AddressType addressType;
 
