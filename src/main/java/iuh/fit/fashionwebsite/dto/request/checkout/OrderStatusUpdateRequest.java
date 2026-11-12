@@ -1,4 +1,4 @@
-package iuh.fit.fashionwebsite.dto.request;
+package iuh.fit.fashionwebsite.dto.request.checkout;
 
 import iuh.fit.fashionwebsite.enums.OrderStatus;
 import iuh.fit.fashionwebsite.enums.PaymentStatus;

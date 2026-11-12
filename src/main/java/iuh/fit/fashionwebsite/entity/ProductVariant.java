@@ -36,17 +36,17 @@ public class ProductVariant extends BaseEntity {
     @Column(name = "stock_quantity", columnDefinition = "int default 0")
     private Integer stockQuantity;
 
-    @Column(name = "weight")
-    private Integer weight;
+    @Column(name = "package_weight")
+    private Integer packageWeight;
 
-    @Column(name = "length")
-    private Integer length;
+    @Column(name = "package_length")
+    private Integer packageLength;
 
-    @Column(name = "width")
-    private Integer width;
+    @Column(name = "package_width")
+    private Integer packageWidth;
 
-    @Column(name = "height")
-    private Integer height;
+    @Column(name = "package_height")
+    private Integer packageHeight;
 
     @Column(name = "is_active", columnDefinition = "boolean default true")
     private Boolean isActive;

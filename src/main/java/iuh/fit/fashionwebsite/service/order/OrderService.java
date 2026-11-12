@@ -1,14 +1,14 @@
 package iuh.fit.fashionwebsite.service.order;
 
-import iuh.fit.fashionwebsite.dto.request.OrderCreationRequest;
+import iuh.fit.fashionwebsite.dto.request.checkout.OrderCreationRequest;
 import iuh.fit.fashionwebsite.dto.response.OrderResponse;
-import iuh.fit.fashionwebsite.entity.Order;
-import iuh.fit.fashionwebsite.entity.User;
-import iuh.fit.fashionwebsite.entity.UserAddress;
+import iuh.fit.fashionwebsite.entity.*;
 import iuh.fit.fashionwebsite.exception.order.OrderNotFoundException;
+import iuh.fit.fashionwebsite.exception.order.PaymentMethodNotFoundException;
 import iuh.fit.fashionwebsite.exception.user.UserAddressNotFoundException;
 import iuh.fit.fashionwebsite.mapper.OrderMapper;
 import iuh.fit.fashionwebsite.repository.OrderRepository;
+import iuh.fit.fashionwebsite.repository.PaymentMethodRepository;
 import iuh.fit.fashionwebsite.repository.UserAddressRepository;
 import iuh.fit.fashionwebsite.service.user.UserService;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +25,7 @@ public class OrderService {
     private final UserAddressRepository userAddressRepository;
     private final OrderMapper orderMapper;
     private final UserService userService;
+    private final PaymentMethodRepository paymentMethodRepository;
 
     // Get all orders
     @Transactional(readOnly = true)
@@ -49,19 +50,18 @@ public class OrderService {
     }
 
     // Create a new order with COD payment method
-    public OrderResponse createOrderWithCOD(OrderCreationRequest request) {
+    public OrderResponse createOrder(OrderCreationRequest request) {
         // Get user information from the security context
         User user = userService.getCurrentUserEntity();
         // Check addressId -> get address from user addresses
         Long addressId = request.getUserAddressId();
-        UserAddress userAddress = userAddressRepository.findByIdAndUserId(addressId, user.getId())
-                .orElseThrow((UserAddressNotFoundException::new));
+        UserAddress userAddress = userAddressRepository.findByIdAndUserId(addressId, user.getId()).orElseThrow((UserAddressNotFoundException::new));
         // Get payment method by code "COD"
-
+        PaymentMethod paymentMethod = paymentMethodRepository.findById(request.getPaymentMethodId()).orElseThrow(PaymentMethodNotFoundException::new);
         // Get cart items from the user's cart
-
+        List<CartItem> cartItems = user.getCart().getItems();
         // Create a new order entity and set its properties
-
+        
         // Save the order to the database
 
         // Create order items for each cart item and save them to the database
