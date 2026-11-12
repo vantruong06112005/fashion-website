@@ -1,17 +1,16 @@
-package iuh.fit.fashionwebsite.dto.request;
+package iuh.fit.fashionwebsite.dto.request.checkout;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.*;
-import org.hibernate.validator.constraints.UniqueElements;
 
 @AllArgsConstructor
 @NoArgsConstructor
 @Getter
 @Setter
 @Builder
-public class PaymentMethodCreationRequest {
+public class PaymentMethodUpdateRequest {
 
     @NotBlank(message = "Code cannot be blank")
     @Size(max = 50, message = "Code must be less than 50 characters")
@@ -27,4 +26,7 @@ public class PaymentMethodCreationRequest {
 
     @Size(max = 255, message = "Icon URL must be less than 255 characters")
     private String iconUrl;
+
+    @NotNull(message = "isActive cannot be null")
+    private Boolean isActive;
 }

@@ -288,10 +288,10 @@ public class InitData implements CommandLineRunner {
         v.setSize(size);
         v.setPrice(price);
         v.setStockQuantity(stockQuantity);
-        v.setWeight(weight);
-        v.setLength(length);
-        v.setWidth(width);
-        v.setHeight(height);
+        v.setPackageWeight(weight);
+        v.setPackageLength(length);
+        v.setPackageWidth(width);
+        v.setPackageHeight(height);
         v.setIsActive(isActive);
         v.setCreatedAt(createdAt);
         v.setUpdatedAt(updatedAt);

@@ -283,13 +283,17 @@ Dưới đây là catalog chi tiết tất cả các Request DTO hiện có tron
   | Tên trường | Kiểu dữ liệu | Bắt buộc | Ràng buộc Validation | Mô tả |
   | :--- | :--- | :---: | :--- | :--- |
   | `fullAddress` | `String` | Có | `@NotBlank`, `@Size(max = 500)` | Địa chỉ chi tiết (Số nhà, đường, phường, quận...) |
+  | `provinceName` | `String` | Có | `@NotBlank`, `@Size(max = 100)` | Tên tỉnh/thành phố theo danh mục GHN |
+  | `wardName` | `String` | Có | `@NotBlank`, `@Size(max = 100)` | Tên phường/xã theo danh mục GHN |
   | `addressType` | `AddressType` | Có | `@NotNull` | Loại địa chỉ: `HOME`, `OFFICE`, `OTHER` |
   | `isDefault` | `Boolean` | Không | Mặc định `false` | Đặt làm địa chỉ mặc định hay không |
 
 - **Sample Request Payload:**
   ```json
   {
-    "fullAddress": "12 Nguyễn Văn Bảo, Phường 4, Quận Gò Vấp, TP. Hồ Chí Minh",
+    "fullAddress": "12 Nguyễn Văn Bảo",
+    "provinceName": "Hồ Chí Minh",
+    "wardName": "Phường Hạnh Thông",
     "addressType": "HOME",
     "isDefault": true
   }
@@ -302,13 +306,17 @@ Dưới đây là catalog chi tiết tất cả các Request DTO hiện có tron
   | Tên trường | Kiểu dữ liệu | Bắt buộc | Ràng buộc Validation | Mô tả |
   | :--- | :--- | :---: | :--- | :--- |
   | `fullAddress` | `String` | Không | `@Size(max = 500)` | Địa chỉ mới cập nhật |
+  | `provinceName` | `String` | Không | `@Size(max = 100)` | Tên tỉnh/thành phố theo danh mục GHN |
+  | `wardName` | `String` | Không | `@Size(max = 100)` | Tên phường/xã theo danh mục GHN |
   | `addressType` | `AddressType` | Không | Enum (`HOME`, `OFFICE`, `OTHER`) | Loại địa chỉ |
   | `isDefault` | `Boolean` | Không | `Boolean` | Đặt làm địa chỉ mặc định hay không |
 
 - **Sample Request Payload:**
   ```json
   {
-    "fullAddress": "Tòa nhà Landmark 81, 720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM",
+    "fullAddress": "Tòa nhà Landmark 81, 720A Điện Biên Phủ",
+    "provinceName": "Hồ Chí Minh",
+    "wardName": "Phường Thạnh Mỹ Tây",
     "addressType": "OFFICE",
     "isDefault": true
   }
