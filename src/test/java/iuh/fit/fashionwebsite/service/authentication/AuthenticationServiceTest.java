@@ -1,8 +1,8 @@
 package iuh.fit.fashionwebsite.service.authentication;
 
-import iuh.fit.fashionwebsite.dto.request.ForgotPasswordRequest;
-import iuh.fit.fashionwebsite.dto.request.GoogleLoginRequest;
-import iuh.fit.fashionwebsite.dto.request.ResetPasswordRequest;
+import iuh.fit.fashionwebsite.dto.request.auth.ForgotPasswordRequest;
+import iuh.fit.fashionwebsite.dto.request.auth.GoogleLoginRequest;
+import iuh.fit.fashionwebsite.dto.request.auth.ResetPasswordRequest;
 import iuh.fit.fashionwebsite.dto.response.auth.AuthenticationResponse;
 import iuh.fit.fashionwebsite.entity.PasswordResetToken;
 import iuh.fit.fashionwebsite.entity.User;

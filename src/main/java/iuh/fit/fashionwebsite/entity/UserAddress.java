@@ -5,12 +5,16 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "user_addresses")
+@Table(
+        name = "user_addresses",
+        indexes = {@Index(name = "idx_user_addresses_user_id", columnList = "user_id")}
+)
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@ToString(exclude = "user")
 public class UserAddress extends BaseEntity {
 
     @Id
@@ -27,13 +31,26 @@ public class UserAddress extends BaseEntity {
     private String wardName;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "address_type")
+    @Column(name = "address_type", length = 30)
     private AddressType addressType;
 
-    @Column(name = "is_default", columnDefinition = "boolean default false")
-    private Boolean isDefault;
+    @Builder.Default
+    @Column(name = "is_default", nullable = false)
+    private Boolean isDefault = false;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof UserAddress other)) return false;
+        return id != null && id.equals(other.getId());
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }

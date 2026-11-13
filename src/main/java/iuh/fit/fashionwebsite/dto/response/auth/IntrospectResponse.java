@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2026 IUH. All rights reserved.
  */
-package iuh.fit.fashionwebsite.dto.response;
+package iuh.fit.fashionwebsite.dto.response.auth;
 
 
 import lombok.*;

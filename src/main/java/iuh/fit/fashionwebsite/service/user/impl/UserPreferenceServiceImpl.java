@@ -7,9 +7,11 @@ import iuh.fit.fashionwebsite.repository.UserCategoryScoreProjection;
 import iuh.fit.fashionwebsite.service.user.UserPreferenceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.List;
 
 @Service
@@ -19,6 +21,7 @@ import java.util.List;
 public class UserPreferenceServiceImpl implements UserPreferenceService {
 
     private final UserBehaviorRepository userBehaviorRepository;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     @Override
     public UserPreferenceScoreResponse getUserScores(Long userId) {
@@ -28,6 +31,17 @@ public class UserPreferenceServiceImpl implements UserPreferenceService {
                     .categoryScores(List.of())
                     .totalScore(0.0)
                     .build();
+        }
+
+        String cacheKey = "fs:user:" + userId + ":cat_scores";
+        try {
+            Object cached = redisTemplate.opsForValue().get(cacheKey);
+            if (cached instanceof UserPreferenceScoreResponse response) {
+                log.debug("Đọc ma trận điểm sở thích từ Redis cache cho userId {}", userId);
+                return response;
+            }
+        } catch (Exception e) {
+            log.warn("Không thể đọc cache ma trận điểm sở thích từ Redis: {}", e.getMessage());
         }
 
         List<UserCategoryScoreProjection> projections = userBehaviorRepository.calculateCategoryScores(userId);
@@ -48,14 +62,21 @@ public class UserPreferenceServiceImpl implements UserPreferenceService {
                 .mapToDouble(c -> c.score() != null ? c.score() : 0.0)
                 .sum();
 
-        log.debug("Đã tính điểm ma trận sở thích cho userId {}: {} danh mục, tổng điểm {}",
-                userId, categoryScores.size(), totalScore);
-
-        return UserPreferenceScoreResponse.builder()
+        UserPreferenceScoreResponse response = UserPreferenceScoreResponse.builder()
                 .userId(userId)
                 .categoryScores(categoryScores)
                 .totalScore(Math.round(totalScore * 100.0) / 100.0)
                 .build();
+
+        try {
+            redisTemplate.opsForValue().set(cacheKey, response, Duration.ofMinutes(15));
+        } catch (Exception e) {
+            log.warn("Không thể ghi cache ma trận điểm sở thích vào Redis: {}", e.getMessage());
+        }
+
+        log.debug("Đã tính điểm ma trận sở thích cho userId {}: {} danh mục, tổng điểm {}",
+                userId, categoryScores.size(), totalScore);
+
+        return response;
     }
 }
-
