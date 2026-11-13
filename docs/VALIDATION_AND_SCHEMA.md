@@ -331,7 +331,11 @@ Dưới đây là catalog chi tiết tất cả các Request DTO hiện có tron
 | `PUT` | `/users/addresses/{id}` | `CUSTOMER`, `STAFF`, `ADMIN` | Cập nhật thông tin địa chỉ |
 | `DELETE` | `/users/addresses/{id}` | `CUSTOMER`, `STAFF`, `ADMIN` | Xóa địa chỉ |
 | `PATCH` | `/users/addresses/{id}/default` | `CUSTOMER`, `STAFF`, `ADMIN` | Đặt địa chỉ làm mặc định nhanh |
+| `GET` | `/users/addresses/default` | `CUSTOMER`, `STAFF`, `ADMIN` | Lấy địa chỉ mặc định của user hiện tại |
 | `GET` | `/users/{userId}/addresses` | `STAFF`, `ADMIN` | Xem danh sách địa chỉ của user bất kỳ |
+| `GET` | `/users/{userId}/addresses/{addressId}` | `STAFF`, `ADMIN` | Xem chi tiết 1 địa chỉ của user bất kỳ |
+
+> Tất cả endpoint `/users/addresses/**` của user hiện tại đều có alias `/users/me/addresses/**`.
 
 ---
 
