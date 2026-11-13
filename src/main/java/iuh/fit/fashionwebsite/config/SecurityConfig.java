@@ -58,6 +58,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/products", "/products/**", "/categories", "/categories/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/shipping/provinces", "/shipping/wards").permitAll()
                         .anyRequest().authenticated()
 
                 );

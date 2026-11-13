@@ -6,13 +6,15 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+
 import java.util.List;
 import java.util.Optional;
 
 @Repository
 public interface UserAddressRepository extends JpaRepository<UserAddress, Long> {
-    
-    List<UserAddress> findAllByUserId(Long userId);
+
+    @Query("SELECT a FROM UserAddress a WHERE a.user.id = :userId ORDER BY a.isDefault DESC, a.id DESC")
+    List<UserAddress> findAllByUserId(@Param("userId") Long userId);
 
     Optional<UserAddress> findByIdAndUserId(Long id, Long userId);
 
@@ -22,7 +24,7 @@ public interface UserAddressRepository extends JpaRepository<UserAddress, Long> 
 
     boolean existsByUserId(Long userId);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE UserAddress a SET a.isDefault = false WHERE a.user.id = :userId")
     void resetDefaultAddressByUserId(@Param("userId") Long userId);
 

@@ -107,47 +107,49 @@ public enum ErrorCode implements BaseErrorCode {
 
     INVALID_PASSWORD(
             400,
-            "error.invalid_password",
+            "Mật khẩu không hợp lệ (từ 6 đến 100 ký tự)",
             HttpStatus.BAD_REQUEST
     ),
 
     OLD_PASSWORD_INCORRECT(
             400,
-            "error.old_password_incorrect",
+            "Mật khẩu cũ không chính xác",
             HttpStatus.BAD_REQUEST
     ),
 
     PASSWORD_CONFIRMATION_MISMATCH(
             400,
-            "error.password_confirmation_mismatch",
+            "Mật khẩu xác nhận không trùng khớp",
             HttpStatus.BAD_REQUEST
     ),
 
     NEW_PASSWORD_SAME_AS_OLD(
             400,
-            "error.new_password_same_as_old",
+            "Mật khẩu mới không được trùng với mật khẩu cũ",
             HttpStatus.BAD_REQUEST
     ),
 
     UNAUTHENTICATED(
             401,
-            "error.unauthenticated",
+            "Tên đăng nhập hoặc mật khẩu không chính xác",
             HttpStatus.UNAUTHORIZED
     ),
 
     UNAUTHORIZED(
             403,
-            "error.unauthorized",
+            "Bạn không có quyền thực hiện thao tác này",
             HttpStatus.FORBIDDEN
-    ),USER_EXISTED(
+    ),
+    
+    USER_EXISTED(
             400,
-            "error.user_existed",
+            "Tên đăng nhập hoặc người dùng đã tồn tại",
             HttpStatus.BAD_REQUEST
     ),
 
     USER_INACTIVE(
             403,
-            "error.user_inactive",
+            "Tài khoản của bạn đã bị khóa hoặc chưa được kích hoạt",
             HttpStatus.FORBIDDEN
     ),
 

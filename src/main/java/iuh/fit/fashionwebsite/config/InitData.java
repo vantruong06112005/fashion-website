@@ -11,28 +11,22 @@ import iuh.fit.fashionwebsite.repository.*;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.FlushModeType;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.BeansException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import javax.sql.DataSource;
 import java.math.BigDecimal;
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class InitData implements CommandLineRunner {
 
     private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -59,6 +53,12 @@ public class InitData implements CommandLineRunner {
 
     @Value("${app.seed.default-password}")
     private String defaultPassword;
+
+    @Value("${app.seed.enabled:true}")
+    private boolean seedEnabled;
+
+    @Value("${app.seed.force:false}")
+    private boolean seedForce;
 
     // Tham chiếu các thực thể gốc để liên kết khóa ngoại giữa các bảng
     private User admin01, staff01, truong01, an01, binh01, cuong01, dung01, ha01, lan01, mai01, nam01;
@@ -87,6 +87,17 @@ public class InitData implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) throws Exception {
+        if (!seedEnabled) {
+            log.info("App seed is disabled (app.seed.enabled=false). Skipping InitData.");
+            return;
+        }
+
+        if (!seedForce && userRepository.count() > 0) {
+            log.info("Database already contains data (users count = {}). Skipping InitData to preserve existing data.", userRepository.count());
+            return;
+        }
+
+        log.info("Initializing demo data...");
         entityManager.setFlushMode(FlushModeType.COMMIT);
 
         seedAllUsersAndAddresses();
@@ -125,78 +136,7 @@ public class InitData implements CommandLineRunner {
 
         seedAllReturnsAndReviews();
         entityManager.flush();
-    }
-
-    /**
-     * Chạy TRƯỚC khi Hibernate khởi tạo bảng:
-     * Nếu phát hiện máy đang chứa các bảng DB cũ (thiếu cột mới hoặc chứa trạng thái cũ CONFIRMED/PENDING
-     * hoặc dữ liệu cũ chưa có thông số ở các cột mới), tự động DROP toàn bộ các bảng hiện có trong DB
-     * để Hibernate tạo mới lại toàn bộ bảng từ đầu.
-     */
-    @Component
-    static class LegacyDatabaseCleaner implements BeanPostProcessor {
-
-        @Override
-        public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
-            if (bean instanceof DataSource dataSource) {
-                dropAllTablesIfLegacyDatabase(dataSource);
-            }
-            return bean;
-        }
-
-        private void dropAllTablesIfLegacyDatabase(DataSource dataSource) {
-            try (Connection conn = dataSource.getConnection();
-                 Statement stmt = conn.createStatement()) {
-
-                List<String> tables = new ArrayList<>();
-                try (ResultSet rs = stmt.executeQuery(
-                        "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()")) {
-                    while (rs.next()) {
-                        tables.add(rs.getString(1));
-                    }
-                }
-                if (tables.isEmpty()) {
-                    return;
-                }
-
-                boolean isLegacy = false;
-                try (ResultSet rs = stmt.executeQuery(
-                        "SELECT COUNT(*) FROM information_schema.columns " +
-                        "WHERE table_schema = DATABASE() AND (" +
-                        "  (table_name = 'user_addresses' AND column_name IN ('province_name', 'ward_name')) OR " +
-                        "  (table_name = 'orders' AND column_name IN ('shipping_provider', 'tracking_code')) OR " +
-                        "  (table_name = 'product_variants' AND column_name IN ('weight', 'length', 'width', 'height')) OR " +
-                        "  (table_name = 'payment_transactions' AND column_name IN ('request_id', 'pay_url'))" +
-                        ")")) {
-                    if (rs.next() && rs.getInt(1) < 10) {
-                        isLegacy = true;
-                    }
-                }
-
-                if (!isLegacy) {
-                    try (ResultSet rs = stmt.executeQuery(
-                            "SELECT (" +
-                            "  (SELECT COUNT(*) FROM orders WHERE order_status IN ('CONFIRMED', 'PENDING') OR payment_status = 'PARTIAL_PAID' OR shipping_provider IS NULL) + " +
-                            "  (SELECT COUNT(*) FROM user_addresses WHERE province_name IS NULL) + " +
-                            "  (SELECT COUNT(*) FROM product_variants WHERE weight IS NULL)" +
-                            ")")) {
-                        if (rs.next() && rs.getLong(1) > 0) {
-                            isLegacy = true;
-                        }
-                    }
-                }
-
-                if (isLegacy) {
-                    stmt.executeUpdate("SET FOREIGN_KEY_CHECKS = 0");
-                    for (String table : tables) {
-                        stmt.executeUpdate("DROP TABLE IF EXISTS `" + table + "`");
-                    }
-                    stmt.executeUpdate("SET FOREIGN_KEY_CHECKS = 1");
-                }
-            } catch (Exception ignored) {
-                // Bỏ qua nếu là H2 in-memory trong lúc chạy unit test
-            }
-        }
+        log.info("Demo data initialization completed successfully.");
     }
 
     // =========================================================================

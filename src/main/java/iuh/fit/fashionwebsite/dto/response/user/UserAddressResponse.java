@@ -3,6 +3,8 @@ package iuh.fit.fashionwebsite.dto.response.user;
 import iuh.fit.fashionwebsite.enums.AddressType;
 import lombok.*;
 
+import java.time.LocalDateTime;
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -16,4 +18,6 @@ public class UserAddressResponse {
     private AddressType addressType;
     private Boolean isDefault;
     private Long userId;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }
