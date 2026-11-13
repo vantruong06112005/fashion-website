@@ -6,11 +6,22 @@ import org.springframework.context.annotation.Configuration;
 import java.time.Clock;
 import java.time.ZoneId;
 
+/**
+ * Lớp cấu hình Spring cho module Trả hàng &amp; Hoàn tiền.
+ * Cung cấp các Bean dùng chung để đảm bảo tính nhất quán về thời gian khi tính toán hạn trả hàng và SLA.
+ */
 @Configuration
 public class ReturnRequestConfig {
 
+    /**
+     * Chức năng: Khởi tạo Bean {@link Clock} cố định theo múi giờ Việt Nam (Asia/Ho_Chi_Minh).
+     *
+     * @return Đối tượng {@link Clock} hệ thống sử dụng múi giờ UTC+7 (Việt Nam).
+     */
     @Bean
     public Clock returnRequestClock() {
+        // Ép múi giờ Việt Nam (UTC+7) để tính hạn 7 ngày trả hàng, hạn bàn giao và SLA 2 ngày làm việc chính xác,
+        // tránh sai lệch khi server triển khai ở múi giờ UTC.
         return Clock.system(ZoneId.of("Asia/Ho_Chi_Minh"));
     }
 }
