@@ -47,6 +47,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
+/**
+ * Lớp cài đặt nghiệp vụ Trả hàng & Hoàn tiền phía Khách hàng (Giai đoạn 1 & 2).
+ * Đảm bảo kiểm tra quyền sở hữu (chống IDOR), hạn 7 ngày sau giao, số lượng còn lại,
+ * khóa bi quan chống xung đột đồng thời và đồng bộ dọn ảnh Cloudinary theo Transaction.
+ */
 @Service
 @Validated
 @RequiredArgsConstructor
@@ -62,12 +67,26 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
     private final ReturnRequestImageService returnRequestImageService;
     private final ApplicationEventPublisher eventPublisher;
 
+    /**
+     * Chức năng: Tạo yêu cầu trả hàng mới từ request JSON (không kèm tệp ảnh).
+     *
+     * @param request DTO chứa thông tin đơn hàng, lý do trả, danh sách món hàng và STK (tùy chọn).
+     * @return {@link ReturnRequestResponse} thông tin phiếu trả hàng vừa được tạo.
+     */
     @Override
     @Transactional
     public ReturnRequestResponse createReturnRequest(ReturnRequestCreationRequest request) {
+        // Ủy quyền về hàm dùng chung với danh sách ảnh rỗng để tránh lặp lại logic nghiệp vụ.
         return createReturnRequest(request, List.of());
     }
 
+    /**
+     * Chức năng: Tạo yêu cầu trả hàng mới kèm upload ảnh minh chứng (nếu có).
+     *
+     * @param request DTO chứa thông tin yêu cầu trả hàng.
+     * @param images  Danh sách tệp ảnh minh chứng do khách hàng gửi lên (có thể null hoặc rỗng nếu đổi ý).
+     * @return {@link ReturnRequestResponse} thông tin phiếu trả hàng đã lưu kèm danh sách ảnh và sản phẩm.
+     */
     @Override
     @Transactional
     public ReturnRequestResponse createReturnRequest(ReturnRequestCreationRequest request, List<MultipartFile> images) {
@@ -77,15 +96,18 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
                 .orElseThrow(() -> new AppException(ReturnRequestErrorCode.ORDER_NOT_AVAILABLE));
         checkDeliveryTime(order);
 
+        // Chặn client tự truyền URL ảnh thô qua JSON; ảnh bắt buộc phải đi qua multipart để kiểm tra nội dung thật.
         if (request.getImageUrls() != null && !request.getImageUrls().isEmpty()) {
             throw new AppException(ReturnRequestErrorCode.IMAGE_UPLOAD_REQUIRED);
         }
         List<MultipartFile> files = images == null ? List.of() : images;
         returnRequestImageService.validate(files);
+        // Với lý do hàng lỗi (DEFECTIVE) hoặc giao sai (WRONG_ITEM), bắt buộc phải có ít nhất 1 ảnh bằng chứng.
         if (!"CHANGE_OF_MIND".equals(request.getReason()) && files.isEmpty()) {
             throw new AppException(ReturnRequestErrorCode.IMAGES_REQUIRED);
         }
 
+        // Kiểm tra tất cả sản phẩm xin trả trước khi upload ảnh để tránh tốn tài nguyên upload khi dữ liệu sai.
         Map<Long, OrderItem> orderItems = validateRequestedItems(order.getId(), request.getItems(), null);
 
         ReturnRequest returnRequest = returnRequestMapper.toReturnRequest(request);
@@ -93,6 +115,7 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         returnRequest.setOrder(order);
         returnRequest.setReturnCode(generateReturnCode());
         returnRequest.setImages(returnRequestMapper.toReturnRequestImages(returnRequestImageService.upload(files)));
+        // Gán quan hệ hai chiều và lưu snapshot biến thể cũ (oldVariant) phục vụ bước nhập lại kho sau kiểm định.
         for (int index = 0; index < request.getItems().size(); index++) {
             OrderItem orderItem = orderItems.get(request.getItems().get(index).getOrderItemId());
             ReturnRequestItem returnItem = returnRequest.getItems().get(index);
@@ -106,11 +129,18 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
 
         // Cascade lưu phiếu, dòng hàng và ảnh trong cùng giao dịch; có lỗi thì rollback.
         ReturnRequest savedRequest = returnRequestRepository.save(returnRequest);
+        // Phát sự kiện để module Thông báo xử lý bất đồng bộ sau khi transaction DB commit thành công.
         eventPublisher.publishEvent(new ReturnRequestCreatedEvent(currentUser.getId(),
                 savedRequest.getId(), savedRequest.getReturnCode()));
         return returnRequestMapper.toReturnRequestResponse(savedRequest);
     }
 
+    /**
+     * Chức năng: Lấy danh sách phiếu trả hàng của chính khách hàng đang đăng nhập (có phân trang).
+     *
+     * @param pageable Đối tượng chứa số trang, kích thước trang và hướng sắp xếp.
+     * @return Trang dữ liệu {@link Page}&lt;{@link ReturnRequestResponse}&gt; của khách hàng.
+     */
     @Override
     @Transactional(readOnly = true)
     public Page<ReturnRequestResponse> getMyReturnRequests(Pageable pageable) {
@@ -119,28 +149,51 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
                 .map(returnRequestMapper::toReturnRequestResponse);
     }
 
+    /**
+     * Chức năng: Lấy chi tiết một phiếu trả hàng theo ID nếu thuộc quyền sở hữu của khách hàng hiện tại.
+     *
+     * @param id Mã ID phiếu trả hàng cần xem.
+     * @return {@link ReturnRequestResponse} chi tiết phiếu trả hàng.
+     */
     @Override
     @Transactional(readOnly = true)
     public ReturnRequestResponse getMyReturnRequestById(Long id) {
         User currentUser = userService.getCurrentUserEntity();
         ReturnRequest returnRequest = returnRequestRepository.findByIdAndUserId(id, currentUser.getId())
                 .orElseThrow(() -> new AppException(ReturnRequestErrorCode.RETURN_REQUEST_NOT_FOUND));
+        // Kiểm tra chéo thêm lần nữa để bảo đảm tuyệt đối không rò rỉ dữ liệu người dùng khác.
         if (returnRequest.getUser() == null || !Objects.equals(returnRequest.getUser().getId(), currentUser.getId())) {
             throw new AppException(ReturnRequestErrorCode.RETURN_REQUEST_NOT_FOUND);
         }
         return returnRequestMapper.toReturnRequestResponse(returnRequest);
     }
 
+    /**
+     * Chức năng: Cập nhật thông tin phiếu trả hàng bằng JSON (giữ nguyên bộ ảnh hiện có).
+     *
+     * @param id      Mã ID phiếu trả hàng cần sửa.
+     * @param request DTO chứa thông tin lý do, sản phẩm và ngân hàng mới.
+     * @return {@link ReturnRequestResponse} thông tin phiếu sau khi lưu.
+     */
     @Override
     @Transactional
     public ReturnRequestResponse updateReturnRequest(Long id, ReturnRequestUpdateRequest request) {
         return updateReturnRequest(id, request, List.of());
     }
 
+    /**
+     * Chức năng: Cập nhật thông tin phiếu trả hàng và thay thế bộ ảnh minh chứng nếu khách gửi ảnh mới.
+     *
+     * @param id      Mã ID phiếu trả hàng cần sửa.
+     * @param request DTO chứa lý do, danh sách sản phẩm và thông tin ngân hàng cập nhật.
+     * @param images  Danh sách tệp ảnh mới (nếu rỗng hoặc null thì giữ nguyên ảnh cũ).
+     * @return {@link ReturnRequestResponse} thông tin phiếu sau khi cập nhật.
+     */
     @Override
     @Transactional
     public ReturnRequestResponse updateReturnRequest(Long id, ReturnRequestUpdateRequest request, List<MultipartFile> images) {
         User currentUser = userService.getCurrentUserEntity();
+        // Khóa bi quan dòng phiếu trả hàng trước khi kiểm tra trạng thái để tránh sửa cùng lúc với lúc shop duyệt.
         ReturnRequest returnRequest = getLockedOwnedReturnRequest(id, currentUser.getId());
         if (returnRequest.getStatus() != ReturnRequestStatus.PENDING_APPROVAL) {
             throw new AppException(ReturnRequestErrorCode.RETURN_NOT_EDITABLE);
@@ -156,6 +209,7 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         List<MultipartFile> files = images == null ? List.of() : images;
         returnRequestImageService.validate(files);
 
+        // Nếu không gửi ảnh mới thì tính theo số lượng ảnh cũ hiện có để đảm bảo phiếu vẫn thỏa điều kiện tối đa 5 ảnh và bắt buộc có ảnh khi không phải đổi ý.
         int effectiveImageCount = !files.isEmpty()
                 ? files.size()
                 : (returnRequest.getImages() == null ? 0 : returnRequest.getImages().size());
@@ -166,6 +220,7 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
             throw new AppException(ReturnRequestErrorCode.IMAGES_REQUIRED);
         }
 
+        // Truyền returnRequest.getId() vào tham số loại trừ để không tự tính trùng số lượng của chính phiếu đang sửa.
         Map<Long, OrderItem> orderItems = validateRequestedItems(order.getId(), request.getItems(), returnRequest.getId());
 
         returnRequest.setReason(request.getReason());
@@ -188,6 +243,7 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
             returnItem.setOrderItem(orderItem);
             returnItem.setOldVariant(orderItem.getProductVariant());
         }
+        // Dùng clear() + addAll() trên collection sẵn có để Hibernate kích hoạt orphanRemoval xóa sạch dòng cũ thay vì gán tham chiếu mới.
         if (returnRequest.getItems() == null) {
             returnRequest.setItems(new ArrayList<>(updatedItems));
         } else {
@@ -197,6 +253,7 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
 
         List<String> oldImageUrls = List.of();
         if (!files.isEmpty()) {
+            // Lưu lại URL ảnh cũ trước khi thay mới để chỉ xóa trên Cloudinary sau khi DB đã lưu thành công.
             oldImageUrls = returnRequest.getImages() == null ? List.of()
                     : returnRequest.getImages().stream().map(ReturnRequestImage::getImageUrl).toList();
             List<ReturnRequestImage> newImages = returnRequestMapper.toReturnRequestImages(returnRequestImageService.upload(files));
@@ -218,6 +275,12 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         return returnRequestMapper.toReturnRequestResponse(savedRequest);
     }
 
+    /**
+     * Chức năng: Khách hàng tự hủy phiếu trả hàng trước khi kiện hàng được bàn giao cho đơn vị vận chuyển.
+     *
+     * @param id Mã ID phiếu trả hàng cần hủy.
+     * @return {@link ReturnRequestResponse} phiếu đã được chuyển sang trạng thái CANCELLED.
+     */
     @Override
     @Transactional
     public ReturnRequestResponse cancelReturnRequest(Long id) {
@@ -226,6 +289,7 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         if (returnRequest.getStatus() == ReturnRequestStatus.CANCELLED) {
             throw new AppException(ReturnRequestErrorCode.RETURN_ALREADY_CANCELLED);
         }
+        // Nếu đã duyệt (WAITING_FOR_RETURN_DELIVERY) nhưng đã bàn giao hàng cho shipper (handedOverAt != null) thì khóa quyền tự hủy.
         if (returnRequest.getStatus() == ReturnRequestStatus.WAITING_FOR_RETURN_DELIVERY
                 && returnRequest.getHandedOverAt() != null) {
             throw new AppException(ReturnRequestErrorCode.RETURN_ALREADY_HANDED_OVER);
@@ -243,16 +307,26 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         return returnRequestMapper.toReturnRequestResponse(savedRequest);
     }
 
+    /**
+     * Chức năng: Khách hàng cung cấp hoặc cập nhật tài khoản ngân hàng nhận tiền hoàn.
+     * Tự động chuyển trạng thái sang WAITING_REFUND nếu phiếu đã kiểm định xong và thỏa đủ các điều kiện hoàn tiền.
+     *
+     * @param id      Mã ID phiếu trả hàng.
+     * @param request DTO chứa 3 thông tin ngân hàng: tên ngân hàng, số tài khoản, tên chủ tài khoản.
+     * @return {@link ReturnRequestResponse} thông tin phiếu sau khi cập nhật STK.
+     */
     @Override
     @Transactional
     public ReturnRequestResponse provideBankAccount(Long id, ReturnRequestBankAccountRequest request) {
         User currentUser = userService.getCurrentUserEntity();
         ReturnRequest returnRequest = getLockedOwnedReturnRequest(id, currentUser.getId());
+        // Không cho phép đổi STK khi phiếu đã hoàn tiền xong hoặc đã đóng (hủy/từ chối).
         if (returnRequest.getStatus() == ReturnRequestStatus.REFUNDED
                 || returnRequest.getStatus() == ReturnRequestStatus.CANCELLED
                 || returnRequest.getStatus() == ReturnRequestStatus.REJECTED) {
             throw new AppException(ReturnRequestErrorCode.RETURN_BANK_UPDATE_NOT_ALLOWED);
         }
+        // Chặn thao tác gửi lặp y hệt thông tin STK khi đơn đã ở trạng thái chờ hoàn tiền.
         if (returnRequest.getStatus() == ReturnRequestStatus.WAITING_REFUND
                 && Objects.equals(returnRequest.getBankName(), request.getBankName())
                 && Objects.equals(returnRequest.getAccountNumber(), request.getAccountNumber())
@@ -271,11 +345,19 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         return returnRequestMapper.toReturnRequestResponse(savedRequest);
     }
 
+    /**
+     * Chức năng: Khách hàng phản hồi đồng ý hoặc từ chối phương án xử lý (duyệt một phần / trừ phí ship).
+     *
+     * @param id      Mã ID phiếu trả hàng.
+     * @param request DTO chứa lựa chọn `agreed`, ghi chú và thông tin ngân hàng bổ sung (nếu có).
+     * @return {@link ReturnRequestResponse} thông tin phiếu sau khi ghi nhận phản hồi.
+     */
     @Override
     @Transactional
     public ReturnRequestResponse confirmResolutionPlan(Long id, ReturnRequestConfirmPlanRequest request) {
         User currentUser = userService.getCurrentUserEntity();
         ReturnRequest returnRequest = getLockedOwnedReturnRequest(id, currentUser.getId());
+        // Chống khách bấm xác nhận đồng ý nhiều lần liên tiếp.
         if (Boolean.TRUE.equals(returnRequest.getCustomerConfirmedPlan())
                 && Boolean.TRUE.equals(request.getAgreed())) {
             throw new AppException(ReturnRequestErrorCode.RETURN_PLAN_ALREADY_CONFIRMED);
@@ -288,7 +370,11 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
 
         LocalDateTime now = LocalDateTime.now(returnRequestClock);
         returnRequest.setCustomerRespondedAt(now);
+        if (request.getCustomerNote() != null && !request.getCustomerNote().isBlank()) {
+            returnRequest.setCustomerNote(request.getCustomerNote().trim());
+        }
 
+        // Nếu khách gửi kèm thông tin ngân hàng mới trong lúc xác nhận phương án thì cập nhật luôn để đủ điều kiện hoàn tiền.
         if (request.getBankName() != null && !request.getBankName().isBlank()) {
             returnRequest.setBankName(request.getBankName());
         }
@@ -300,6 +386,11 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         }
 
         if (Boolean.TRUE.equals(request.getAgreed())) {
+            // Tình huống 18 & 19: Chỉ chuyển sang diện Đổi ý khi khách đồng ý rõ ràng; giữ nguyên createdAt ban đầu.
+            if (Boolean.TRUE.equals(returnRequest.getProposedChangeOfMind())) {
+                returnRequest.setReason("CHANGE_OF_MIND");
+                returnRequest.setProposedChangeOfMind(false);
+            }
             returnRequest.setCustomerConfirmedPlan(true);
             evaluateAndMarkRefundEligibleIfReady(returnRequest, now);
         } else {
@@ -310,6 +401,13 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         return returnRequestMapper.toReturnRequestResponse(savedRequest);
     }
 
+    /**
+     * Chức năng: Lấy phiếu trả hàng thuộc đúng user hiện tại kèm khóa ghi bi quan (PESSIMISTIC_WRITE).
+     *
+     * @param id     Mã ID phiếu trả hàng.
+     * @param userId Mã ID khách hàng hiện tại.
+     * @return {@link ReturnRequest} đã được khóa trong CSDL.
+     */
     private ReturnRequest getLockedOwnedReturnRequest(Long id, Long userId) {
         ReturnRequest returnRequest = returnRequestRepository.findOwnedReturnRequestForUpdate(id, userId)
                 .orElseThrow(() -> new AppException(ReturnRequestErrorCode.RETURN_REQUEST_NOT_FOUND));
@@ -319,6 +417,12 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         return returnRequest;
     }
 
+    /**
+     * Chức năng: Kiểm tra bất biến tài chính, tuyệt đối không để tiền hoàn cuối cùng bị âm.
+     * Nếu chưa tính sẵn `refundAmount`, tự động tính bằng `itemsRefundAmount - returnShippingFee`.
+     *
+     * @param returnRequest Phiếu trả hàng cần kiểm tra tài chính.
+     */
     private void validateNoNegativeRefund(ReturnRequest returnRequest) {
         BigDecimal itemsAmount = returnRequest.getItemsRefundAmount();
         BigDecimal shippingFee = returnRequest.getReturnShippingFee();
@@ -326,6 +430,7 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         if (finalRefund != null && finalRefund.signum() < 0) {
             throw new AppException(ReturnRequestErrorCode.NEGATIVE_REFUND_NOT_ALLOWED);
         }
+        // Phí ship trả về không được lớn hơn hoặc bằng tiền hàng được hoàn (nếu bằng/lớn hơn thì khách không nhận lại được đồng nào hoặc bị âm).
         if (itemsAmount != null && shippingFee != null && shippingFee.signum() > 0) {
             if (shippingFee.compareTo(itemsAmount) >= 0) {
                 throw new AppException(ReturnRequestErrorCode.NEGATIVE_REFUND_NOT_ALLOWED);
@@ -336,6 +441,13 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         }
     }
 
+    /**
+     * Chức năng: Đánh giá tổng hợp xem phiếu đã hội đủ điều kiện chuyển sang trạng thái chờ hoàn tiền (`WAITING_REFUND`) hay chưa.
+     * Tại sao phải kiểm tra cả 3 điều kiện: Chỉ được chuyển tiền khi kho đã kiểm hàng xong, khách đã cung cấp đủ 3 thông tin STK, và khách đã đồng ý phương án (nếu bị trừ ship hoặc chỉ duyệt 1 phần).
+     *
+     * @param returnRequest Phiếu trả hàng cần đánh giá điều kiện.
+     * @param now           Mốc thời gian hiện tại để ghi nhận `refundEligibleAt`.
+     */
     private void evaluateAndMarkRefundEligibleIfReady(ReturnRequest returnRequest, LocalDateTime now) {
         validateNoNegativeRefund(returnRequest);
         boolean hasInspection = returnRequest.getInspectedAt() != null
@@ -357,7 +469,16 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         }
     }
 
+    /**
+     * Chức năng: Kiểm tra xem phiếu có thuộc diện hoàn một phần (acceptedQuantity != quantity) hoặc có khấu trừ phí ship hay không.
+     *
+     * @param returnRequest Phiếu trả hàng cần kiểm tra.
+     * @return true nếu cần khách hàng xác nhận đồng ý phương án xử lý trước khi hoàn tiền.
+     */
     private boolean isPartialOrShippingDeducted(ReturnRequest returnRequest) {
+        if (Boolean.TRUE.equals(returnRequest.getProposedChangeOfMind())) {
+            return true;
+        }
         if (returnRequest.getReturnShippingFee() != null && returnRequest.getReturnShippingFee().signum() > 0) {
             return true;
         }
@@ -373,8 +494,17 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         return false;
     }
 
+    /**
+     * Chức năng: Kiểm tra tính hợp lệ của toàn bộ danh sách sản phẩm xin trả (không trùng dòng, đúng thuộc đơn hàng, đủ số lượng còn lại).
+     *
+     * @param orderId                 Mã ID đơn hàng gốc.
+     * @param requestedItems          Danh sách sản phẩm và số lượng khách xin trả.
+     * @param excludedReturnRequestId Mã phiếu trả hàng cần loại trừ (dùng khi đang sửa phiếu, truyền null nếu tạo mới).
+     * @return Map ánh xạ từ `orderItemId` sang Entity `OrderItem` tương ứng để tái sử dụng, tránh query lại nhiều lần.
+     */
     private Map<Long, OrderItem> validateRequestedItems(
             Long orderId, List<ReturnRequestItemRequest> requestedItems, Long excludedReturnRequestId) {
+        // Dùng LinkedHashMap để vừa tra cứu trùng lặp O(1), vừa giữ nguyên thứ tự sản phẩm client gửi lên.
         Map<Long, OrderItem> orderItems = new LinkedHashMap<>();
         for (ReturnRequestItemRequest requestedItem : requestedItems) {
             if (orderItems.containsKey(requestedItem.getOrderItemId())) {
@@ -389,6 +519,11 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         return orderItems;
     }
 
+    /**
+     * Chức năng: Kiểm tra đơn hàng đã giao thành công (`DELIVERED`) và còn nằm trong thời hạn đổi trả 7 ngày hay chưa.
+     *
+     * @param order Entity đơn hàng gốc cần kiểm tra.
+     */
     private void checkDeliveryTime(Order order) {
         if (order.getOrderStatus() != OrderStatus.DELIVERED) {
             throw new AppException(ReturnRequestErrorCode.ORDER_NOT_DELIVERED);
@@ -396,6 +531,7 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         if (order.getDeliveredAt() == null) {
             throw new AppException(ReturnRequestErrorCode.DELIVERY_TIME_MISSING);
         }
+        // Quy đổi theo múi giờ Việt Nam để tính chính xác mốc 7 x 24 giờ kể từ lúc nhận hàng.
         Instant deliveredAt = order.getDeliveredAt().atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toInstant();
         Instant now = returnRequestClock.instant();
         if (deliveredAt.isAfter(now)) {
@@ -407,12 +543,20 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         }
     }
 
+    /**
+     * Chức năng: Tính toán số lượng còn lại được phép trả của một dòng sản phẩm, chống gian lận gửi nhiều phiếu vượt quá số lượng đã mua.
+     *
+     * @param orderItem               Dòng sản phẩm trong đơn hàng gốc.
+     * @param requestedQuantity       Số lượng khách đang xin trả lần này.
+     * @param excludedReturnRequestId ID phiếu đang sửa (để loại trừ số lượng cũ của chính nó), null nếu là tạo mới.
+     */
     private void checkRemainingQuantity(OrderItem orderItem, int requestedQuantity, Long excludedReturnRequestId) {
         if (orderItem.getQuantity() == null || orderItem.getQuantity() < 1) {
             throw new AppException(ReturnRequestErrorCode.RETURN_DATA_INVALID);
         }
         long usedQuantity = 0;
         for (ReturnRequestItem previousItem : returnRequestItemRepository.findForReturnValidation(orderItem.getId())) {
+            // Bỏ qua các dòng thuộc chính phiếu đang chỉnh sửa để không tự cộng dồn số lượng cũ của mình.
             if (excludedReturnRequestId != null
                     && previousItem.getReturnRequest() != null
                     && Objects.equals(previousItem.getReturnRequest().getId(), excludedReturnRequestId)) {
@@ -427,6 +571,7 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
             }
             ReturnRequestStatus status = previousItem.getReturnRequest().getStatus();
             usedQuantity += switch (status) {
+                // Nếu phiếu cũ đã bị từ chối/hủy thì chỉ tính phần acceptedQuantity (thường bằng 0) để nhả lại hạn mức cho khách tạo đơn khác.
                 case REJECTED, CANCELLED -> acceptedQuantity == null ? 0 : acceptedQuantity;
                 case REFUNDED -> {
                     if (acceptedQuantity == null) {
@@ -444,6 +589,11 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         }
     }
 
+    /**
+     * Chức năng: Sinh mã phiếu trả hàng duy nhất dài 30 ký tự (bắt đầu bằng "RT") và kiểm tra không trùng lặp trong CSDL.
+     *
+     * @return Chuỗi mã phiếu trả hàng duy nhất.
+     */
     private String generateReturnCode() {
         String returnCode;
         do {

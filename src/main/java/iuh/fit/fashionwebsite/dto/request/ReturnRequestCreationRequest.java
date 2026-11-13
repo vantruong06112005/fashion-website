@@ -15,6 +15,13 @@ import lombok.*;
 
 import java.util.List;
 
+/**
+ * DTO nhận dữ liệu đầu vào khi khách hàng gửi yêu cầu tạo mới phiếu trả hàng & hoàn tiền.
+ *
+ * <p>Chứa thông tin đơn hàng cần trả, lý do, danh sách sản phẩm muốn trả, tài khoản ngân hàng
+ * nhận hoàn tiền (nếu có) và trường kiểm soát ảnh minh chứng. DTO này áp dụng cơ chế từ chối
+ * các trường không hợp lệ thông qua {@code @JsonAnySetter} để bảo vệ dữ liệu nghiệp vụ.</p>
+ */
 @Getter
 @Setter
 @NoArgsConstructor
@@ -22,32 +29,39 @@ import java.util.List;
 @Builder
 public class ReturnRequestCreationRequest {
 
+    // Bắt buộc chọn đơn hàng và mã đơn phải là số dương để tránh dữ liệu giả hoặc ID không hợp lệ.
     @NotNull(message = "Vui lòng chọn đơn hàng.")
     @Positive(message = "Mã đơn hàng phải lớn hơn 0.")
     private Long orderId;
 
+    // @NotBlank chặn chuỗi null/rỗng/chỉ có khoảng trắng; @Pattern giới hạn đúng 3 mã lý do hệ thống hỗ trợ.
     @NotBlank(message = "Vui lòng chọn lý do trả hàng.")
     @Pattern(regexp = "CHANGE_OF_MIND|DEFECTIVE|WRONG_ITEM",
             message = "Lý do trả hàng phải là đổi ý, hàng lỗi hoặc shop giao sai.")
     @Size(max = 100, message = "Lý do trả hàng không được quá 100 ký tự.")
     private String reason;
 
+    // Khách hàng bắt buộc phải mô tả chi tiết tình trạng sản phẩm hoặc nguyên nhân trả hàng.
     @NotBlank(message = "Vui lòng mô tả lý do trả hàng.")
     @Size(max = 1000, message = "Mô tả trả hàng không được quá 1000 ký tự.")
     private String reasonDetail;
 
+    // @NotEmpty đảm bảo phiếu trả có ít nhất 1 sản phẩm; @Valid kích hoạt kiểm tra validation cho từng phần tử bên trong danh sách.
     @NotEmpty(message = "Vui lòng chọn ít nhất một sản phẩm cần trả.")
     @Valid
     private List<@NotNull(message = "Sản phẩm cần trả không được để trống.") @Valid ReturnRequestItemRequest> items;
 
+    // Nhóm thông tin tài khoản ngân hàng dùng để hoàn tiền (tùy chọn lúc tạo nếu đơn chưa cần ngay, hoặc nhập sẵn).
     @Size(max = 100, message = "Tên ngân hàng không được quá 100 ký tự.")
     private String bankName;
 
+    // @JsonAlias cho phép client gửi theo tên cũ "bankAccountNumber" bên cạnh tên chuẩn "accountNumber".
     @JsonAlias("bankAccountNumber")
     @Pattern(regexp = "^[0-9]{6,30}$", message = "Số tài khoản ngân hàng chỉ gồm 6 đến 30 chữ số.")
     @Size(max = 50, message = "Số tài khoản ngân hàng không được quá 50 ký tự.")
     private String accountNumber;
 
+    // @JsonAlias cho phép tương thích ngược với payload dùng tên "bankAccountHolder".
     @JsonAlias("bankAccountHolder")
     @Size(max = 100, message = "Tên chủ tài khoản không được quá 100 ký tự.")
     private String accountHolderName;
@@ -58,24 +72,53 @@ public class ReturnRequestCreationRequest {
     private List<@NotBlank(message = "Đường dẫn ảnh không được để trống.")
             @Size(max = 255, message = "Đường dẫn ảnh không được quá 255 ký tự.") String> imageUrls;
 
+    /**
+     * Lấy số tài khoản ngân hàng theo tên getter tương thích ngược.
+     *
+     * @return số tài khoản ngân hàng nhận hoàn tiền (giá trị của {@code accountNumber})
+     */
     public String getBankAccountNumber() {
         return accountNumber;
     }
 
+    /**
+     * Gán số tài khoản ngân hàng thông qua tên setter tương thích ngược.
+     *
+     * @param bankAccountNumber số tài khoản ngân hàng cần lưu vào {@code accountNumber}
+     */
     public void setBankAccountNumber(String bankAccountNumber) {
         this.accountNumber = bankAccountNumber;
     }
 
+    /**
+     * Lấy tên chủ tài khoản ngân hàng theo tên getter tương thích ngược.
+     *
+     * @return tên chủ tài khoản ngân hàng (giá trị của {@code accountHolderName})
+     */
     public String getBankAccountHolder() {
         return accountHolderName;
     }
 
+    /**
+     * Gán tên chủ tài khoản ngân hàng thông qua tên setter tương thích ngược.
+     *
+     * @param bankAccountHolder tên chủ tài khoản cần lưu vào {@code accountHolderName}
+     */
     public void setBankAccountHolder(String bankAccountHolder) {
         this.accountHolderName = bankAccountHolder;
     }
 
+    /**
+     * Chặn mọi trường JSON lạ không được khai báo trong DTO nhằm chống lỗ hổng mass-assignment
+     * (ví dụ: client cố tình gửi thêm {@code status}, {@code returnType}, {@code refundAmount}).
+     *
+     * @param name  tên trường lạ xuất hiện trong JSON đầu vào
+     * @param value giá trị đi kèm của trường lạ đó
+     * @throws AppException luôn ném lỗi {@code ReturnRequestErrorCode.UNSUPPORTED_FIELD} khi có trường không được hỗ trợ
+     */
     @JsonAnySetter
     public void rejectUnknownField(String name, Object value) {
+        // Khi Jackson gặp field không có trong DTO, hàm này được gọi để từ chối ngay thay vì bỏ qua âm thầm.
         throw new AppException(ReturnRequestErrorCode.UNSUPPORTED_FIELD);
     }
 }
