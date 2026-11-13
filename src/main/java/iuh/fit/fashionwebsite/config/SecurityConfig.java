@@ -105,7 +105,7 @@ public class SecurityConfig {
         // Tạo cấu hình CORS cho phép frontend gọi API từ domain khác
         CorsConfiguration configuration = new CorsConfiguration();
         // Chỉ cho phép các origin nằm trong whitelist (không dùng "*")
-        configuration.setAllowedOrigins(allowedOrigins);
+        configuration.setAllowedOriginPatterns(List.of("*"));
 
         // Cho phép các HTTP method thường dùng trong REST API
         // OPTIONS được dùng cho request kiểm tra CORS (preflight)
@@ -113,7 +113,7 @@ public class SecurityConfig {
                 List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
 
         // Chỉ cho phép các header cần thiết
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
+        configuration.setAllowedHeaders(List.of("*"));
 
         // Xác thực bằng Bearer token trong header (không dùng Cookie/Session)
         // → không cần gửi credentials
