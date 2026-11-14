@@ -114,6 +114,21 @@ public class UserAddressController {
                 .build();
     }
 
+    // ADMIN và STAFF thêm địa chỉ mới cho một user cụ thể
+    @PostMapping("/{userId}/addresses")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
+    public ApiResponse<UserAddressResponse> createAddressForUser(
+            @PathVariable Long userId,
+            @RequestBody @Valid UserAddressCreationRequest request
+    ) {
+        return ApiResponse.<UserAddressResponse>builder()
+                .code(HttpStatus.CREATED.value())
+                .message("Address has been added for user successfully")
+                .data(userAddressService.createAddressForUser(userId, request))
+                .build();
+    }
+
     // ADMIN và STAFF xem chi tiết 1 địa chỉ của một user (service kiểm tra user tồn tại & địa chỉ thuộc user)
     @GetMapping("/{userId}/addresses/{addressId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")

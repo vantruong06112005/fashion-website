@@ -1,6 +1,7 @@
 package iuh.fit.fashionwebsite.dto.response.user;
 
 import iuh.fit.fashionwebsite.enums.RoleUser;
+import iuh.fit.fashionwebsite.enums.StatusUser;
 import lombok.*;
 
 @AllArgsConstructor
@@ -16,5 +17,6 @@ public class UserResponse {
     private String phone;
     private String address;
     private RoleUser role;
+    private StatusUser status;
     private String avt;
 }
