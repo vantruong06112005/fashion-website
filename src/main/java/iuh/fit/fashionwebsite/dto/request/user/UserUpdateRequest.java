@@ -1,5 +1,6 @@
 package iuh.fit.fashionwebsite.dto.request.user;
 
+import iuh.fit.fashionwebsite.enums.Gender;
 import iuh.fit.fashionwebsite.enums.RoleUser;
 import iuh.fit.fashionwebsite.enums.StatusUser;
 import jakarta.validation.constraints.Email;
@@ -21,6 +22,8 @@ public class UserUpdateRequest {
     @Size(max = 100,
             message = "Fullname must be less than 100 characters")
     private String fullname;
+
+    private Gender gender;
 
     @Email(message = "Invalid email format")
     @Size(max = 100,

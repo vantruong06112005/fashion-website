@@ -10,6 +10,7 @@ import iuh.fit.fashionwebsite.dto.request.user.UserCreationRequest;
 import iuh.fit.fashionwebsite.dto.request.user.UserUpdateRequest;
 import iuh.fit.fashionwebsite.dto.response.user.UserResponse;
 import iuh.fit.fashionwebsite.entity.User;
+import iuh.fit.fashionwebsite.enums.Gender;
 import iuh.fit.fashionwebsite.enums.RoleUser;
 import iuh.fit.fashionwebsite.enums.StatusUser;
 import iuh.fit.fashionwebsite.exception.AppException;
@@ -71,6 +72,7 @@ public class UserService {
                 passwordEncoder.encode(request.getPassword())
         );
 
+        user.setGender(request.getGender() != null ? request.getGender() : Gender.OTHER);
         user.setRole(request.getRole() != null ? request.getRole() : RoleUser.CUSTOMER);
         user.setStatus(StatusUser.ACTIVE);
 
@@ -101,6 +103,10 @@ public class UserService {
         }
 
         userMapper.updateUser(user, request);
+
+        if (request.getGender() != null) {
+            user.setGender(request.getGender());
+        }
 
         if (request.getRole() != null) {
             user.setRole(request.getRole());

@@ -93,6 +93,7 @@ public class InitData implements CommandLineRunner {
         }
 
         if (!seedForce && userRepository.count() > 0) {
+            backfillMissingUserGenders();
             log.info("Database already contains data (users count = {}). Skipping InitData to preserve existing data.", userRepository.count());
             return;
         }
@@ -145,8 +146,31 @@ public class InitData implements CommandLineRunner {
     // tương ứng vào hàm seed của bảng đó dưới đây.
     // =========================================================================
 
-    private User seedUser(String username, String passwordHash, String fullname, String phone,
-                          String email, RoleUser role, StatusUser status) {
+    private void backfillMissingUserGenders() {
+        var existingUsers = userRepository.findAll();
+        boolean changed = false;
+        for (User u : existingUsers) {
+            if (u.getGender() == null) {
+                String uname = u.getUsername() != null ? u.getUsername().toLowerCase() : "";
+                String fname = u.getFullname() != null ? u.getFullname().toLowerCase() : "";
+                if (uname.equals("staff01") || uname.equals("ha01") || uname.equals("lan01") || uname.equals("mai01")
+                        || fname.contains(" thi ") || fname.contains(" thị ")) {
+                    u.setGender(Gender.FEMALE);
+                } else {
+                    u.setGender(Gender.MALE);
+                }
+                userRepository.save(u);
+                changed = true;
+            }
+        }
+        if (changed) {
+            entityManager.flush();
+            log.info("Backfilled missing gender for existing users.");
+        }
+    }
+
+    private User seedUser(String username, String passwordHash, String fullname, Gender gender,
+                          String phone, String email, RoleUser role, StatusUser status) {
         User u = userRepository.findByUsername(username)
                 .orElse(new User());
 
@@ -155,6 +179,7 @@ public class InitData implements CommandLineRunner {
             u.setPasswordHash(passwordHash);
         }
         u.setFullname(fullname);
+        u.setGender(gender);
         u.setPhone(phone);
         u.setEmail(email);
         u.setRole(role);
@@ -495,17 +520,17 @@ public class InitData implements CommandLineRunner {
     private void seedAllUsersAndAddresses() {
         String password = passwordEncoder.encode(defaultPassword);
 
-        admin01 = seedUser("admin01", password, "Nguyen Van Admin", "0901000001", "admin01@gmail.com", RoleUser.ADMIN, StatusUser.ACTIVE);
-        staff01 = seedUser("staff01", password, "Tran Thi Staff", "0901000099", "staff01@gmail.com", RoleUser.STAFF, StatusUser.ACTIVE);
-        truong01 = seedUser("truong01", password, "Nguyen Van Truong", "0901000002", "truong01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        an01 = seedUser("an01", password, "Tran Van An", "0901000003", "an01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        binh01 = seedUser("binh01", password, "Le Van Binh", "0901000004", "binh01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        cuong01 = seedUser("cuong01", password, "Pham Van Cuong", "0901000005", "cuong01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        dung01 = seedUser("dung01", password, "Hoang Van Dung", "0901000006", "dung01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        ha01 = seedUser("ha01", password, "Nguyen Thi Ha", "0901000007", "ha01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        lan01 = seedUser("lan01", password, "Tran Thi Lan", "0901000008", "lan01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        mai01 = seedUser("mai01", password, "Le Thi Mai", "0901000009", "mai01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        nam01 = seedUser("nam01", password, "Pham Van Nam", "0901000010", "nam01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        admin01 = seedUser("admin01", password, "Nguyen Van Admin", Gender.MALE, "0901000001", "admin01@gmail.com", RoleUser.ADMIN, StatusUser.ACTIVE);
+        staff01 = seedUser("staff01", password, "Tran Thi Staff", Gender.FEMALE, "0901000099", "staff01@gmail.com", RoleUser.STAFF, StatusUser.ACTIVE);
+        truong01 = seedUser("truong01", password, "Nguyen Van Truong", Gender.MALE, "0901000002", "truong01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        an01 = seedUser("an01", password, "Tran Van An", Gender.MALE, "0901000003", "an01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        binh01 = seedUser("binh01", password, "Le Van Binh", Gender.MALE, "0901000004", "binh01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        cuong01 = seedUser("cuong01", password, "Pham Van Cuong", Gender.MALE, "0901000005", "cuong01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        dung01 = seedUser("dung01", password, "Hoang Van Dung", Gender.MALE, "0901000006", "dung01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        ha01 = seedUser("ha01", password, "Nguyen Thi Ha", Gender.FEMALE, "0901000007", "ha01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        lan01 = seedUser("lan01", password, "Tran Thi Lan", Gender.FEMALE, "0901000008", "lan01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        mai01 = seedUser("mai01", password, "Le Thi Mai", Gender.FEMALE, "0901000009", "mai01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        nam01 = seedUser("nam01", password, "Pham Van Nam", Gender.MALE, "0901000010", "nam01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
 
         seedUserAddress(truong01, "12 Nguyễn Văn Bảo, Phường 4, Quận Gò Vấp, TP. Hồ Chí Minh", "Hồ Chí Minh", "Phường Bến Thành", AddressType.HOME, true);
         seedUserAddress(truong01, "Tòa nhà Bitexco, 2 Hải Triều, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh", "Hồ Chí Minh", "Phường Bến Thành", AddressType.OFFICE, false);
