@@ -10,6 +10,7 @@ import iuh.fit.fashionwebsite.dto.request.user.UserCreationRequest;
 import iuh.fit.fashionwebsite.dto.request.user.UserUpdateRequest;
 import iuh.fit.fashionwebsite.dto.response.user.UserResponse;
 import iuh.fit.fashionwebsite.entity.User;
+import iuh.fit.fashionwebsite.enums.Gender;
 import iuh.fit.fashionwebsite.enums.RoleUser;
 import iuh.fit.fashionwebsite.enums.StatusUser;
 import iuh.fit.fashionwebsite.exception.AppException;
@@ -24,6 +25,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 import java.time.Instant;
 import java.util.List;
@@ -69,6 +72,7 @@ public class UserService {
                 passwordEncoder.encode(request.getPassword())
         );
 
+        user.setGender(request.getGender() != null ? request.getGender() : Gender.OTHER);
         user.setRole(request.getRole() != null ? request.getRole() : RoleUser.CUSTOMER);
         user.setStatus(StatusUser.ACTIVE);
 
@@ -100,6 +104,10 @@ public class UserService {
 
         userMapper.updateUser(user, request);
 
+        if (request.getGender() != null) {
+            user.setGender(request.getGender());
+        }
+
         if (request.getRole() != null) {
             user.setRole(request.getRole());
         }
@@ -112,14 +120,23 @@ public class UserService {
 
         if (file != null && !file.isEmpty()) {
             String avatarUrl = cloudinaryService.uploadImage(file, "fashion_website/avatars");
+            registerRollbackCleanup(avatarUrl);
             user.setAvt(avatarUrl);
             if (oldAvatar != null && !oldAvatar.isBlank() && !oldAvatar.equals(avatarUrl)) {
-                cloudinaryService.deleteImage(oldAvatar);
+                deleteOldAvatarSafely(oldAvatar);
             }
-        } else if (request.getAvt() != null && !request.getAvt().isBlank() && !request.getAvt().equals(oldAvatar)) {
-            user.setAvt(request.getAvt());
-            if (oldAvatar != null && !oldAvatar.isBlank()) {
-                cloudinaryService.deleteImage(oldAvatar);
+        } else if (request.getAvt() != null) {
+            if (request.getAvt().isBlank()) {
+                // Người dùng chủ động xóa ảnh đại diện (gửi chuỗi rỗng)
+                user.setAvt(null);
+                if (oldAvatar != null && !oldAvatar.isBlank()) {
+                    deleteOldAvatarSafely(oldAvatar);
+                }
+            } else if (!request.getAvt().equals(oldAvatar)) {
+                user.setAvt(request.getAvt());
+                if (oldAvatar != null && !oldAvatar.isBlank()) {
+                    deleteOldAvatarSafely(oldAvatar);
+                }
             }
         }
 
@@ -163,12 +180,12 @@ public class UserService {
         User user = userRepository.findById(id)
                 .orElseThrow(UserNotFoundException::new);
 
-        String oldAvatar = user.getAvt();
-        userRepository.delete(user);
+        // Xóa mềm: Chuyển trạng thái sang INACTIVE và vô hiệu hoá toàn bộ token cũ
+        user.setStatus(StatusUser.INACTIVE);
+        user.setPasswordChangedAt(Instant.now());
+        userRepository.save(user);
 
-        if (oldAvatar != null && !oldAvatar.isBlank()) {
-            cloudinaryService.deleteImage(oldAvatar);
-        }
+        log.info("Soft-deleted (deactivated) user with id: {}", id);
     }
 
     @Transactional(readOnly = true)
@@ -212,12 +229,13 @@ public class UserService {
 
         String oldAvatar = user.getAvt();
         String avatarUrl = cloudinaryService.uploadImage(file, "fashion_website/avatars");
+        registerRollbackCleanup(avatarUrl);
         user.setAvt(avatarUrl);
 
         User savedUser = userRepository.save(user);
 
         if (oldAvatar != null && !oldAvatar.isBlank() && !oldAvatar.equals(avatarUrl)) {
-            cloudinaryService.deleteImage(oldAvatar);
+            deleteOldAvatarSafely(oldAvatar);
         }
 
         return userMapper.toUserResponse(savedUser);
@@ -234,12 +252,13 @@ public class UserService {
 
         String oldAvatar = user.getAvt();
         String avatarUrl = cloudinaryService.uploadImage(file, "fashion_website/avatars");
+        registerRollbackCleanup(avatarUrl);
         user.setAvt(avatarUrl);
 
         User savedUser = userRepository.save(user);
 
         if (oldAvatar != null && !oldAvatar.isBlank() && !oldAvatar.equals(avatarUrl)) {
-            cloudinaryService.deleteImage(oldAvatar);
+            deleteOldAvatarSafely(oldAvatar);
         }
 
         return userMapper.toUserResponse(savedUser);
@@ -254,7 +273,7 @@ public class UserService {
         User savedUser = userRepository.save(user);
 
         if (oldAvatar != null && !oldAvatar.isBlank()) {
-            cloudinaryService.deleteImage(oldAvatar);
+            deleteOldAvatarSafely(oldAvatar);
         }
 
         return userMapper.toUserResponse(savedUser);
@@ -270,6 +289,57 @@ public class UserService {
                 .orElseThrow(UserNotFoundException::new);
 
         return deleteAvatar(user.getId());
+    }
+
+    /**
+     * Dọn ảnh cũ trên Cloudinary sau khi database transaction đã commit thành công.
+     */
+    private void deleteOldAvatarSafely(String oldAvatar) {
+        if (oldAvatar == null || oldAvatar.isBlank()) {
+            return;
+        }
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    try {
+                        cloudinaryService.deleteImage(oldAvatar);
+                    } catch (Exception e) {
+                        log.warn("Failed to delete old avatar from Cloudinary after commit: {}", oldAvatar, e);
+                    }
+                }
+            });
+        } else {
+            try {
+                cloudinaryService.deleteImage(oldAvatar);
+            } catch (Exception e) {
+                log.warn("Failed to delete old avatar from Cloudinary: {}", oldAvatar, e);
+            }
+        }
+    }
+
+    /**
+     * Tự động xóa ảnh vừa tải lên nếu database transaction bị rollback.
+     */
+    private void registerRollbackCleanup(String newAvatarUrl) {
+        if (newAvatarUrl == null || newAvatarUrl.isBlank()) {
+            return;
+        }
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCompletion(int status) {
+                    if (status == STATUS_ROLLED_BACK) {
+                        log.warn("Database transaction rolled back. Cleaning up uploaded avatar: {}", newAvatarUrl);
+                        try {
+                            cloudinaryService.deleteImage(newAvatarUrl);
+                        } catch (Exception e) {
+                            log.error("Failed to clean up uploaded avatar on rollback", e);
+                        }
+                    }
+                }
+            });
+        }
     }
 
     /**

@@ -1,8 +1,10 @@
 package iuh.fit.fashionwebsite.dto.request.user;
 
+import iuh.fit.fashionwebsite.enums.Gender;
 import iuh.fit.fashionwebsite.enums.RoleUser;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.*;
@@ -27,6 +29,9 @@ public class UserCreationRequest {
     @Size(max = 100,
             message = "Fullname must be less than 100 characters")
     private String fullname;
+
+    @NotNull(message = "Gender cannot be null")
+    private Gender gender;
 
     @NotBlank(message = "Email cannot be blank")
     @Email(message = "Invalid email format")

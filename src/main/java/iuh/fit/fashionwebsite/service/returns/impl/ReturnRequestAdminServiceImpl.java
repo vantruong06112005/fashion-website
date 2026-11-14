@@ -26,6 +26,7 @@ import iuh.fit.fashionwebsite.entity.ReturnRequestItem;
 import iuh.fit.fashionwebsite.entity.User;
 import iuh.fit.fashionwebsite.enums.ReturnRequestStatus;
 import iuh.fit.fashionwebsite.enums.TransactionStatus;
+import iuh.fit.fashionwebsite.event.StockChangedEvent;
 import iuh.fit.fashionwebsite.exception.AppException;
 import iuh.fit.fashionwebsite.exception.returns.ReturnRequestErrorCode;
 import iuh.fit.fashionwebsite.mapper.ReturnRequestMapper;
@@ -593,8 +594,17 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
                 ProductVariant variant = productVariantRepository.findById(variantRef.getId())
                         .orElseThrow(() -> new AppException(ReturnRequestErrorCode.VARIANT_NOT_FOUND_FOR_RESTOCK));
                 int currentStock = variant.getStockQuantity() == null ? 0 : variant.getStockQuantity();
-                variant.setStockQuantity(currentStock + restockQty);
+                int newStock = currentStock + restockQty;
+                variant.setStockQuantity(newStock);
                 productVariantRepository.save(variant);
+
+                if (variant.getProduct() != null && variant.getProduct().getId() != null) {
+                    eventPublisher.publishEvent(new StockChangedEvent(
+                            variant.getProduct().getId(),
+                            variant.getId(),
+                            newStock
+                    ));
+                }
 
                 item.setRestockedQuantity(restockQty);
                 item.setIsRestocked(true);
