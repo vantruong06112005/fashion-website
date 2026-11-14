@@ -56,7 +56,8 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/auth/**").permitAll()
+                        .requestMatchers("/auth/**", "/ws/**").permitAll()
+                        .requestMatchers("/admin/chat/**", "/api/admin/chat/**").hasAnyRole("ADMIN", "STAFF")
                         .requestMatchers(HttpMethod.GET, "/products", "/products/**", "/categories", "/categories/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/shipping/provinces", "/shipping/wards").permitAll()
                         .anyRequest().authenticated()
@@ -78,7 +79,7 @@ public class SecurityConfig {
         DefaultBearerTokenResolver delegate = new DefaultBearerTokenResolver();
         return request -> {
             String path = request.getRequestURI().substring(request.getContextPath().length());
-            if (path.startsWith("/auth/")) {
+            if (path.startsWith("/auth/") || path.startsWith("/ws")) {
                 // nó không có nghĩa là tự auto bỏ qua xác thực JWT,
                 // mà là Spring Security sẽ không tìm token trong header Authorization.
                 return null;
@@ -89,7 +90,7 @@ public class SecurityConfig {
 
     // dùng để chuyển đổi JWT thành Authentication object
     @Bean
-    JwtAuthenticationConverter jwtAuthenticationConverter() {
+    public JwtAuthenticationConverter jwtAuthenticationConverter() {
        //Tạo đối tượng có nhiệm vụ đọc thông tin quyền từ JWT và chuyển thành danh sách GrantedAuthority
         JwtGrantedAuthoritiesConverter jwtGrantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
         jwtGrantedAuthoritiesConverter.setAuthorityPrefix("ROLE_");

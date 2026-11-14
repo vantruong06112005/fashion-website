@@ -48,6 +48,8 @@ public class InitData implements CommandLineRunner {
     private final ReturnRequestImageRepository returnRequestImageRepository;
     private final ProductReviewRepository productReviewRepository;
     private final ProductReviewImageRepository productReviewImageRepository;
+    private final NotificationRepository notificationRepository;
+    private final ChatMessageRepository chatMessageRepository;
     private final PasswordEncoder passwordEncoder;
     private final EntityManager entityManager;
 
@@ -94,6 +96,7 @@ public class InitData implements CommandLineRunner {
 
         if (!seedForce && userRepository.count() > 0) {
             backfillMissingUserGenders();
+            seedRealtimeNotificationsAndChatIfEmpty();
             log.info("Database already contains data (users count = {}). Skipping InitData to preserve existing data.", userRepository.count());
             return;
         }
@@ -137,7 +140,70 @@ public class InitData implements CommandLineRunner {
 
         seedAllReturnsAndReviews();
         entityManager.flush();
+
+        seedRealtimeNotificationsAndChatIfEmpty();
+        entityManager.flush();
         log.info("Demo data initialization completed successfully.");
+    }
+
+    private void seedRealtimeNotificationsAndChatIfEmpty() {
+        if (notificationRepository.count() == 0) {
+            notificationRepository.save(Notification.builder()
+                    .username("truong01")
+                    .type(NotificationType.ORDER_STATUS)
+                    .title("Đơn hàng #1 đã được cập nhật")
+                    .content("Trạng thái mới: DELIVERED — Đơn hàng của bạn đã giao thành công.")
+                    .referenceId(1L)
+                    .seen(false)
+                    .build());
+            notificationRepository.save(Notification.builder()
+                    .username("truong01")
+                    .type(NotificationType.PROMOTION)
+                    .title("Ưu đãi thành viên VIP 15%")
+                    .content("Nhập mã VIP15 khi thanh toán bộ sưu tập Thu Đông Minimalist.")
+                    .referenceId(null)
+                    .seen(false)
+                    .build());
+            notificationRepository.save(Notification.builder()
+                    .username("an01")
+                    .type(NotificationType.ORDER_STATUS)
+                    .title("Đơn hàng #2 đang vận chuyển")
+                    .content("Trạng thái mới: SHIPPING — Đơn vị vận chuyển GHN đã nhận kiện hàng.")
+                    .referenceId(2L)
+                    .seen(false)
+                    .build());
+            notificationRepository.save(Notification.builder()
+                    .username("admin01")
+                    .type(NotificationType.SYSTEM)
+                    .title("Hệ thống WebSocket STOMP đã sẵn sàng")
+                    .content("Đã kết nối kênh thông báo đơn hàng, tồn kho realtime và chat hỗ trợ.")
+                    .referenceId(null)
+                    .seen(false)
+                    .build());
+            log.info("Seeded initial demo notifications.");
+        }
+
+        if (chatMessageRepository.count() == 0) {
+            chatMessageRepository.save(ChatMessage.builder()
+                    .customerUsername("truong01")
+                    .senderUsername("truong01")
+                    .senderRole(ChatRole.CUSTOMER)
+                    .content("Chào shop, mình cao 1m72 nặng 65kg thì mặc Áo Sơ Mi Oxford size M hay L vừa ạ?")
+                    .build());
+            chatMessageRepository.save(ChatMessage.builder()
+                    .customerUsername("truong01")
+                    .senderUsername("staff01")
+                    .senderRole(ChatRole.ADMIN)
+                    .content("Dạ chào anh Trường! Với chiều cao 1m72 và 65kg, anh mặc size M sẽ ôm vừa vặn chuẩn form Smart Casual ạ.")
+                    .build());
+            chatMessageRepository.save(ChatMessage.builder()
+                    .customerUsername("an01")
+                    .senderUsername("an01")
+                    .senderRole(ChatRole.CUSTOMER)
+                    .content("Shop kiểm tra giúp mình đơn hàng gần nhất khi nào giao tới Quận Gò Vấp nhé!")
+                    .build());
+            log.info("Seeded initial demo chat messages.");
+        }
     }
 
     // =========================================================================
