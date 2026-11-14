@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
         name = "user_addresses",
         indexes = {@Index(name = "idx_user_addresses_user_id", columnList = "user_id")}
 )
-@SQLDelete(sql = "UPDATE user_addresses SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?")
+@SQLDelete(sql = "UPDATE user_addresses SET deleted_at = CURRENT_TIMESTAMP, is_default = false WHERE id = ?")
 @SQLRestriction("deleted_at IS NULL")
 @Getter
 @Setter
