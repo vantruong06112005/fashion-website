@@ -3,6 +3,7 @@ package iuh.fit.fashionwebsite.repository;
 import iuh.fit.fashionwebsite.entity.ReturnRequestItem;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -55,4 +56,14 @@ public interface ReturnRequestItemRepository extends JpaRepository<ReturnRequest
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select i from ReturnRequestItem i join fetch i.returnRequest where i.orderItem.id = :orderItemId")
     List<ReturnRequestItem> findForReturnValidation(@Param("orderItemId") Long orderItemId);
+
+    /**
+     * Chức năng (Nhánh 4 - Mục 5 Phần V): Xóa vật lý toàn bộ dòng sản phẩm con thuộc một phiếu trả hàng đã đủ 5 năm
+     * trước khi xóa vật lý bản ghi phiếu cha.
+     *
+     * @param returnRequestId Đầu vào: Mã ID phiếu trả hàng cần dọn sạch các dòng {@code return_request_items}.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "DELETE FROM return_request_items WHERE return_request_id = :returnRequestId", nativeQuery = true)
+    void hardDeleteByReturnRequestId(@Param("returnRequestId") Long returnRequestId);
 }

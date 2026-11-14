@@ -420,8 +420,14 @@ class ReturnRequestControllerTest {
                 .thenReturn(ReturnRequestResponse.builder().id(5L).status(ReturnRequestStatus.WAITING_REFUND)
                         .bankName("Vietcombank").bankAccountNumber("0123456789").build());
 
-        // Khách hàng gửi thông tin ngân hàng hợp lệ
+        // Khách hàng gửi thông tin ngân hàng hợp lệ (POST và PATCH)
         mvc.perform(post("/returns/5/bank-account")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER")))
+                        .contentType(MediaType.APPLICATION_JSON).content(BANK_BODY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("WAITING_REFUND"));
+
+        mvc.perform(patch("/returns/5/bank-account")
                         .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER")))
                         .contentType(MediaType.APPLICATION_JSON).content(BANK_BODY))
                 .andExpect(status().isOk())

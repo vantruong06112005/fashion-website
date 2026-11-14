@@ -1,8 +1,10 @@
 package iuh.fit.fashionwebsite.service.returns.impl;
 
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestApproveRequest;
+import iuh.fit.fashionwebsite.dto.request.ReturnRequestContactLogRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestExtendHandoverRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestHandoverRequest;
+import iuh.fit.fashionwebsite.dto.request.ReturnRequestHolidayRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestInspectItemRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestInspectRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestOverdueNoteRequest;
@@ -11,6 +13,7 @@ import iuh.fit.fashionwebsite.dto.request.ReturnRequestRefundRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestRejectRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestRestockItemRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestRestockRequest;
+import iuh.fit.fashionwebsite.dto.response.ReturnRequestHolidayResponse;
 import iuh.fit.fashionwebsite.dto.response.ReturnRequestResponse;
 import iuh.fit.fashionwebsite.entity.Order;
 import iuh.fit.fashionwebsite.entity.OrderItem;
@@ -18,6 +21,7 @@ import iuh.fit.fashionwebsite.entity.PaymentMethod;
 import iuh.fit.fashionwebsite.entity.PaymentTransaction;
 import iuh.fit.fashionwebsite.entity.ProductVariant;
 import iuh.fit.fashionwebsite.entity.ReturnRequest;
+import iuh.fit.fashionwebsite.entity.ReturnRequestHoliday;
 import iuh.fit.fashionwebsite.entity.ReturnRequestItem;
 import iuh.fit.fashionwebsite.entity.User;
 import iuh.fit.fashionwebsite.enums.ReturnRequestStatus;
@@ -28,6 +32,7 @@ import iuh.fit.fashionwebsite.mapper.ReturnRequestMapper;
 import iuh.fit.fashionwebsite.repository.PaymentMethodRepository;
 import iuh.fit.fashionwebsite.repository.PaymentTransactionRepository;
 import iuh.fit.fashionwebsite.repository.ProductVariantRepository;
+import iuh.fit.fashionwebsite.repository.ReturnRequestHolidayRepository;
 import iuh.fit.fashionwebsite.repository.ReturnRequestItemRepository;
 import iuh.fit.fashionwebsite.repository.ReturnRequestRepository;
 import iuh.fit.fashionwebsite.service.returns.ReturnRefundCalculator;
@@ -45,7 +50,11 @@ import org.springframework.validation.annotation.Validated;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -62,8 +71,11 @@ import java.util.function.Function;
 @RequiredArgsConstructor
 public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService {
 
+    private static final DateTimeFormatter CONTACT_LOG_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+
     private final ReturnRequestRepository returnRequestRepository;
     private final ReturnRequestItemRepository returnRequestItemRepository;
+    private final ReturnRequestHolidayRepository returnRequestHolidayRepository;
     private final ProductVariantRepository productVariantRepository;
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final PaymentMethodRepository paymentMethodRepository;
@@ -270,6 +282,9 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
         returnRequest.setPreviousHandoverDeadline(currentDeadline);
         returnRequest.setHandoverDeadline(newDeadline);
         returnRequest.setExtensionReason(request.getExtensionReason().trim());
+        // Đặt lại dấu vết đã nhắc nhở về null vì vừa cấp hạn chót mới (+3 ngày),
+        // cho phép scheduler gửi lại 1 thông báo nhắc nhở trước hạn mới 1 ngày (Tình huống 16, 30).
+        returnRequest.setHandoverReminderSentAt(null);
 
         ReturnRequest saved = returnRequestRepository.save(returnRequest);
         publishStatusEvent(saved, "HANDOVER_EXTENDED", saved.getExtensionReason(), now);
@@ -650,6 +665,196 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
         }
         ReturnRequest saved = returnRequestRepository.save(returnRequest);
         return returnRequestMapper.toReturnRequestResponse(saved);
+    }
+
+    /**
+     * Chức năng: Lấy danh sách đầy đủ ngày nghỉ lễ áp dụng cho năm được chọn, gồm 6 ngày lễ mặc định
+     * của hệ thống (tự động quy đổi Giỗ Tổ 10/03 Âm lịch) kết hợp với các ngày lễ mở rộng trong DB.
+     *
+     * @param year Đầu vào: Năm dương lịch cần tra cứu (nếu {@code null} lấy năm hiện tại theo giờ Việt Nam).
+     * @return Đầu ra: Danh sách {@link ReturnRequestHolidayResponse} sắp xếp tăng dần theo ngày nghỉ.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<ReturnRequestHolidayResponse> getHolidaysByYear(Integer year) {
+        // Mặc định lấy năm hiện tại theo đồng hồ Việt Nam nếu Admin chưa truyền tham số ?year=.
+        int targetYear = year != null ? year : LocalDate.now(returnRequestClock).getYear();
+        LocalDate startOfYear = LocalDate.of(targetYear, 1, 1);
+        LocalDate endOfYear = LocalDate.of(targetYear, 12, 31);
+
+        // Dùng Map theo holidayDate để ghép 6 ngày mặc định và ngày Admin lưu trong DB, tránh hiển thị trùng nếu DB cũ lỡ có cùng ngày.
+        Map<LocalDate, ReturnRequestHolidayResponse> byDate = new LinkedHashMap<>();
+        for (ReturnRequestHolidayResponse defaultHoliday : returnRefundCalculator.getDefaultHolidaysForYear(targetYear)) {
+            byDate.put(defaultHoliday.getHolidayDate(), defaultHoliday);
+        }
+
+        List<ReturnRequestHoliday> customHolidays =
+                returnRequestHolidayRepository.findAllByHolidayDateBetweenOrderByHolidayDateAsc(startOfYear, endOfYear);
+        for (ReturnRequestHoliday custom : customHolidays) {
+            // Chỉ đưa vào danh sách ngày do Admin quản lý nếu ngày đó không trùng với 6 ngày mặc định đang được khóa bảo vệ.
+            byDate.putIfAbsent(custom.getHolidayDate(), toHolidayResponse(custom));
+        }
+
+        List<ReturnRequestHolidayResponse> result = new ArrayList<>(byDate.values());
+        // Sắp xếp lại tăng dần theo ngày dương lịch vì ngày mặc định và ngày Admin thêm được nạp từ hai nguồn khác nhau.
+        result.sort(Comparator.comparing(ReturnRequestHolidayResponse::getHolidayDate));
+        return result;
+    }
+
+    /**
+     * Chức năng: Thêm mới một ngày nghỉ lễ mở rộng (Tết Âm lịch, nghỉ bù, ngày liền kề 02/09...) vào bảng cấu hình.
+     *
+     * @param request Đầu vào: DTO chứa ngày nghỉ lễ, tên hiển thị và mô tả tùy chọn.
+     * @return Đầu ra: {@link ReturnRequestHolidayResponse} đã lưu trong DB với cờ {@code isDefault = false}.
+     */
+    @Override
+    @Transactional
+    public ReturnRequestHolidayResponse createHoliday(ReturnRequestHolidayRequest request) {
+        LocalDate holidayDate = request.getHolidayDate();
+        // Chặn tạo đè lên 6 ngày mặc định để bảo đảm các ngày lễ gốc luôn cố định và không phụ thuộc bản ghi DB.
+        if (returnRefundCalculator.isDefaultHoliday(holidayDate)) {
+            throw new AppException(ReturnRequestErrorCode.DEFAULT_HOLIDAY_IMMUTABLE);
+        }
+        // Chặn trùng ngày nghỉ lễ trong DB nhằm giữ toàn vẹn ràng buộc duy nhất trước khi insert.
+        if (returnRequestHolidayRepository.existsByHolidayDate(holidayDate)) {
+            throw new AppException(ReturnRequestErrorCode.HOLIDAY_ALREADY_EXISTS);
+        }
+
+        ReturnRequestHoliday saved = returnRequestHolidayRepository.save(ReturnRequestHoliday.builder()
+                .holidayDate(holidayDate)
+                .name(request.getName().trim())
+                .description(normalizeOptionalText(request.getDescription()))
+                .build());
+        return toHolidayResponse(saved);
+    }
+
+    /**
+     * Chức năng: Cập nhật ngày nghỉ lễ mở rộng do Admin đã thêm trước đó.
+     *
+     * @param id      Đầu vào: Mã ID bản ghi ngày lễ cần cập nhật.
+     * @param request Đầu vào: DTO chứa ngày mới, tên mới và mô tả mới.
+     * @return Đầu ra: {@link ReturnRequestHolidayResponse} sau khi lưu xuống DB.
+     */
+    @Override
+    @Transactional
+    public ReturnRequestHolidayResponse updateHoliday(Long id, ReturnRequestHolidayRequest request) {
+        ReturnRequestHoliday holiday = returnRequestHolidayRepository.findById(id)
+                .orElseThrow(() -> new AppException(ReturnRequestErrorCode.HOLIDAY_NOT_FOUND));
+
+        LocalDate newDate = request.getHolidayDate();
+        // Không cho phép sửa một ngày tùy chỉnh thành trùng với 1 trong 6 ngày lễ mặc định của hệ thống.
+        if (returnRefundCalculator.isDefaultHoliday(newDate)) {
+            throw new AppException(ReturnRequestErrorCode.DEFAULT_HOLIDAY_IMMUTABLE);
+        }
+        // Loại trừ chính ID hiện tại khi kiểm tra trùng ngày để Admin có thể chỉ sửa tên/mô tả mà giữ nguyên ngày cũ.
+        if (returnRequestHolidayRepository.existsByHolidayDateAndIdNot(newDate, id)) {
+            throw new AppException(ReturnRequestErrorCode.HOLIDAY_ALREADY_EXISTS);
+        }
+
+        holiday.setHolidayDate(newDate);
+        holiday.setName(request.getName().trim());
+        holiday.setDescription(normalizeOptionalText(request.getDescription()));
+        ReturnRequestHoliday saved = returnRequestHolidayRepository.save(holiday);
+        return toHolidayResponse(saved);
+    }
+
+    /**
+     * Chức năng: Xóa một ngày nghỉ lễ mở rộng do Admin thêm khỏi DB (không xóa được 6 ngày mặc định vì chúng không có ID trong DB).
+     *
+     * @param id Đầu vào: Mã ID bản ghi ngày lễ cần xóa.
+     */
+    @Override
+    @Transactional
+    public void deleteHoliday(Long id) {
+        ReturnRequestHoliday holiday = returnRequestHolidayRepository.findById(id)
+                .orElseThrow(() -> new AppException(ReturnRequestErrorCode.HOLIDAY_NOT_FOUND));
+        returnRequestHolidayRepository.delete(holiday);
+    }
+
+    /**
+     * Chức năng (Nhánh 3 - Mục 4 Phần V): Ghi nhận nhật ký nhân viên gọi điện / liên hệ khách hàng
+     * và niêm phong lưu kho riêng khi khách chưa phản hồi. Mỗi lần ghi được nối thêm vào nhật ký cũ.
+     *
+     * @param id      Đầu vào: Mã ID phiếu trả hàng cần ghi nhật ký.
+     * @param request Đầu vào: DTO chứa nội dung ghi chú liên hệ.
+     * @return Đầu ra: {@link ReturnRequestResponse} đã cập nhật trường {@code staffContactLog}.
+     */
+    @Override
+    @Transactional
+    public ReturnRequestResponse recordCustomerContactLog(Long id, ReturnRequestContactLogRequest request) {
+        User staff = userService.getCurrentUserEntity();
+        ReturnRequest returnRequest = getLockedReturnRequest(id);
+
+        // Chỉ cho phép ghi nhật ký liên hệ/lưu kho đối với hồ sơ chưa đóng và đang đợi khách phản hồi hoặc đang giữ hàng bị từ chối tại kho.
+        boolean isWaitingCustomerFeedback = returnRequest.getStatus() == ReturnRequestStatus.WAITING_CUSTOMER_FEEDBACK;
+        boolean isRejectedHoldingGoods = returnRequest.getStatus() == ReturnRequestStatus.REJECTED
+                && returnRequest.getReceivedAt() != null;
+        if (returnRequest.getCompletedAt() != null || (!isWaitingCustomerFeedback && !isRejectedHoldingGoods)) {
+            throw new AppException(ReturnRequestErrorCode.RETURN_CONTACT_LOG_NOT_ALLOWED);
+        }
+
+        LocalDateTime now = LocalDateTime.now(returnRequestClock);
+        String staffName = (staff != null && staff.getUsername() != null && !staff.getUsername().isBlank())
+                ? staff.getUsername()
+                : "staff";
+        String entry = String.format("[%s - %s]: %s",
+                now.format(CONTACT_LOG_FORMATTER),
+                staffName,
+                request.getContactNote().trim());
+
+        // Nối tiếp dòng nhật ký mới xuống dưới để bảo toàn toàn bộ lịch sử các lần gọi điện/liên hệ trước đó.
+        String existingLog = returnRequest.getStaffContactLog();
+        String updatedLog = (existingLog == null || existingLog.isBlank())
+                ? entry
+                : existingLog + "\n" + entry;
+        returnRequest.setStaffContactLog(updatedLog);
+
+        ReturnRequest saved = returnRequestRepository.save(returnRequest);
+        publishStatusEvent(saved, "CUSTOMER_CONTACT_LOG_RECORDED", entry, now);
+        return returnRequestMapper.toReturnRequestResponse(saved);
+    }
+
+    /**
+     * Chức năng (Nhánh 3 - Tình huống 21): Lấy danh sách phân trang các hồ sơ đã chạm mốc 30 ngày khách chưa phản hồi
+     * và đang lưu kho riêng để Quản trị viên rà soát định kỳ, tìm phương án liên hệ hỗ trợ.
+     *
+     * @param pageable Đầu vào: Thông tin phân trang kết quả.
+     * @return Đầu ra: {@link Page}&lt;{@link ReturnRequestResponse}&gt; các hồ sơ cần Quản trị viên rà soát.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ReturnRequestResponse> getDormantReviewRequests(Pageable pageable) {
+        return returnRequestRepository.findDormantReviewRequests(pageable)
+                .map(returnRequestMapper::toReturnRequestResponse);
+    }
+
+    /**
+     * Chức năng: Chuyển đổi thực thể {@link ReturnRequestHoliday} sang DTO {@link ReturnRequestHolidayResponse}.
+     *
+     * @param holiday Đầu vào: Bản ghi ngày nghỉ lễ từ DB.
+     * @return Đầu ra: DTO phản hồi với {@code isDefault = false} để giao diện cho phép Sửa/Xóa.
+     */
+    private ReturnRequestHolidayResponse toHolidayResponse(ReturnRequestHoliday holiday) {
+        return ReturnRequestHolidayResponse.builder()
+                .id(holiday.getId())
+                .holidayDate(holiday.getHolidayDate())
+                .name(holiday.getName())
+                .description(holiday.getDescription())
+                .isDefault(false)
+                .build();
+    }
+
+    /**
+     * Chức năng: Chuẩn hóa chuỗi văn bản tùy chọn (cắt khoảng trắng đầu/cuối và chuyển chuỗi rỗng thành {@code null}).
+     *
+     * @param raw Đầu vào: Chuỗi gốc từ request.
+     * @return Đầu ra: Chuỗi đã làm sạch, hoặc {@code null} nếu đầu vào rỗng/chỉ có khoảng trắng.
+     */
+    private String normalizeOptionalText(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        return raw.trim();
     }
 
     /**

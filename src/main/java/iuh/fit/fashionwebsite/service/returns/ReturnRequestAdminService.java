@@ -1,21 +1,28 @@
 package iuh.fit.fashionwebsite.service.returns;
 
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestApproveRequest;
+import iuh.fit.fashionwebsite.dto.request.ReturnRequestContactLogRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestExtendHandoverRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestHandoverRequest;
+import iuh.fit.fashionwebsite.dto.request.ReturnRequestHolidayRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestInspectRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestOverdueNoteRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestReceiveRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestRefundRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestRejectRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestRestockRequest;
+import iuh.fit.fashionwebsite.dto.response.ReturnRequestHolidayResponse;
 import iuh.fit.fashionwebsite.dto.response.ReturnRequestResponse;
 import iuh.fit.fashionwebsite.enums.ReturnRequestStatus;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+
+import java.util.List;
 
 /**
  * Interface tầng Service định nghĩa các nghiệp vụ Trả hàng & Hoàn tiền phía Nhân viên / Quản trị viên (Giai đoạn 3: Bước 2 - Bước 6).
@@ -171,4 +178,71 @@ public interface ReturnRequestAdminService {
     ReturnRequestResponse completeReturnRequest(
             @NotNull(message = "Vui lòng chọn mã yêu cầu trả hàng.")
             @Positive(message = "Mã yêu cầu trả hàng phải lớn hơn 0.") Long id);
+
+    /**
+     * Chức năng: Lấy danh sách ngày nghỉ lễ áp dụng tính SLA theo năm (gồm 6 ngày lễ mặc định bắt buộc
+     * và các ngày lễ mở rộng do Quản trị viên cấu hình thêm trong DB).
+     *
+     * @param year Đầu vào: Năm dương lịch cần xem (tùy chọn; nếu {@code null} lấy năm hiện tại theo giờ Việt Nam).
+     * @return Đầu ra: Danh sách {@link ReturnRequestHolidayResponse} đã sắp xếp tăng dần theo ngày.
+     */
+    List<ReturnRequestHolidayResponse> getHolidaysByYear(
+            @Min(value = 2000, message = "Năm cấu hình ngày lễ phải từ 2000 trở lên.")
+            @Max(value = 2100, message = "Năm cấu hình ngày lễ không được vượt quá 2100.") Integer year);
+
+    /**
+     * Chức năng: Thêm mới một ngày nghỉ lễ mở rộng (Tết Âm lịch, ngày nghỉ bù, ngày liền kề 02/09...) vào DB.
+     *
+     * @param request Đầu vào: DTO chứa ngày nghỉ, tên ngày lễ và mô tả tùy chọn.
+     * @return Đầu ra: {@link ReturnRequestHolidayResponse} vừa lưu với {@code isDefault = false}.
+     */
+    ReturnRequestHolidayResponse createHoliday(
+            @NotNull(message = "Vui lòng nhập thông tin ngày nghỉ lễ.")
+            @Valid ReturnRequestHolidayRequest request);
+
+    /**
+     * Chức năng: Cập nhật thông tin một ngày nghỉ lễ mở rộng do Quản trị viên đã tạo trong DB.
+     *
+     * @param id      Đầu vào: Mã ID bản ghi ngày lễ cần sửa (> 0).
+     * @param request Đầu vào: DTO chứa thông tin ngày nghỉ lễ mới.
+     * @return Đầu ra: {@link ReturnRequestHolidayResponse} sau khi cập nhật.
+     */
+    ReturnRequestHolidayResponse updateHoliday(
+            @NotNull(message = "Vui lòng chọn mã ngày nghỉ lễ.")
+            @Positive(message = "Mã ngày nghỉ lễ phải lớn hơn 0.") Long id,
+            @NotNull(message = "Vui lòng nhập thông tin ngày nghỉ lễ.")
+            @Valid ReturnRequestHolidayRequest request);
+
+    /**
+     * Chức năng: Xóa một ngày nghỉ lễ mở rộng do Quản trị viên đã tạo khỏi DB (không áp dụng với 6 ngày lễ mặc định).
+     *
+     * @param id Đầu vào: Mã ID bản ghi ngày lễ cần xóa (> 0).
+     */
+    void deleteHoliday(
+            @NotNull(message = "Vui lòng chọn mã ngày nghỉ lễ.")
+            @Positive(message = "Mã ngày nghỉ lễ phải lớn hơn 0.") Long id);
+
+    /**
+     * Chức năng (Mục 4 - Phần V): Ghi nhận nhật ký nhân viên gọi điện / liên hệ khách hàng và niêm phong lưu kho riêng
+     * khi khách hàng chưa phản hồi. Nội dung mới được nối thêm vào nhật ký hiện có để không làm mất lịch sử liên hệ.
+     *
+     * @param id      Đầu vào: Mã ID phiếu trả hàng (> 0).
+     * @param request Đầu vào: DTO chứa nội dung ghi chú liên hệ bắt buộc.
+     * @return Đầu ra: {@link ReturnRequestResponse} đã cập nhật trường {@code staffContactLog}.
+     */
+    ReturnRequestResponse recordCustomerContactLog(
+            @NotNull(message = "Vui lòng chọn mã yêu cầu trả hàng.")
+            @Positive(message = "Mã yêu cầu trả hàng phải lớn hơn 0.") Long id,
+            @NotNull(message = "Vui lòng nhập nội dung nhật ký liên hệ.")
+            @Valid ReturnRequestContactLogRequest request);
+
+    /**
+     * Chức năng (Tình huống 21): Lấy danh sách phân trang các hồ sơ đã chạm mốc 30 ngày khách chưa phản hồi
+     * và đang lưu kho riêng để Quản trị viên rà soát định kỳ.
+     *
+     * @param pageable Đầu vào: Thông tin phân trang kết quả.
+     * @return Đầu ra: {@link Page}&lt;{@link ReturnRequestResponse}&gt; các hồ sơ cần Quản trị viên rà soát.
+     */
+    Page<ReturnRequestResponse> getDormantReviewRequests(
+            @NotNull(message = "Thông tin phân trang không được để trống.") Pageable pageable);
 }

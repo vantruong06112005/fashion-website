@@ -38,10 +38,14 @@ public class ReturnRequestResponse {
     private String extensionReason;
     private LocalDateTime handedOverAt;
     private LocalDateTime handedOverToShipperAt;
+    private LocalDateTime handoverReminderSentAt;
     private LocalDateTime receivedAt;
     private LocalDateTime inspectedAt;
     private LocalDateTime inspectionResultSentAt;
     private LocalDateTime customerRespondedAt;
+    private LocalDateTime feedbackReminderSentAt;
+    private LocalDateTime dormantReviewNotifiedAt;
+    private String staffContactLog;
     private LocalDateTime refundEligibleAt;
     private LocalDateTime refundedAt;
     private LocalDateTime resolvedAt;
