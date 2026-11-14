@@ -93,6 +93,11 @@ public class ReturnRequest extends BaseEntity {
     @Column(name = "handed_over_at")
     private LocalDateTime handedOverAt;
 
+    // Thời điểm hệ thống đã gửi thông báo nhắc nhở bàn giao kiện hàng trước hạn chót 1 ngày
+    // (dùng để chống gửi trùng thông báo và giữ dấu vết đối soát khi quá hạn theo Tình huống 17).
+    @Column(name = "handover_reminder_sent_at")
+    private LocalDateTime handoverReminderSentAt;
+
     // Thời điểm kho ký nhận được hàng hoàn gửi về (Bước 4).
     @Column(name = "received_at")
     private LocalDateTime receivedAt;
@@ -108,6 +113,18 @@ public class ReturnRequest extends BaseEntity {
     // Thời điểm gần nhất khách hàng phản hồi (nhập STK hoặc xác nhận phương án).
     @Column(name = "customer_responded_at")
     private LocalDateTime customerRespondedAt;
+
+    // Thời điểm hệ thống đã gửi nhắc nhở khi khách chưa phản hồi quá 3 ngày làm việc (Mục 4 - Phần V).
+    @Column(name = "feedback_reminder_sent_at")
+    private LocalDateTime feedbackReminderSentAt;
+
+    // Thời điểm hệ thống đánh dấu mốc 30 ngày để Quản lý rà soát hồ sơ đang lưu kho riêng (Tình huống 21).
+    @Column(name = "dormant_review_notified_at")
+    private LocalDateTime dormantReviewNotifiedAt;
+
+    // Nhật ký nhân viên gọi điện liên hệ khách và ghi chú niêm phong lưu kho riêng (Mục 4 - Phần V).
+    @Column(name = "staff_contact_log", length = 4000)
+    private String staffContactLog;
 
     // Thời điểm phiếu đủ điều kiện chuyển sang chờ hoàn tiền (WAITING_REFUND).
     @Column(name = "refund_eligible_at")

@@ -138,4 +138,81 @@ class ReturnRefundCalculatorTest {
                 friday16h, Set.of(LocalDate.of(2026, 10, 26)));
         assertEquals(LocalDateTime.of(2026, 10, 28, 17, 0), withExtraHoliday);
     }
+
+    /**
+     * Chức năng: Kiểm thử hàm tính hạn tổng quát theo N ngày làm việc ({@code calculateWorkingDaysDeadline})
+     * cho mốc 1 ngày làm việc, mốc 3 ngày làm việc và các tham số biên.
+     * <p>
+     * Đầu vào / ngữ cảnh giả lập:
+     * 1) Mốc Thứ Hai 26/10/2026 15:00 với N = 1 ngày làm việc;
+     * 2) Mốc Thứ Tư 29/04/2026 10:00 với N = 1 (vướng lễ 30/04, 01/05 và cuối tuần 02/05, 03/05);
+     * 3) Mốc Thứ Sáu 23/10/2026 16:00 với N = 3 ngày làm việc;
+     * 4) Tham số biên {@code startTime = null} hoặc {@code workingDays = 0}.
+     * <p>
+     * Đầu ra / kỳ vọng: Trả về chính xác lần lượt {@code 27/10/2026 17:00}, {@code 04/05/2026 17:00},
+     * {@code 28/10/2026 17:00}, {@code null} và giữ nguyên {@code friday16h}.
+     */
+    @Test
+    void calculatesNWorkingDaysDeadlineForOneAndMultipleWorkingDays() {
+        // Tình huống 31: Kiểm xong thứ Hai 26/10/2026 -> hạn gửi kết quả là 17:00 thứ Ba 27/10/2026 (không tính ngày kiểm).
+        LocalDateTime monday15h = LocalDateTime.of(2026, 10, 26, 15, 0);
+        assertEquals(LocalDateTime.of(2026, 10, 27, 17, 0),
+                calculator.calculateWorkingDaysDeadline(monday15h, 1, Set.of()));
+
+        // Kiểm tra bỏ qua liên tiếp cả ngày lễ cố định (30/04, 01/05) lẫn cuối tuần (02/05, 03/05) khi đếm 1 ngày làm việc.
+        LocalDateTime beforeHolidays = LocalDateTime.of(2026, 4, 29, 10, 0);
+        assertEquals(LocalDateTime.of(2026, 5, 4, 17, 0),
+                calculator.calculateWorkingDaysDeadline(beforeHolidays, 1, Set.of()));
+
+        // Kiểm chứng hàm hoạt động đúng cho N > 2 (ví dụ hạn 3 ngày làm việc từ thứ Sáu -> T2, T3, T4 lúc 17:00).
+        LocalDateTime friday16h = LocalDateTime.of(2026, 10, 23, 16, 0);
+        assertEquals(LocalDateTime.of(2026, 10, 28, 17, 0),
+                calculator.calculateWorkingDaysDeadline(friday16h, 3, Set.of()));
+
+        // Xác nhận bảo vệ biên: truyền null hoặc workingDays <= 0 không gây lỗi và trả lại nguyên mốc đầu vào.
+        assertNull(calculator.calculateWorkingDaysDeadline(null, 2, Set.of()));
+        assertEquals(friday16h, calculator.calculateWorkingDaysDeadline(friday16h, 0, Set.of()));
+    }
+
+    /**
+     * Chức năng: Kiểm thử tự động quy đổi Giỗ Tổ Hùng Vương (mùng 10/03 Âm lịch) sang Dương lịch qua nhiều năm
+     * và xác minh bộ 6 ngày lễ mặc định luôn được loại trừ tự động khi tính ngày làm việc.
+     * <p>
+     * Đầu vào / ngữ cảnh giả lập: Kiểm tra {@code resolveHungKingsMemorialDay} cho các năm 2024–2030,
+     * kiểm tra {@code getDefaultHolidaysForYear(2026)} và {@code isWorkingDay} vào Thứ Sáu 16/04/2027
+     * (trùng 10/03 ÂL năm 2027) với tập ngày lễ mở rộng rỗng.
+     * <p>
+     * Đầu ra / kỳ vọng: Khớp tuyệt đối ngày Dương lịch 10/03 ÂL từng năm; đủ 6 ngày mặc định sắp xếp tăng dần;
+     * và ngày 16/04/2027 tự động bị coi là ngày nghỉ ({@code isWorkingDay == false}) không cần thêm vào DB.
+     */
+    @Test
+    void resolvesHungKingsMemorialDayAndSixDefaultHolidaysAutomaticallyAcrossYears() {
+        // Đối chiếu ngày Dương lịch thực tế của mùng 10/03 Âm lịch qua 7 năm liên tiếp.
+        assertEquals(LocalDate.of(2024, 4, 18), calculator.resolveHungKingsMemorialDay(2024));
+        assertEquals(LocalDate.of(2025, 4, 7), calculator.resolveHungKingsMemorialDay(2025));
+        assertEquals(LocalDate.of(2026, 4, 26), calculator.resolveHungKingsMemorialDay(2026));
+        assertEquals(LocalDate.of(2027, 4, 16), calculator.resolveHungKingsMemorialDay(2027));
+        assertEquals(LocalDate.of(2028, 4, 4), calculator.resolveHungKingsMemorialDay(2028));
+        assertEquals(LocalDate.of(2029, 4, 23), calculator.resolveHungKingsMemorialDay(2029));
+        assertEquals(LocalDate.of(2030, 4, 12), calculator.resolveHungKingsMemorialDay(2030));
+
+        // Đảm bảo bộ 6 ngày lễ mặc định năm 2026 trả về đủ và đúng thứ tự thời gian.
+        var defaults2026 = calculator.getDefaultHolidaysForYear(2026);
+        assertEquals(6, defaults2026.size());
+        assertEquals(List.of(
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 4, 26),
+                LocalDate.of(2026, 4, 30),
+                LocalDate.of(2026, 5, 1),
+                LocalDate.of(2026, 9, 2),
+                LocalDate.of(2026, 11, 24)
+        ), defaults2026.stream().map(h -> h.getHolidayDate()).toList());
+        assertTrue(defaults2026.stream().allMatch(h -> Boolean.TRUE.equals(h.getIsDefault())));
+
+        // Thứ Sáu 16/04/2027 là 10/03 ÂL -> tự động tính là ngày nghỉ dù extraHolidays rỗng.
+        assertFalse(calculator.isWorkingDay(LocalDate.of(2027, 4, 16), Set.of()));
+        // Nếu nhận việc Thứ Năm 15/04/2027 thì bỏ qua Giỗ Tổ 16/04, T7 17/04, CN 18/04 -> hạn 2 ngày là 17:00 Thứ Ba 20/04/2027.
+        assertEquals(LocalDateTime.of(2027, 4, 20, 17, 0),
+                calculator.calculateTwoWorkingDaysDeadline(LocalDateTime.of(2027, 4, 15, 10, 0), Set.of()));
+    }
 }

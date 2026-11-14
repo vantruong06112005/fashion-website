@@ -1,6 +1,7 @@
 package iuh.fit.fashionwebsite.controller.returns;
 
 import iuh.fit.fashionwebsite.config.SecurityConfig;
+import iuh.fit.fashionwebsite.dto.response.ReturnRequestHolidayResponse;
 import iuh.fit.fashionwebsite.dto.response.ReturnRequestResponse;
 import iuh.fit.fashionwebsite.enums.ReturnRequestStatus;
 import iuh.fit.fashionwebsite.exception.AppException;
@@ -21,6 +22,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -28,9 +30,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
@@ -296,5 +300,615 @@ class ReturnRequestAdminControllerTest {
         mvc.perform(patch("/admin/returns/3/complete")
                         .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk());
+    }
+
+    /**
+     * Kịch bản kiểm thử bảo mật bổ sung cho nhóm API admin/kho:
+     * Chưa đăng nhập bị chặn 401 và khách hàng thường (ROLE_CUSTOMER) bị từ chối 403 trên các nhóm endpoint còn lại.
+     */
+    @Test
+    void adminEndpointsRejectUnauthenticatedAndCustomerRoles() throws Exception {
+        mvc.perform(get("/admin/returns"))
+                .andExpect(status().isUnauthorized());
+
+        mvc.perform(get("/admin/returns/1")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER"))))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(patch("/admin/returns/1/approve")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(patch("/admin/returns/1/inspect")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"returnRequestItemId\":1,\"acceptedQuantity\":1}]}"))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(post("/admin/returns/1/restock")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"returnRequestItemId\":1,\"restockQuantity\":1}]}"))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(patch("/admin/returns/1/complete")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER"))))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(returnRequestAdminService);
+    }
+
+    /**
+     * Kịch bản API 1 (GET /admin/returns): kiểm tra ràng buộc phân trang (page >= 0, size 1..100)
+     * và chuyển tiếp đầy đủ tham số lọc (status, orderCode, isOverdue, Pageable) xuống service với vai trò STAFF.
+     */
+    @Test
+    void searchReturnRequestsValidatesQueryParamsAndDelegatesForStaff() throws Exception {
+        mvc.perform(get("/admin/returns")
+                        .param("page", "-1")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF"))))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(get("/admin/returns")
+                        .param("size", "0")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF"))))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(get("/admin/returns")
+                        .param("size", "101")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF"))))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(returnRequestAdminService);
+
+        when(returnRequestAdminService.searchReturnRequests(
+                eq(ReturnRequestStatus.PENDING_APPROVAL), eq("ORD-99"), eq(true), any()))
+                .thenReturn(new PageImpl<>(
+                        List.of(ReturnRequestResponse.builder().id(9L)
+                                .status(ReturnRequestStatus.PENDING_APPROVAL).build()),
+                        PageRequest.of(1, 10), 11));
+
+        mvc.perform(get("/admin/returns")
+                        .param("status", "PENDING_APPROVAL")
+                        .param("orderCode", "ORD-99")
+                        .param("isOverdue", "true")
+                        .param("page", "1")
+                        .param("size", "10")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].id").value(9))
+                .andExpect(jsonPath("$.data.totalElements").value(11));
+
+        org.mockito.ArgumentCaptor<org.springframework.data.domain.Pageable> pageableCaptor =
+                org.mockito.ArgumentCaptor.forClass(org.springframework.data.domain.Pageable.class);
+        verify(returnRequestAdminService).searchReturnRequests(
+                eq(ReturnRequestStatus.PENDING_APPROVAL), eq("ORD-99"), eq(true), pageableCaptor.capture());
+        org.junit.jupiter.api.Assertions.assertEquals(1, pageableCaptor.getValue().getPageNumber());
+        org.junit.jupiter.api.Assertions.assertEquals(10, pageableCaptor.getValue().getPageSize());
+    }
+
+    /**
+     * Kịch bản API 2 (GET /admin/returns/{id}): từ chối id không dương (400) và ánh xạ mã lỗi 404 khi không tìm thấy phiếu.
+     */
+    @Test
+    void getReturnRequestByIdValidatesPositivePathAndMapsNotFound() throws Exception {
+        mvc.perform(get("/admin/returns/0")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF"))))
+                .andExpect(status().isBadRequest());
+
+        when(returnRequestAdminService.getReturnRequestById(999L))
+                .thenThrow(new AppException(ReturnRequestErrorCode.RETURN_REQUEST_NOT_FOUND));
+
+        mvc.perform(get("/admin/returns/999")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(404))
+                .andExpect(jsonPath("$.message").value(ReturnRequestErrorCode.RETURN_REQUEST_NOT_FOUND.getMessage()));
+    }
+
+    /**
+     * Kịch bản API 3 (PATCH /admin/returns/{id}/approve): cho phép body rỗng tùy chọn,
+     * chặn path id <= 0, chặn ghi chú vượt 1000 ký tự và chặn field lạ qua @JsonAnySetter.
+     */
+    @Test
+    void approveReturnRequestValidatesPathUnknownFieldsAndMaxLength() throws Exception {
+        when(returnRequestAdminService.approveReturnRequest(eq(10L), any()))
+                .thenReturn(ReturnRequestResponse.builder().id(10L)
+                        .status(ReturnRequestStatus.WAITING_FOR_RETURN_DELIVERY).build());
+
+        mvc.perform(patch("/admin/returns/10/approve")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("WAITING_FOR_RETURN_DELIVERY"));
+
+        mvc.perform(patch("/admin/returns/0/approve")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(patch("/admin/returns/10/approve")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"extraField\":\"not-allowed\"}"))
+                .andExpect(status().isBadRequest());
+
+        String tooLongNote = "a".repeat(1001);
+        mvc.perform(patch("/admin/returns/10/approve")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"instructionNote\":\"" + tooLongNote + "\"}"))
+                .andExpect(status().isBadRequest());
+
+        verify(returnRequestAdminService, times(1)).approveReturnRequest(eq(10L), any());
+    }
+
+    /**
+     * Kịch bản API 4 (PATCH /admin/returns/{id}/reject): từ chối path id <= 0, lý do rỗng, vượt 1000 ký tự và field lạ.
+     */
+    @Test
+    void rejectReturnRequestValidatesReasonAndUnknownFields() throws Exception {
+        mvc.perform(patch("/admin/returns/0/reject")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rejectionReason\":\"Không đạt\"}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(patch("/admin/returns/10/reject")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rejectionReason\":\"   \"}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(patch("/admin/returns/10/reject")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rejectionReason\":\"Không hợp lệ\",\"unknown\":true}"))
+                .andExpect(status().isBadRequest());
+
+        String tooLongReason = "b".repeat(1001);
+        mvc.perform(patch("/admin/returns/10/reject")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rejectionReason\":\"" + tooLongReason + "\"}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(returnRequestAdminService);
+    }
+
+    /**
+     * Kịch bản API 5 & 6 (PATCH handover & extend-handover):
+     * kiểm tra handover cho phép body tùy chỉnh handedOverAt nhưng chặn note > 500 và field lạ;
+     * extend-handover bắt buộc extensionReason không rỗng, không vượt 500 ký tự và chặn field lạ.
+     */
+    @Test
+    void handoverAndExtendHandoverValidateBodyAndUnknownFields() throws Exception {
+        LocalDateTime handedOverAt = LocalDateTime.of(2026, 10, 25, 10, 30);
+        when(returnRequestAdminService.markHandedOver(eq(12L), any()))
+                .thenReturn(ReturnRequestResponse.builder().id(12L)
+                        .status(ReturnRequestStatus.WAITING_FOR_RETURN_DELIVERY)
+                        .handedOverAt(handedOverAt).build());
+
+        mvc.perform(patch("/admin/returns/12/handover")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"handedOverAt\":\"2026-10-25T10:30:00\",\"note\":\"Khách gửi qua GHN\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("WAITING_FOR_RETURN_DELIVERY"));
+
+        org.mockito.ArgumentCaptor<iuh.fit.fashionwebsite.dto.request.ReturnRequestHandoverRequest> handoverCaptor =
+                org.mockito.ArgumentCaptor.forClass(iuh.fit.fashionwebsite.dto.request.ReturnRequestHandoverRequest.class);
+        verify(returnRequestAdminService).markHandedOver(eq(12L), handoverCaptor.capture());
+        org.junit.jupiter.api.Assertions.assertEquals(handedOverAt, handoverCaptor.getValue().getHandedOverAt());
+
+        mvc.perform(patch("/admin/returns/12/handover")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"note\":\"" + "c".repeat(501) + "\"}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(patch("/admin/returns/12/handover")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"badKey\":1}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(patch("/admin/returns/12/extend-handover")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"extensionReason\":\"\"}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(patch("/admin/returns/12/extend-handover")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"extensionReason\":\"Xin thêm thời gian\",\"unexpected\":123}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(patch("/admin/returns/12/extend-handover")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"extensionReason\":\"" + "d".repeat(501) + "\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * Kịch bản API 7 (PATCH /admin/returns/{id}/receive):
+     * xác nhận nhận hàng tại kho với thời điểm receivedAt tùy chỉnh; chặn id <= 0, note > 500 và field lạ.
+     */
+    @Test
+    void receiveAtWarehouseValidatesOptionalBodyNoteLengthAndUnknownFields() throws Exception {
+        LocalDateTime receivedAt = LocalDateTime.of(2026, 10, 26, 9, 0);
+        when(returnRequestAdminService.receiveAtWarehouse(eq(15L), any()))
+                .thenReturn(ReturnRequestResponse.builder().id(15L)
+                        .status(ReturnRequestStatus.INSPECTING)
+                        .receivedAt(receivedAt).build());
+
+        mvc.perform(patch("/admin/returns/15/receive")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"receivedAt\":\"2026-10-26T09:00:00\",\"note\":\"Kiện nguyên vẹn\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("INSPECTING"));
+
+        org.mockito.ArgumentCaptor<iuh.fit.fashionwebsite.dto.request.ReturnRequestReceiveRequest> receiveCaptor =
+                org.mockito.ArgumentCaptor.forClass(iuh.fit.fashionwebsite.dto.request.ReturnRequestReceiveRequest.class);
+        verify(returnRequestAdminService).receiveAtWarehouse(eq(15L), receiveCaptor.capture());
+        org.junit.jupiter.api.Assertions.assertEquals(receivedAt, receiveCaptor.getValue().getReceivedAt());
+
+        mvc.perform(patch("/admin/returns/0/receive")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(patch("/admin/returns/15/receive")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"note\":\"" + "e".repeat(501) + "\"}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(patch("/admin/returns/15/receive")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"unknownField\":\"x\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * Kịch bản API 8 (PATCH /admin/returns/{id}/inspect):
+     * hỗ trợ bí danh @JsonAlias("id") cho returnRequestItemId và chặn items rỗng,
+     * số lượng âm, id item <= 0, phí ship âm hoặc field lạ ở cấp item/root.
+     */
+    @Test
+    void inspectReturnRequestSupportsIdAliasAndValidatesConstraints() throws Exception {
+        when(returnRequestAdminService.inspectReturnRequest(eq(20L), any()))
+                .thenReturn(ReturnRequestResponse.builder().id(20L).status(ReturnRequestStatus.WAITING_REFUND).build());
+
+        // Kiểm tra frontend gửi "id" thay cho "returnRequestItemId" vẫn bind đúng nhờ @JsonAlias("id")
+        mvc.perform(patch("/admin/returns/20/inspect")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"id\":101,\"acceptedQuantity\":2,\"inspectionNote\":\"Đủ điều kiện\"}],\"reclassifyToChangeOfMind\":false,\"returnShippingFee\":0}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("WAITING_REFUND"));
+
+        org.mockito.ArgumentCaptor<iuh.fit.fashionwebsite.dto.request.ReturnRequestInspectRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(iuh.fit.fashionwebsite.dto.request.ReturnRequestInspectRequest.class);
+        verify(returnRequestAdminService).inspectReturnRequest(eq(20L), captor.capture());
+        org.junit.jupiter.api.Assertions.assertEquals(101L, captor.getValue().getItems().get(0).getReturnRequestItemId());
+
+        mvc.perform(patch("/admin/returns/20/inspect")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[]}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(patch("/admin/returns/20/inspect")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"returnRequestItemId\":101,\"acceptedQuantity\":-1}]}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(patch("/admin/returns/20/inspect")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"returnRequestItemId\":0,\"acceptedQuantity\":1}]}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(patch("/admin/returns/20/inspect")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"returnRequestItemId\":101,\"acceptedQuantity\":1}],\"returnShippingFee\":-5000}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(patch("/admin/returns/20/inspect")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"returnRequestItemId\":101,\"acceptedQuantity\":1,\"extraItem\":1}]}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * Kịch bản API 9 & 10 (POST /refund & POST /restock):
+     * kiểm tra mã giao dịch hoàn tiền bắt buộc (<= 100 ký tự), ảnh & ghi chú giới hạn độ dài, chặn field lạ,
+     * đồng thời xác nhận /restock hỗ trợ @JsonAlias("id") và chặn items rỗng, số lượng âm hoặc field lạ.
+     */
+    @Test
+    void refundAndRestockValidatePayloadAliasAndUnknownFields() throws Exception {
+        mvc.perform(post("/admin/returns/25/refund")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refundTransactionCode\":\"  \"}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(post("/admin/returns/25/refund")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refundTransactionCode\":\"" + "R".repeat(101) + "\"}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(post("/admin/returns/25/refund")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refundTransactionCode\":\"RF-25\",\"refundProofImageUrl\":\"" + "u".repeat(256) + "\"}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(post("/admin/returns/25/refund")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refundTransactionCode\":\"RF-25\",\"extra\":\"bad\"}"))
+                .andExpect(status().isBadRequest());
+
+        LocalDateTime restockedAt = LocalDateTime.of(2026, 10, 27, 8, 0);
+        when(returnRequestAdminService.restockReturnItems(eq(25L), any()))
+                .thenReturn(ReturnRequestResponse.builder().id(25L)
+                        .status(ReturnRequestStatus.REFUNDED).restockedAt(restockedAt).build());
+
+        mvc.perform(post("/admin/returns/25/restock")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"id\":501,\"restockQuantity\":2,\"note\":\"Còn nguyên tem\"}]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.restockedAt").exists());
+
+        org.mockito.ArgumentCaptor<iuh.fit.fashionwebsite.dto.request.ReturnRequestRestockRequest> restockCaptor =
+                org.mockito.ArgumentCaptor.forClass(iuh.fit.fashionwebsite.dto.request.ReturnRequestRestockRequest.class);
+        verify(returnRequestAdminService).restockReturnItems(eq(25L), restockCaptor.capture());
+        org.junit.jupiter.api.Assertions.assertEquals(501L, restockCaptor.getValue().getItems().get(0).getReturnRequestItemId());
+
+        mvc.perform(post("/admin/returns/25/restock")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[]}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(post("/admin/returns/25/restock")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"returnRequestItemId\":501,\"restockQuantity\":-1}]}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(post("/admin/returns/25/restock")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"returnRequestItemId\":501,\"restockQuantity\":1}],\"extra\":true}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * Kịch bản API 11 & 12 (PATCH /overdue-note & PATCH /complete):
+     * kiểm tra overdueReason/estimatedCompletionAt bắt buộc và field lạ trên overdue-note;
+     * kiểm tra path id <= 0, quyền STAFF và ánh xạ lỗi 409 RETURN_NOT_COMPLETABLE trên complete.
+     */
+    @Test
+    void overdueNoteAndCompleteValidateInputsAndMapServiceErrors() throws Exception {
+        mvc.perform(patch("/admin/returns/30/overdue-note")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"overdueReason\":\"  \",\"estimatedCompletionAt\":\"2026-10-30T17:00:00\"}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(patch("/admin/returns/30/overdue-note")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"overdueReason\":\"Quá tải kho\"}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(patch("/admin/returns/30/overdue-note")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"overdueReason\":\"Quá tải kho\",\"estimatedCompletionAt\":\"2026-10-30T17:00:00\",\"extra\":1}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(patch("/admin/returns/0/complete")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF"))))
+                .andExpect(status().isBadRequest());
+
+        when(returnRequestAdminService.completeReturnRequest(30L))
+                .thenReturn(ReturnRequestResponse.builder().id(30L).status(ReturnRequestStatus.REFUNDED).build());
+
+        mvc.perform(patch("/admin/returns/30/complete")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("REFUNDED"));
+
+        when(returnRequestAdminService.completeReturnRequest(31L))
+                .thenThrow(new AppException(ReturnRequestErrorCode.RETURN_NOT_COMPLETABLE));
+
+        mvc.perform(patch("/admin/returns/31/complete")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(409))
+                .andExpect(jsonPath("$.message").value(ReturnRequestErrorCode.RETURN_NOT_COMPLETABLE.getMessage()));
+    }
+
+    /**
+     * Chức năng: Kiểm thử 4 API cấu hình ngày nghỉ lễ SLA của Admin ({@code GET/POST/PUT/DELETE /admin/returns/holidays}).
+     * <p>
+     * Đầu vào / ngữ cảnh giả lập:
+     * - Khách hàng ({@code ROLE_CUSTOMER}) gọi {@code GET /admin/returns/holidays};
+     * - Admin gửi payload thiếu tên hoặc chứa trường lạ lên {@code POST /admin/returns/holidays};
+     * - Admin gọi đầy đủ 4 thao tác xem theo năm, thêm mới, cập nhật và xóa ngày lễ mở rộng.
+     * <p>
+     * Đầu ra / kỳ vọng: Khách hàng bị chặn 403; payload không hợp lệ trả 400; Admin xem/cập nhật/xóa nhận 200 OK
+     * và tạo mới nhận 201 Created, ánh xạ đúng lỗi 400 {@code DEFAULT_HOLIDAY_IMMUTABLE}.
+     */
+    @Test
+    void holidayEndpointsEnforceAuthValidateInputsAndMapServiceResponses() throws Exception {
+        // Chặn ROLE_CUSTOMER truy cập API cấu hình ngày lễ nội bộ.
+        mvc.perform(get("/admin/returns/holidays")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER"))))
+                .andExpect(status().isForbidden());
+
+        // Chặn field lạ (@JsonAnySetter) và tên ngày lễ trống khi tạo mới.
+        mvc.perform(post("/admin/returns/holidays")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"holidayDate\":\"2026-02-17\",\"name\":\"Tết\",\"isDefault\":true}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(post("/admin/returns/holidays")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"holidayDate\":\"2026-02-17\",\"name\":\"   \"}"))
+                .andExpect(status().isBadRequest());
+
+        // GET theo năm trả về cả ngày mặc định lẫn ngày Admin thêm.
+        when(returnRequestAdminService.getHolidaysByYear(2026)).thenReturn(List.of(
+                ReturnRequestHolidayResponse.builder()
+                        .holidayDate(LocalDate.of(2026, 4, 26))
+                        .name("Giỗ Tổ Hùng Vương (10/03 Âm lịch)")
+                        .isDefault(true)
+                        .build()
+        ));
+        mvc.perform(get("/admin/returns/holidays").param("year", "2026")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].isDefault").value(true));
+
+        // POST tạo ngày lễ mới hợp lệ trả 201 Created.
+        when(returnRequestAdminService.createHoliday(any())).thenReturn(ReturnRequestHolidayResponse.builder()
+                .id(12L)
+                .holidayDate(LocalDate.of(2026, 2, 17))
+                .name("Mùng 1 Tết Âm lịch")
+                .isDefault(false)
+                .build());
+        mvc.perform(post("/admin/returns/holidays")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"holidayDate\":\"2026-02-17\",\"name\":\"Mùng 1 Tết Âm lịch\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code").value(201))
+                .andExpect(jsonPath("$.data.id").value(12));
+
+        // PUT cập nhật ngày lễ và ánh xạ lỗi DEFAULT_HOLIDAY_IMMUTABLE thành 400 Bad Request.
+        when(returnRequestAdminService.updateHoliday(eq(12L), any())).thenReturn(ReturnRequestHolidayResponse.builder()
+                .id(12L)
+                .holidayDate(LocalDate.of(2026, 2, 18))
+                .name("Mùng 2 Tết Âm lịch")
+                .isDefault(false)
+                .build());
+        mvc.perform(put("/admin/returns/holidays/12")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"holidayDate\":\"2026-02-18\",\"name\":\"Mùng 2 Tết Âm lịch\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("Mùng 2 Tết Âm lịch"));
+
+        when(returnRequestAdminService.updateHoliday(eq(13L), any()))
+                .thenThrow(new AppException(ReturnRequestErrorCode.DEFAULT_HOLIDAY_IMMUTABLE));
+        mvc.perform(put("/admin/returns/holidays/13")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"holidayDate\":\"2026-04-30\",\"name\":\"Đè 30/04\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(ReturnRequestErrorCode.DEFAULT_HOLIDAY_IMMUTABLE.getMessage()));
+
+        // DELETE xóa ngày lễ thành công và kiểm tra path id <= 0 bị chặn 400.
+        mvc.perform(delete("/admin/returns/holidays/0")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(delete("/admin/returns/holidays/12")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                .andExpect(status().isOk());
+        verify(returnRequestAdminService).deleteHoliday(12L);
+    }
+
+    /**
+     * Chức năng: Kiểm thử 2 endpoint của Nhánh 3:
+     * 1) {@code PATCH /admin/returns/{id}/contact-log} cho phép {@code STAFF}/{@code ADMIN} ghi nhật ký, chặn field lạ và {@code CUSTOMER};
+     * 2) {@code GET /admin/returns/dormant-reviews} chỉ cho phép {@code ROLE_ADMIN} (chặn cả {@code ROLE_STAFF} lẫn {@code ROLE_CUSTOMER} với 403).
+     */
+    @Test
+    void branchThreeCustomerFollowUpEndpointsEnforceAuthValidationAndPermissions() throws Exception {
+        // 1. Endpoint ghi nhật ký liên hệ: chặn CUSTOMER, chặn field lạ (@JsonAnySetter), chặn ghi chú rỗng, cho STAFF ghi thành công.
+        mvc.perform(patch("/admin/returns/1/contact-log")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contactNote\":\"Đã gọi khách\"}"))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(patch("/admin/returns/1/contact-log")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contactNote\":\"Đã gọi\",\"status\":\"REJECTED\"}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(patch("/admin/returns/1/contact-log")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contactNote\":\"   \"}"))
+                .andExpect(status().isBadRequest());
+
+        when(returnRequestAdminService.recordCustomerContactLog(eq(1L), any()))
+                .thenReturn(ReturnRequestResponse.builder()
+                        .id(1L)
+                        .status(ReturnRequestStatus.WAITING_CUSTOMER_FEEDBACK)
+                        .staffContactLog("[11/11/2026 09:30 - staff01]: Đã gọi khách 2 lần, niêm phong lưu kho riêng B3")
+                        .build());
+
+        mvc.perform(patch("/admin/returns/1/contact-log")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contactNote\":\"Đã gọi khách 2 lần, niêm phong lưu kho riêng B3\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.staffContactLog")
+                        .value("[11/11/2026 09:30 - staff01]: Đã gọi khách 2 lần, niêm phong lưu kho riêng B3"));
+
+        // 2. Endpoint rà soát mốc 30 ngày: bắt buộc ROLE_ADMIN -> chặn cả CUSTOMER lẫn STAFF (403 Forbidden).
+        mvc.perform(get("/admin/returns/dormant-reviews")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER"))))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(get("/admin/returns/dormant-reviews")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF"))))
+                .andExpect(status().isForbidden());
+
+        LocalDateTime dormantTime = LocalDateTime.of(2026, 12, 5, 17, 5, 0);
+        when(returnRequestAdminService.getDormantReviewRequests(any()))
+                .thenReturn(new PageImpl<>(
+                        List.of(ReturnRequestResponse.builder()
+                                .id(15L)
+                                .returnCode("RET-30")
+                                .status(ReturnRequestStatus.WAITING_CUSTOMER_FEEDBACK)
+                                .dormantReviewNotifiedAt(dormantTime)
+                                .build()),
+                        PageRequest.of(0, 10),
+                        1
+                ));
+
+        mvc.perform(get("/admin/returns/dormant-reviews")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.content[0].returnCode").value("RET-30"));
     }
 }

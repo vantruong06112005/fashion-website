@@ -1,8 +1,10 @@
 package iuh.fit.fashionwebsite.controller.returns;
 
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestApproveRequest;
+import iuh.fit.fashionwebsite.dto.request.ReturnRequestContactLogRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestExtendHandoverRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestHandoverRequest;
+import iuh.fit.fashionwebsite.dto.request.ReturnRequestHolidayRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestInspectRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestOverdueNoteRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestReceiveRequest;
@@ -10,6 +12,7 @@ import iuh.fit.fashionwebsite.dto.request.ReturnRequestRefundRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestRejectRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestRestockRequest;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
+import iuh.fit.fashionwebsite.dto.response.ReturnRequestHolidayResponse;
 import iuh.fit.fashionwebsite.dto.response.ReturnRequestResponse;
 import iuh.fit.fashionwebsite.enums.ReturnRequestStatus;
 import iuh.fit.fashionwebsite.service.returns.ReturnRequestAdminService;
@@ -27,14 +30,18 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * Controller tiếp nhận các HTTP Request thuộc module Trả hàng & Hoàn tiền phía Nhân viên / Quản trị viên (/api/v1/admin/returns).
@@ -316,6 +323,134 @@ public class ReturnRequestAdminController {
         return ResponseEntity.ok(ApiResponse.<ReturnRequestResponse>builder()
                 .code(HttpStatus.OK.value())
                 .message("Đã đóng hoàn tất hồ sơ trả hàng.")
+                .data(response)
+                .build());
+    }
+
+    /**
+     * Chức năng: Lấy danh sách ngày nghỉ lễ áp dụng tính SLA theo năm (gồm 6 ngày lễ mặc định của hệ thống
+     * và các ngày lễ mở rộng do Quản trị viên cấu hình thêm trong DB).
+     *
+     * @param year Đầu vào: Năm dương lịch cần xem (tùy chọn; mặc định lấy năm hiện tại nếu không truyền).
+     * @return Đầu ra: {@link ResponseEntity} mã 200 OK kèm danh sách {@link ReturnRequestHolidayResponse}.
+     */
+    @GetMapping("/holidays")
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
+    public ResponseEntity<ApiResponse<List<ReturnRequestHolidayResponse>>> getHolidaysByYear(
+            @RequestParam(required = false)
+            @Min(value = 2000, message = "Năm cấu hình ngày lễ phải từ 2000 trở lên.")
+            @Max(value = 2100, message = "Năm cấu hình ngày lễ không được vượt quá 2100.") Integer year) {
+        List<ReturnRequestHolidayResponse> holidays = returnRequestAdminService.getHolidaysByYear(year);
+        return ResponseEntity.ok(ApiResponse.<List<ReturnRequestHolidayResponse>>builder()
+                .code(HttpStatus.OK.value())
+                .message("Lấy danh sách ngày nghỉ lễ áp dụng SLA thành công.")
+                .data(holidays)
+                .build());
+    }
+
+    /**
+     * Chức năng: Thêm mới một ngày nghỉ lễ mở rộng (Tết Âm lịch, nghỉ bù, ngày liền kề Quốc khánh...) vào DB.
+     *
+     * @param request Đầu vào: DTO chứa ngày nghỉ lễ dương lịch, tên và ghi chú tùy chọn.
+     * @return Đầu ra: {@link ResponseEntity} mã 201 Created kèm thông tin ngày nghỉ lễ vừa tạo.
+     */
+    @PostMapping("/holidays")
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
+    public ResponseEntity<ApiResponse<ReturnRequestHolidayResponse>> createHoliday(
+            @RequestBody @Valid ReturnRequestHolidayRequest request) {
+        ReturnRequestHolidayResponse response = returnRequestAdminService.createHoliday(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.<ReturnRequestHolidayResponse>builder()
+                .code(HttpStatus.CREATED.value())
+                .message("Đã thêm ngày nghỉ lễ mới thành công.")
+                .data(response)
+                .build());
+    }
+
+    /**
+     * Chức năng: Cập nhật thông tin một ngày nghỉ lễ mở rộng do Quản trị viên đã tạo.
+     *
+     * @param id      Đầu vào: Mã ID bản ghi ngày lễ cần cập nhật (> 0).
+     * @param request Đầu vào: DTO chứa thông tin ngày nghỉ lễ mới.
+     * @return Đầu ra: {@link ResponseEntity} mã 200 OK kèm thông tin ngày nghỉ lễ đã cập nhật.
+     */
+    @PutMapping("/holidays/{id}")
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
+    public ResponseEntity<ApiResponse<ReturnRequestHolidayResponse>> updateHoliday(
+            @PathVariable
+            @NotNull(message = "Vui lòng chọn mã ngày nghỉ lễ.")
+            @Positive(message = "Mã ngày nghỉ lễ phải lớn hơn 0.") Long id,
+            @RequestBody @Valid ReturnRequestHolidayRequest request) {
+        ReturnRequestHolidayResponse response = returnRequestAdminService.updateHoliday(id, request);
+        return ResponseEntity.ok(ApiResponse.<ReturnRequestHolidayResponse>builder()
+                .code(HttpStatus.OK.value())
+                .message("Đã cập nhật thông tin ngày nghỉ lễ thành công.")
+                .data(response)
+                .build());
+    }
+
+    /**
+     * Chức năng: Xóa một ngày nghỉ lễ mở rộng do Quản trị viên đã tạo khỏi DB.
+     *
+     * @param id Đầu vào: Mã ID bản ghi ngày lễ cần xóa (> 0).
+     * @return Đầu ra: {@link ResponseEntity} mã 200 OK xác nhận đã xóa thành công.
+     */
+    @DeleteMapping("/holidays/{id}")
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
+    public ResponseEntity<ApiResponse<Void>> deleteHoliday(
+            @PathVariable
+            @NotNull(message = "Vui lòng chọn mã ngày nghỉ lễ.")
+            @Positive(message = "Mã ngày nghỉ lễ phải lớn hơn 0.") Long id) {
+        returnRequestAdminService.deleteHoliday(id);
+        return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .code(HttpStatus.OK.value())
+                .message("Đã xóa ngày nghỉ lễ thành công.")
+                .build());
+    }
+
+    /**
+     * Chức năng (Nhánh 3 - Mục 4 Phần V): Ghi nhận nhật ký nhân viên gọi điện / liên hệ khách hàng
+     * và đánh dấu niêm phong lưu kho riêng khi khách chưa phản hồi.
+     *
+     * @param id      Đầu vào: Mã ID phiếu trả hàng (> 0).
+     * @param request Đầu vào: DTO chứa nội dung nhật ký liên hệ bắt buộc.
+     * @return Đầu ra: {@link ResponseEntity} mã 200 OK kèm phiếu đã cập nhật trường {@code staffContactLog}.
+     */
+    @PatchMapping("/{id}/contact-log")
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
+    public ResponseEntity<ApiResponse<ReturnRequestResponse>> recordCustomerContactLog(
+            @PathVariable
+            @NotNull(message = "Vui lòng chọn mã yêu cầu trả hàng.")
+            @Positive(message = "Mã yêu cầu trả hàng phải lớn hơn 0.") Long id,
+            @RequestBody @Valid ReturnRequestContactLogRequest request) {
+        ReturnRequestResponse response = returnRequestAdminService.recordCustomerContactLog(id, request);
+        return ResponseEntity.ok(ApiResponse.<ReturnRequestResponse>builder()
+                .code(HttpStatus.OK.value())
+                .message("Đã ghi nhận nhật ký liên hệ khách hàng.")
+                .data(response)
+                .build());
+    }
+
+    /**
+     * Chức năng (Nhánh 3 - Tình huống 21): Lấy danh sách hồ sơ đã chạm mốc 30 ngày khách chưa phản hồi
+     * và đang lưu kho riêng để Quản trị viên ({@code ADMIN}) rà soát, tiếp tục liên hệ khách hàng.
+     *
+     * @param page Đầu vào: Số thứ tự trang cần xem (từ 0, mặc định 0).
+     * @param size Đầu vào: Số bản ghi mỗi trang (1..100, mặc định 10).
+     * @return Đầu ra: {@link ResponseEntity} mã 200 OK kèm {@link Page}&lt;{@link ReturnRequestResponse}&gt;.
+     */
+    @GetMapping("/dormant-reviews")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<Page<ReturnRequestResponse>>> getDormantReviewRequests(
+            @RequestParam(defaultValue = "0")
+            @Min(value = 0, message = "Số trang không được nhỏ hơn 0.") Integer page,
+            @RequestParam(defaultValue = "10")
+            @Min(value = 1, message = "Kích thước trang phải ít nhất là 1.")
+            @Max(value = 100, message = "Kích thước trang không được vượt quá 100.") Integer size) {
+        Pageable pageable = PageRequest.of(page, size);
+        Page<ReturnRequestResponse> response = returnRequestAdminService.getDormantReviewRequests(pageable);
+        return ResponseEntity.ok(ApiResponse.<Page<ReturnRequestResponse>>builder()
+                .code(HttpStatus.OK.value())
+                .message("Lấy danh sách hồ sơ mốc 30 ngày cần rà soát thành công.")
                 .data(response)
                 .build());
     }

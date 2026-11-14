@@ -53,7 +53,11 @@ public enum ReturnRequestErrorCode implements BaseErrorCode {
     VARIANT_NOT_FOUND_FOR_RESTOCK("Không tìm thấy biến thể sản phẩm để cập nhật tồn kho.", HttpStatus.CONFLICT),
     OVERDUE_UPDATE_NOT_ALLOWED("Không thể ghi nhận lý do quá hạn cho yêu cầu trả hàng đã kết thúc.", HttpStatus.CONFLICT),
     ESTIMATED_COMPLETION_MUST_BE_FUTURE("Thời gian dự kiến xử lý xong phải sau thời điểm hiện tại.", HttpStatus.BAD_REQUEST),
-    RETURN_NOT_COMPLETABLE("Chỉ có thể đóng hoàn tất hồ sơ khi đã xử lý xong phần hoàn tiền hoặc từ chối.", HttpStatus.CONFLICT);
+    RETURN_NOT_COMPLETABLE("Chỉ có thể đóng hoàn tất hồ sơ khi đã xử lý xong phần hoàn tiền hoặc từ chối.", HttpStatus.CONFLICT),
+    RETURN_CONTACT_LOG_NOT_ALLOWED("Chỉ được ghi nhận nhật ký liên hệ khi phiếu đang chờ khách phản hồi hoặc đang lưu giữ hàng trả bị từ chối chưa kết thúc.", HttpStatus.CONFLICT),
+    HOLIDAY_NOT_FOUND("Không tìm thấy ngày nghỉ lễ.", HttpStatus.NOT_FOUND),
+    HOLIDAY_ALREADY_EXISTS("Ngày nghỉ lễ này đã tồn tại trong cấu hình.", HttpStatus.CONFLICT),
+    DEFAULT_HOLIDAY_IMMUTABLE("Không thể chỉnh sửa hoặc xóa 6 ngày lễ mặc định của hệ thống.", HttpStatus.BAD_REQUEST);
 
     // Thông báo lỗi tiếng Việt hiển thị cho người dùng khi ngoại lệ xảy ra.
     private final String message;

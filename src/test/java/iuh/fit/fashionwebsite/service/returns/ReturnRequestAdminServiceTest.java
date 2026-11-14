@@ -1,8 +1,10 @@
 package iuh.fit.fashionwebsite.service.returns;
 
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestApproveRequest;
+import iuh.fit.fashionwebsite.dto.request.ReturnRequestContactLogRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestExtendHandoverRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestHandoverRequest;
+import iuh.fit.fashionwebsite.dto.request.ReturnRequestHolidayRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestInspectItemRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestInspectRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestOverdueNoteRequest;
@@ -11,12 +13,14 @@ import iuh.fit.fashionwebsite.dto.request.ReturnRequestRefundRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestRejectRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestRestockItemRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestRestockRequest;
+import iuh.fit.fashionwebsite.dto.response.ReturnRequestHolidayResponse;
 import iuh.fit.fashionwebsite.entity.Order;
 import iuh.fit.fashionwebsite.entity.OrderItem;
 import iuh.fit.fashionwebsite.entity.PaymentMethod;
 import iuh.fit.fashionwebsite.entity.PaymentTransaction;
 import iuh.fit.fashionwebsite.entity.ProductVariant;
 import iuh.fit.fashionwebsite.entity.ReturnRequest;
+import iuh.fit.fashionwebsite.entity.ReturnRequestHoliday;
 import iuh.fit.fashionwebsite.entity.ReturnRequestItem;
 import iuh.fit.fashionwebsite.entity.User;
 import iuh.fit.fashionwebsite.enums.ReturnRequestStatus;
@@ -27,6 +31,7 @@ import iuh.fit.fashionwebsite.mapper.ReturnRequestMapper;
 import iuh.fit.fashionwebsite.repository.PaymentMethodRepository;
 import iuh.fit.fashionwebsite.repository.PaymentTransactionRepository;
 import iuh.fit.fashionwebsite.repository.ProductVariantRepository;
+import iuh.fit.fashionwebsite.repository.ReturnRequestHolidayRepository;
 import iuh.fit.fashionwebsite.repository.ReturnRequestItemRepository;
 import iuh.fit.fashionwebsite.repository.ReturnRequestRepository;
 import iuh.fit.fashionwebsite.service.returns.impl.ReturnRequestAdminServiceImpl;
@@ -44,6 +49,7 @@ import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -69,6 +75,7 @@ class ReturnRequestAdminServiceTest {
 
     @Mock private ReturnRequestRepository returnRequestRepository;
     @Mock private ReturnRequestItemRepository returnRequestItemRepository;
+    @Mock private ReturnRequestHolidayRepository returnRequestHolidayRepository;
     @Mock private ProductVariantRepository productVariantRepository;
     @Mock private PaymentTransactionRepository paymentTransactionRepository;
     @Mock private PaymentMethodRepository paymentMethodRepository;
@@ -127,6 +134,7 @@ class ReturnRequestAdminServiceTest {
         adminService = new ReturnRequestAdminServiceImpl(
                 returnRequestRepository,
                 returnRequestItemRepository,
+                returnRequestHolidayRepository,
                 productVariantRepository,
                 paymentTransactionRepository,
                 paymentMethodRepository,
@@ -243,12 +251,17 @@ class ReturnRequestAdminServiceTest {
         LocalDateTime expiredDeadline = NOW.minusDays(2);
         returnRequest.setStatus(ReturnRequestStatus.WAITING_FOR_RETURN_DELIVERY);
         returnRequest.setHandoverDeadline(expiredDeadline);
+        // Giả lập hệ thống đã từng nhắc nhở ở hạn cũ để kiểm tra việc gia hạn phải reset mốc này về null.
+        returnRequest.setHandoverReminderSentAt(NOW.minusDays(3));
 
         var res1 = adminService.extendHandoverDeadline(1L, ReturnRequestExtendHandoverRequest.builder()
                 .extensionReason("Bưu cục quá tải").build());
         assertEquals(expiredDeadline, res1.getPreviousHandoverDeadline());
         assertEquals(NOW.plusDays(3), res1.getHandoverDeadline());
         assertEquals("Bưu cục quá tải", res1.getExtensionReason());
+        // Sau khi gia hạn, dấu vết nhắc nhở phải trở về null để scheduler được phép nhắc lại trước hạn mới 1 ngày.
+        org.junit.jupiter.api.Assertions.assertNull(res1.getHandoverReminderSentAt());
+        org.junit.jupiter.api.Assertions.assertNull(returnRequest.getHandoverReminderSentAt());
 
         // Trường hợp hạn cũ vẫn còn trong tương lai (30/10), xác nhận ngày 25/10 -> hạn mới 30/10 + 3 = 02/11.
         LocalDateTime futureDeadline = NOW.plusDays(5);
@@ -545,5 +558,533 @@ class ReturnRequestAdminServiceTest {
                         .estimatedCompletionAt(NOW.minusHours(1))
                         .build()));
         assertSame(ReturnRequestErrorCode.ESTIMATED_COMPLETION_MUST_BE_FUTURE, pastEstimate.getErrorCode());
+    }
+
+    /**
+     * Kiểm thử chuẩn hóa tham số {@code orderCode} có khoảng trắng hai đầu trong {@code searchReturnRequests}
+     * và kiểm thử {@code getReturnRequestById} (trả về dữ liệu khi tồn tại, ném 404 khi không thấy).
+     */
+    @Test
+    void searchTrimsOrderCodeAndGetByIdHandlesFoundAndNotFound() {
+        var pageable = PageRequest.of(0, 10);
+        when(returnRequestRepository.searchForAdmin(null, "ORD-10", false, pageable))
+                .thenReturn(new PageImpl<>(List.of(returnRequest), pageable, 1));
+
+        var page = adminService.searchReturnRequests(null, "  ORD-10  ", false, pageable);
+        assertEquals(1, page.getTotalElements());
+        verify(returnRequestRepository).searchForAdmin(null, "ORD-10", false, pageable);
+
+        when(returnRequestRepository.findById(1L)).thenReturn(Optional.of(returnRequest));
+        var detail = adminService.getReturnRequestById(1L);
+        assertEquals("RT-1", detail.getReturnCode());
+
+        when(returnRequestRepository.findById(999L)).thenReturn(Optional.empty());
+        AppException notFound = assertThrows(AppException.class, () -> adminService.getReturnRequestById(999L));
+        assertSame(ReturnRequestErrorCode.RETURN_REQUEST_NOT_FOUND, notFound.getErrorCode());
+    }
+
+    /**
+     * Kiểm thử duyệt phiếu sẽ xóa cờ quá hạn SLA trước đó và chặn duyệt nếu phiếu không ở {@code PENDING_APPROVAL}.
+     */
+    @Test
+    void approveClearsOverdueFlagAndRejectsInvalidStatus() {
+        returnRequest.setIsOverdue(true);
+        returnRequest.setOverdueReason("Đông đơn cuối tuần");
+        returnRequest.setEstimatedCompletionAt(NOW.plusDays(1));
+
+        var approved = adminService.approveReturnRequest(1L, null);
+        assertFalse(approved.getIsOverdue());
+        assertNull(approved.getOverdueReason());
+        assertNull(approved.getEstimatedCompletionAt());
+        assertEquals(ReturnRequestStatus.WAITING_FOR_RETURN_DELIVERY, approved.getStatus());
+
+        // Đang ở WAITING_FOR_RETURN_DELIVERY -> không thể duyệt lần nữa
+        AppException invalid = assertThrows(AppException.class,
+                () -> adminService.approveReturnRequest(1L, ReturnRequestApproveRequest.builder().build()));
+        assertSame(ReturnRequestErrorCode.INVALID_RETURN_STATUS_TRANSITION, invalid.getErrorCode());
+    }
+
+    /**
+     * Kiểm thử từ chối khi đang kiểm định tại kho ({@code INSPECTING}): giữ {@code completedAt == null}
+     * để hoàn tất quy trình sau khi xử lý hàng không đạt, đưa toàn bộ số tiền/số lượng hoàn về 0,
+     * đồng thời chặn từ chối ở trạng thái không hợp lệ.
+     */
+    @Test
+    void rejectAtInspectingZerosRefundFieldsLeavesCompletedAtNullAndRejectsInvalidStatus() {
+        returnRequest.setStatus(ReturnRequestStatus.INSPECTING);
+        returnRequest.setReceivedAt(NOW.minusHours(3));
+        returnItem.setAcceptedQuantity(2);
+        returnItem.setItemRefundAmount(new BigDecimal("200000"));
+        returnRequest.setItemsRefundAmount(new BigDecimal("200000"));
+        returnRequest.setRefundAmount(new BigDecimal("200000"));
+
+        var rejected = adminService.rejectReturnRequest(1L,
+                ReturnRequestRejectRequest.builder().rejectionReason("Hàng bị rách do khách").build());
+
+        assertEquals(ReturnRequestStatus.REJECTED, rejected.getStatus());
+        assertEquals("Hàng bị rách do khách", rejected.getRejectionReason());
+        // Vì hàng đã nhập về kho (receivedAt != null), giữ resolvedAt & completedAt = null cho tới bước /complete
+        assertNull(rejected.getResolvedAt());
+        assertNull(rejected.getCompletedAt());
+        assertEquals(0, BigDecimal.ZERO.compareTo(rejected.getRefundAmount()));
+        assertEquals(0, returnItem.getAcceptedQuantity());
+        assertEquals(0, BigDecimal.ZERO.compareTo(returnItem.getItemRefundAmount()));
+
+        // Phiếu đã bị từ chối/chờ hoàn tiền -> không được từ chối lại
+        returnRequest.setStatus(ReturnRequestStatus.WAITING_REFUND);
+        AppException invalid = assertThrows(AppException.class,
+                () -> adminService.rejectReturnRequest(1L,
+                        ReturnRequestRejectRequest.builder().rejectionReason("Lặp").build()));
+        assertSame(ReturnRequestErrorCode.INVALID_RETURN_STATUS_TRANSITION, invalid.getErrorCode());
+    }
+
+    /**
+     * Kiểm thử ghi nhận bàn giao hỗ trợ timestamp tùy chỉnh và gia hạn hạn bàn giao (+3 ngày lịch)
+     * bị chặn nếu trạng thái sai hoặc kiện hàng đã được bàn giao cho bưu tá.
+     */
+    @Test
+    void handoverAndExtendHandoverEnforceTimestampsAndGuardRules() {
+        returnRequest.setStatus(ReturnRequestStatus.WAITING_FOR_RETURN_DELIVERY);
+        returnRequest.setHandoverDeadline(NOW.plusDays(7));
+
+        // Gia hạn hợp lệ trước khi bàn giao: công thức max(hạn hiện tại, NOW) + 3 ngày lịch -> NOW + 10 ngày
+        var extended = adminService.extendHandoverDeadline(1L,
+                ReturnRequestExtendHandoverRequest.builder().extensionReason("Bão lũ hoãn lấy hàng").build());
+        assertEquals(NOW.plusDays(7), extended.getPreviousHandoverDeadline());
+        assertEquals(NOW.plusDays(10), extended.getHandoverDeadline());
+        assertEquals("Bão lũ hoãn lấy hàng", extended.getExtensionReason());
+
+        // Bàn giao với timestamp tùy chỉnh -> giữ nguyên timestamp được truyền vào
+        LocalDateTime customHandover = NOW.minusHours(2);
+        var handedOver = adminService.markHandedOver(1L,
+                ReturnRequestHandoverRequest.builder().handedOverAt(customHandover).build());
+        assertEquals(customHandover, handedOver.getHandedOverAt());
+
+        // Đã bàn giao cho đơn vị vận chuyển -> không cho phép gia hạn thêm
+        AppException alreadyHandedOver = assertThrows(AppException.class,
+                () -> adminService.extendHandoverDeadline(1L,
+                        ReturnRequestExtendHandoverRequest.builder().extensionReason("Trễ").build()));
+        assertSame(ReturnRequestErrorCode.RETURN_ALREADY_HANDED_OVER, alreadyHandedOver.getErrorCode());
+
+        // Sai trạng thái -> ném INVALID_RETURN_STATUS_TRANSITION
+        returnRequest.setStatus(ReturnRequestStatus.PENDING_APPROVAL);
+        assertSame(ReturnRequestErrorCode.INVALID_RETURN_STATUS_TRANSITION,
+                assertThrows(AppException.class, () -> adminService.markHandedOver(1L, null)).getErrorCode());
+        assertSame(ReturnRequestErrorCode.INVALID_RETURN_STATUS_TRANSITION,
+                assertThrows(AppException.class, () -> adminService.extendHandoverDeadline(1L,
+                        ReturnRequestExtendHandoverRequest.builder().extensionReason("x").build())).getErrorCode());
+    }
+
+    /**
+     * Kiểm thử xác nhận nhận hàng tại kho xóa cờ trễ hạn SLA, giữ mốc thời gian nhận tùy chỉnh
+     * và chặn nếu phiếu không ở {@code WAITING_FOR_RETURN_DELIVERY}.
+     */
+    @Test
+    void receiveAtWarehouseClearsOverduePreservesTimestampAndRejectsInvalidStatus() {
+        returnRequest.setStatus(ReturnRequestStatus.WAITING_FOR_RETURN_DELIVERY);
+        returnRequest.setIsOverdue(true);
+        returnRequest.setOverdueReason("Giao hoàn chậm");
+        returnRequest.setEstimatedCompletionAt(NOW.plusDays(2));
+
+        LocalDateTime customReceivedAt = NOW.minusMinutes(30);
+        var received = adminService.receiveAtWarehouse(1L,
+                ReturnRequestReceiveRequest.builder().receivedAt(customReceivedAt).build());
+
+        assertEquals(ReturnRequestStatus.INSPECTING, received.getStatus());
+        assertEquals(customReceivedAt, received.getReceivedAt());
+        assertFalse(received.getIsOverdue());
+        assertNull(received.getOverdueReason());
+
+        // Đang ở INSPECTING -> không được gọi receive lần 2
+        AppException invalid = assertThrows(AppException.class,
+                () -> adminService.receiveAtWarehouse(1L, null));
+        assertSame(ReturnRequestErrorCode.INVALID_RETURN_STATUS_TRANSITION, invalid.getErrorCode());
+    }
+
+    /**
+     * Kiểm thử các nhánh bảo vệ khi kiểm định hàng trả về:
+     * sai trạng thái, dòng item không tồn tại, trùng lặp item, thiếu item, và vượt quá số lượng đã yêu cầu.
+     */
+    @Test
+    void inspectRejectsInvalidStatusItemMismatchDuplicateAndExcessAcceptedQuantity() {
+        // Sai trạng thái PENDING_APPROVAL
+        assertSame(ReturnRequestErrorCode.INVALID_RETURN_STATUS_TRANSITION,
+                assertThrows(AppException.class, () -> adminService.inspectReturnRequest(1L,
+                        ReturnRequestInspectRequest.builder()
+                                .items(List.of(ReturnRequestInspectItemRequest.builder()
+                                        .returnRequestItemId(501L).acceptedQuantity(1).build()))
+                                .build())).getErrorCode());
+
+        returnRequest.setStatus(ReturnRequestStatus.INSPECTING);
+
+        // Item ID không thuộc phiếu trả hàng
+        assertSame(ReturnRequestErrorCode.RETURN_ITEM_NOT_FOUND,
+                assertThrows(AppException.class, () -> adminService.inspectReturnRequest(1L,
+                        ReturnRequestInspectRequest.builder()
+                                .items(List.of(ReturnRequestInspectItemRequest.builder()
+                                        .returnRequestItemId(999L).acceptedQuantity(1).build()))
+                                .build())).getErrorCode());
+
+        // Gửi trùng 1 dòng item trong payload kiểm định
+        assertSame(ReturnRequestErrorCode.DUPLICATE_ITEM,
+                assertThrows(AppException.class, () -> adminService.inspectReturnRequest(1L,
+                        ReturnRequestInspectRequest.builder()
+                                .items(List.of(
+                                        ReturnRequestInspectItemRequest.builder().returnRequestItemId(501L).acceptedQuantity(1).build(),
+                                        ReturnRequestInspectItemRequest.builder().returnRequestItemId(501L).acceptedQuantity(1).build()))
+                                .build())).getErrorCode());
+
+        // Số lượng chấp nhận vượt số lượng khách yêu cầu (3 > 2)
+        assertSame(ReturnRequestErrorCode.INVALID_ACCEPTED_QUANTITY,
+                assertThrows(AppException.class, () -> adminService.inspectReturnRequest(1L,
+                        ReturnRequestInspectRequest.builder()
+                                .items(List.of(ReturnRequestInspectItemRequest.builder()
+                                        .returnRequestItemId(501L).acceptedQuantity(3).build()))
+                                .build())).getErrorCode());
+
+        // Phiếu có 2 dòng nhưng chỉ gửi kiểm định 1 dòng -> INSPECTION_ITEMS_MISMATCH
+        ReturnRequestItem secondItem = ReturnRequestItem.builder().id(502L).orderItem(orderItem)
+                .oldVariant(variant).quantity(1).returnRequest(returnRequest).build();
+        returnRequest.setItems(List.of(returnItem, secondItem));
+        assertSame(ReturnRequestErrorCode.INSPECTION_ITEMS_MISMATCH,
+                assertThrows(AppException.class, () -> adminService.inspectReturnRequest(1L,
+                        ReturnRequestInspectRequest.builder()
+                                .items(List.of(ReturnRequestInspectItemRequest.builder()
+                                        .returnRequestItemId(501L).acceptedQuantity(1).build()))
+                                .build())).getErrorCode());
+    }
+
+    /**
+     * Kiểm thử kiểm định chấp nhận 0 sản phẩm (bắt buộc nhập lý do từ chối hoặc chuyển {@code REJECTED}),
+     * và trường hợp chấp nhận 100% hàng lỗi nhưng khách chưa cung cấp STK -> chuyển {@code WAITING_CUSTOMER_FEEDBACK}.
+     */
+    @Test
+    void inspectHandlesZeroAcceptedAndFullAcceptedWithoutBankAccount() {
+        returnRequest.setStatus(ReturnRequestStatus.INSPECTING);
+
+        // Chấp nhận 0 sản phẩm nhưng không nhập rejectionReason -> REJECTION_REASON_REQUIRED
+        assertSame(ReturnRequestErrorCode.REJECTION_REASON_REQUIRED,
+                assertThrows(AppException.class, () -> adminService.inspectReturnRequest(1L,
+                        ReturnRequestInspectRequest.builder()
+                                .items(List.of(ReturnRequestInspectItemRequest.builder()
+                                        .returnRequestItemId(501L).acceptedQuantity(0).build()))
+                                .rejectionReason("   ")
+                                .build())).getErrorCode());
+
+        // Chấp nhận toàn bộ nhưng chưa có thông tin ngân hàng -> chờ khách nhập STK (WAITING_CUSTOMER_FEEDBACK)
+        var awaitingBank = adminService.inspectReturnRequest(1L,
+                ReturnRequestInspectRequest.builder()
+                        .items(List.of(ReturnRequestInspectItemRequest.builder()
+                                .returnRequestItemId(501L).acceptedQuantity(2).build()))
+                        .build());
+        assertEquals(ReturnRequestStatus.WAITING_CUSTOMER_FEEDBACK, awaitingBank.getStatus());
+        assertNull(awaitingBank.getRefundEligibleAt());
+        assertEquals(0, new BigDecimal("200000").compareTo(awaitingBank.getRefundAmount()));
+
+        // Đặt lại về INSPECTING và từ chối toàn bộ kèm lý do -> chuyển REJECTED, giữ resolvedAt & completedAt = null để đóng sau
+        returnRequest.setStatus(ReturnRequestStatus.INSPECTING);
+        var rejectedAll = adminService.inspectReturnRequest(1L,
+                ReturnRequestInspectRequest.builder()
+                        .items(List.of(ReturnRequestInspectItemRequest.builder()
+                                .returnRequestItemId(501L).acceptedQuantity(0).build()))
+                        .rejectionReason("Cả 2 áo đều dính mực")
+                        .build());
+        assertEquals(ReturnRequestStatus.REJECTED, rejectedAll.getStatus());
+        assertEquals(0, BigDecimal.ZERO.compareTo(rejectedAll.getRefundAmount()));
+        assertEquals(NOW, rejectedAll.getInspectedAt());
+        assertNull(rejectedAll.getResolvedAt());
+        assertNull(rejectedAll.getCompletedAt());
+    }
+
+    /**
+     * Kiểm thử hoàn tiền chặn khi chưa tới trạng thái {@code WAITING_REFUND}, chặn trùng mã giao dịch hoàn tiền,
+     * và ưu tiên dùng phương thức thanh toán từ giao dịch gốc của đơn hàng khi ghi nhận giao dịch hoàn.
+     */
+    @Test
+    void executeRefundValidatesStatusDuplicateCodeAndUsesOrderTransactionPaymentMethod() {
+        returnRequest.setStatus(ReturnRequestStatus.WAITING_CUSTOMER_FEEDBACK);
+        assertSame(ReturnRequestErrorCode.RETURN_NOT_WAITING_REFUND,
+                assertThrows(AppException.class, () -> adminService.executeRefund(1L,
+                        ReturnRequestRefundRequest.builder().refundTransactionCode("UNC-01").build())).getErrorCode());
+
+        // Đủ WAITING_REFUND kèm inspectedAt, full acceptedQuantity (tự động đóng completedAt) và thông tin ngân hàng đầy đủ
+        returnRequest.setStatus(ReturnRequestStatus.WAITING_REFUND);
+        returnRequest.setInspectedAt(NOW.minusHours(1));
+        returnItem.setAcceptedQuantity(2);
+        returnRequest.setRefundAmount(new BigDecimal("200000"));
+        returnRequest.setBankName("Vietcombank");
+        returnRequest.setAccountNumber("0123456789");
+        returnRequest.setAccountHolderName("NGUYEN VAN A");
+
+        when(returnRequestRepository.existsByRefundTransactionCodeAndIdNot("UNC-DUP", 1L)).thenReturn(true);
+        assertSame(ReturnRequestErrorCode.DUPLICATE_REFUND_TRANSACTION_CODE,
+                assertThrows(AppException.class, () -> adminService.executeRefund(1L,
+                        ReturnRequestRefundRequest.builder().refundTransactionCode("UNC-DUP").build())).getErrorCode());
+
+        PaymentMethod originalMethod = PaymentMethod.builder().id(5L).code("VNPAY").name("VNPay").build();
+        order.setPaymentTransactions(List.of(PaymentTransaction.builder()
+                .transactionCode("PAY-10").paymentMethod(originalMethod).status(TransactionStatus.SUCCESS).build()));
+        when(returnRequestRepository.existsByRefundTransactionCodeAndIdNot("UNC-OK", 1L)).thenReturn(false);
+
+        var refunded = adminService.executeRefund(1L, ReturnRequestRefundRequest.builder()
+                .refundTransactionCode("UNC-OK")
+                .refundProofImageUrl("https://cdn.example.com/unc-ok.jpg")
+                .build());
+
+        assertEquals(ReturnRequestStatus.REFUNDED, refunded.getStatus());
+        assertEquals(NOW, refunded.getRefundedAt());
+        assertEquals(NOW, refunded.getCompletedAt());
+        assertEquals(99L, refunded.getRefundedBy());
+
+        ArgumentCaptor<PaymentTransaction> txCaptor = ArgumentCaptor.forClass(PaymentTransaction.class);
+        verify(paymentTransactionRepository).save(txCaptor.capture());
+        assertEquals(originalMethod, txCaptor.getValue().getPaymentMethod());
+        assertEquals(TransactionStatus.REFUNDED, txCaptor.getValue().getStatus());
+        verify(paymentMethodRepository, never()).findByCode(any());
+    }
+
+    /**
+     * Kiểm thử nhập kho lại tồn kho: chặn nếu phiếu chưa kiểm định, chặn nhập vượt số lượng chấp nhận,
+     * cho phép chốt kiểm/nhập kho 0 sản phẩm (không cộng tồn kho), và báo lỗi nếu thiếu biến thể gốc.
+     */
+    @Test
+    void restockEnforcesInspectedStateQuantityBoundsZeroSkipAndVariantPresence() {
+        // Chưa kiểm định (inspectedAt == null) -> RETURN_NOT_INSPECTED
+        assertSame(ReturnRequestErrorCode.RETURN_NOT_INSPECTED,
+                assertThrows(AppException.class, () -> adminService.restockReturnItems(1L,
+                        ReturnRequestRestockRequest.builder()
+                                .items(List.of(ReturnRequestRestockItemRequest.builder()
+                                        .returnRequestItemId(501L).restockQuantity(1).build()))
+                                .build())).getErrorCode());
+
+        returnRequest.setStatus(ReturnRequestStatus.WAITING_REFUND);
+        returnRequest.setInspectedAt(NOW.minusHours(1));
+        returnItem.setAcceptedQuantity(1);
+
+        // Nhập kho vượt quá acceptedQuantity (2 > 1) -> INVALID_RESTOCK_QUANTITY
+        assertSame(ReturnRequestErrorCode.INVALID_RESTOCK_QUANTITY,
+                assertThrows(AppException.class, () -> adminService.restockReturnItems(1L,
+                        ReturnRequestRestockRequest.builder()
+                                .items(List.of(ReturnRequestRestockItemRequest.builder()
+                                        .returnRequestItemId(501L).restockQuantity(2).build()))
+                                .build())).getErrorCode());
+
+        // Thiếu cả oldVariant lẫn orderItem.productVariant khi restockQuantity > 0 -> VARIANT_NOT_FOUND_FOR_RESTOCK
+        returnItem.setOldVariant(null);
+        orderItem.setProductVariant(null);
+        assertSame(ReturnRequestErrorCode.VARIANT_NOT_FOUND_FOR_RESTOCK,
+                assertThrows(AppException.class, () -> adminService.restockReturnItems(1L,
+                        ReturnRequestRestockRequest.builder()
+                                .items(List.of(ReturnRequestRestockItemRequest.builder()
+                                        .returnRequestItemId(501L).restockQuantity(1).build()))
+                                .build())).getErrorCode());
+
+        // Hàng hỏng hoàn toàn không thể bán lại (restockQuantity == 0) -> vẫn chốt restockedAt nhưng không sửa tồn kho
+        returnItem.setOldVariant(variant);
+        orderItem.setProductVariant(variant);
+        var zeroRestocked = adminService.restockReturnItems(1L,
+                ReturnRequestRestockRequest.builder()
+                        .items(List.of(ReturnRequestRestockItemRequest.builder()
+                                .returnRequestItemId(501L).restockQuantity(0).note("Hàng lỗi bỏ kho thanh lý").build()))
+                        .build());
+
+        assertEquals(NOW, zeroRestocked.getRestockedAt());
+        assertEquals(0, returnItem.getRestockedQuantity());
+        assertFalse(returnItem.getIsRestocked());
+        assertEquals(10, variant.getStockQuantity());
+        verify(productVariantRepository, never()).save(any());
+    }
+
+    /**
+     * Kiểm thử chặn ghi chú quá hạn đối với phiếu đã kết thúc và kiểm thử đóng hoàn tất hồ sơ ({@code completeReturnRequest})
+     * cho cả trạng thái {@code REJECTED} lẫn chặn đóng nếu phiếu vẫn đang xử lý dở.
+     */
+    @Test
+    void overdueNoteRejectsTerminalAndCompleteClosesRejectedOrRejectsActive() {
+        returnRequest.setStatus(ReturnRequestStatus.CANCELLED);
+        assertSame(ReturnRequestErrorCode.OVERDUE_UPDATE_NOT_ALLOWED,
+                assertThrows(AppException.class, () -> adminService.recordOverdueNote(1L,
+                        ReturnRequestOverdueNoteRequest.builder()
+                                .overdueReason("Quá hạn")
+                                .estimatedCompletionAt(NOW.plusHours(4))
+                                .build())).getErrorCode());
+
+        // Phiếu đang INSPECTING -> chưa thể đóng hoàn tất
+        returnRequest.setStatus(ReturnRequestStatus.INSPECTING);
+        assertSame(ReturnRequestErrorCode.RETURN_NOT_COMPLETABLE,
+                assertThrows(AppException.class, () -> adminService.completeReturnRequest(1L)).getErrorCode());
+
+        // Phiếu bị REJECTED ở kho nhưng chưa có completedAt -> cho phép Admin đóng hoàn tất hồ sơ
+        returnRequest.setStatus(ReturnRequestStatus.REJECTED);
+        returnRequest.setResolvedAt(null);
+        returnRequest.setCompletedAt(null);
+
+        var completed = adminService.completeReturnRequest(1L);
+        assertEquals(ReturnRequestStatus.REJECTED, completed.getStatus());
+        assertEquals(NOW, completed.getCompletedAt());
+        assertEquals(NOW, completed.getResolvedAt());
+    }
+
+    /**
+     * Chức năng: Kiểm thử luồng lấy danh sách ngày nghỉ lễ theo năm và CRUD ngày lễ mở rộng của Admin.
+     * <p>
+     * Đầu vào / ngữ cảnh giả lập:
+     * 1) Năm 2026 có sẵn 1 ngày Tết Âm lịch (17/02/2026) và 1 ngày nghỉ bù Giỗ Tổ (27/04/2026) trong DB;
+     * 2) Tạo mới, cập nhật và xóa ngày lễ hợp lệ;
+     * 3) Cố tình thêm/sửa trùng với ngày lễ mặc định (30/04 hoặc 10/03 ÂL 26/04/2026) hoặc trùng ngày đã có trong DB.
+     * <p>
+     * Đầu ra / kỳ vọng: {@code getHolidaysByYear(2026)} trả về đủ 6 ngày mặc định ({@code isDefault = true},
+     * gồm 10/03 ÂL 26/04/2026) + 2 ngày DB ({@code isDefault = false}) sắp xếp tăng dần; chặn đúng
+     * {@code DEFAULT_HOLIDAY_IMMUTABLE}, {@code HOLIDAY_ALREADY_EXISTS} và {@code HOLIDAY_NOT_FOUND}.
+     */
+    @Test
+    void managesAdminHolidaysWhileProtectingSixDefaultHolidays() {
+        ReturnRequestHoliday tet = ReturnRequestHoliday.builder()
+                .id(10L)
+                .holidayDate(LocalDate.of(2026, 2, 17))
+                .name("Mùng 1 Tết Âm lịch")
+                .description("Nghỉ Tết Nguyên Đán 2026")
+                .build();
+        ReturnRequestHoliday hungKingsComp = ReturnRequestHoliday.builder()
+                .id(11L)
+                .holidayDate(LocalDate.of(2026, 4, 27))
+                .name("Nghỉ bù Giỗ Tổ Hùng Vương")
+                .build();
+        when(returnRequestHolidayRepository.findAllByHolidayDateBetweenOrderByHolidayDateAsc(
+                LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31)))
+                .thenReturn(List.of(tet, hungKingsComp));
+
+        // Kiểm tra ghép 6 ngày mặc định + 2 ngày DB và sắp xếp tăng dần theo ngày dương lịch.
+        List<ReturnRequestHolidayResponse> holidays2026 = adminService.getHolidaysByYear(2026);
+        assertEquals(8, holidays2026.size());
+        assertEquals(LocalDate.of(2026, 1, 1), holidays2026.get(0).getHolidayDate());
+        assertTrue(holidays2026.get(0).getIsDefault());
+        assertEquals(LocalDate.of(2026, 2, 17), holidays2026.get(1).getHolidayDate());
+        assertFalse(holidays2026.get(1).getIsDefault());
+        // Xác nhận ngày 26/04/2026 (10/03 Âm lịch năm 2026) có mặt tự động với isDefault = true.
+        assertTrue(holidays2026.stream().anyMatch(h ->
+                LocalDate.of(2026, 4, 26).equals(h.getHolidayDate()) && Boolean.TRUE.equals(h.getIsDefault())));
+
+        // Tạo mới ngày lễ mở rộng hợp lệ -> lưu DB với isDefault = false.
+        LocalDate newDate = LocalDate.of(2026, 9, 1);
+        when(returnRequestHolidayRepository.existsByHolidayDate(newDate)).thenReturn(false);
+        when(returnRequestHolidayRepository.save(any(ReturnRequestHoliday.class))).thenAnswer(inv -> {
+            ReturnRequestHoliday entity = inv.getArgument(0);
+            if (entity.getId() == null) {
+                entity.setId(20L);
+            }
+            return entity;
+        });
+        ReturnRequestHolidayResponse created = adminService.createHoliday(ReturnRequestHolidayRequest.builder()
+                .holidayDate(newDate)
+                .name("  Nghỉ liền kề Quốc khánh  ")
+                .description("   ")
+                .build());
+        assertEquals(20L, created.getId());
+        assertEquals("Nghỉ liền kề Quốc khánh", created.getName());
+        assertNull(created.getDescription());
+        assertFalse(created.getIsDefault());
+
+        // Chặn tạo trùng lên ngày mặc định (cả dương lịch 30/04 lẫn âm lịch 10/03 ÂL 26/04/2026).
+        assertSame(ReturnRequestErrorCode.DEFAULT_HOLIDAY_IMMUTABLE,
+                assertThrows(AppException.class, () -> adminService.createHoliday(
+                        ReturnRequestHolidayRequest.builder()
+                                .holidayDate(LocalDate.of(2026, 4, 30))
+                                .name("Trùng 30/04").build())).getErrorCode());
+        assertSame(ReturnRequestErrorCode.DEFAULT_HOLIDAY_IMMUTABLE,
+                assertThrows(AppException.class, () -> adminService.createHoliday(
+                        ReturnRequestHolidayRequest.builder()
+                                .holidayDate(LocalDate.of(2026, 4, 26))
+                                .name("Trùng Giỗ Tổ").build())).getErrorCode());
+
+        // Chặn tạo trùng ngày đã tồn tại trong DB.
+        when(returnRequestHolidayRepository.existsByHolidayDate(newDate)).thenReturn(true);
+        assertSame(ReturnRequestErrorCode.HOLIDAY_ALREADY_EXISTS,
+                assertThrows(AppException.class, () -> adminService.createHoliday(
+                        ReturnRequestHolidayRequest.builder()
+                                .holidayDate(newDate)
+                                .name("Trùng ngày DB").build())).getErrorCode());
+
+        // Cập nhật ngày lễ mở rộng hợp lệ và kiểm tra chặn sửa trùng sang ngày lễ mặc định.
+        when(returnRequestHolidayRepository.findById(10L)).thenReturn(Optional.of(tet));
+        when(returnRequestHolidayRepository.existsByHolidayDateAndIdNot(LocalDate.of(2026, 2, 18), 10L))
+                .thenReturn(false);
+        ReturnRequestHolidayResponse updated = adminService.updateHoliday(10L, ReturnRequestHolidayRequest.builder()
+                .holidayDate(LocalDate.of(2026, 2, 18))
+                .name("Mùng 2 Tết Âm lịch")
+                .description("Cập nhật tên")
+                .build());
+        assertEquals(LocalDate.of(2026, 2, 18), updated.getHolidayDate());
+        assertEquals("Mùng 2 Tết Âm lịch", updated.getName());
+
+        assertSame(ReturnRequestErrorCode.DEFAULT_HOLIDAY_IMMUTABLE,
+                assertThrows(AppException.class, () -> adminService.updateHoliday(10L,
+                        ReturnRequestHolidayRequest.builder()
+                                .holidayDate(LocalDate.of(2026, 9, 2))
+                                .name("Đè Quốc khánh").build())).getErrorCode());
+
+        // Xóa ngày lễ mở rộng thành công và ném HOLIDAY_NOT_FOUND nếu ID không tồn tại.
+        adminService.deleteHoliday(10L);
+        verify(returnRequestHolidayRepository, times(1)).delete(tet);
+
+        when(returnRequestHolidayRepository.findById(999L)).thenReturn(Optional.empty());
+        assertSame(ReturnRequestErrorCode.HOLIDAY_NOT_FOUND,
+                assertThrows(AppException.class, () -> adminService.deleteHoliday(999L)).getErrorCode());
+    }
+
+    /**
+     * Chức năng: Kiểm thử nghiệp vụ Nhánh 3 trên Service Admin:
+     * 1) Ghi nhận và nối tiếp nhật ký liên hệ khách hàng ({@code recordCustomerContactLog}) ở trạng thái chờ phản hồi hoặc giữ hàng bị từ chối;
+     * 2) Chặn ghi nhật ký khi phiếu đã hoàn tất hoặc ở trạng thái không phù hợp ({@code RETURN_CONTACT_LOG_NOT_ALLOWED});
+     * 3) Lấy danh sách phân trang các hồ sơ mốc 30 ngày cần Quản trị viên rà soát ({@code getDormantReviewRequests}).
+     */
+    @Test
+    void recordsAndAppendsStaffContactLogAndListsDormantReviews() {
+        returnRequest.setStatus(ReturnRequestStatus.WAITING_CUSTOMER_FEEDBACK);
+
+        var firstRes = adminService.recordCustomerContactLog(1L,
+                ReturnRequestContactLogRequest.builder()
+                        .contactNote("Đã gọi lần 1 không bắt máy, đã niêm phong kệ B3")
+                        .build());
+        assertEquals("[25/10/2026 10:00 - staff01]: Đã gọi lần 1 không bắt máy, đã niêm phong kệ B3",
+                firstRes.getStaffContactLog());
+
+        // Ghi lần thứ 2 -> phải nối thêm dòng mới xuống dưới, không làm mất nhật ký cũ.
+        var secondRes = adminService.recordCustomerContactLog(1L,
+                ReturnRequestContactLogRequest.builder()
+                        .contactNote("Đã gửi SMS + gọi lại lần 2")
+                        .build());
+        assertTrue(secondRes.getStaffContactLog().contains("Đã gọi lần 1 không bắt máy, đã niêm phong kệ B3"));
+        assertTrue(secondRes.getStaffContactLog().contains("\n[25/10/2026 10:00 - staff01]: Đã gửi SMS + gọi lại lần 2"));
+
+        // Phiếu REJECTED nhưng hàng đã về kho và chưa đóng -> vẫn được ghi nhật ký liên hệ để trả lại hàng.
+        returnRequest.setStatus(ReturnRequestStatus.REJECTED);
+        returnRequest.setReceivedAt(NOW.minusDays(5));
+        returnRequest.setCompletedAt(null);
+        var rejectedRes = adminService.recordCustomerContactLog(1L,
+                ReturnRequestContactLogRequest.builder().contactNote("Liên hệ gửi hoàn hàng không đạt").build());
+        assertTrue(rejectedRes.getStaffContactLog().contains("Liên hệ gửi hoàn hàng không đạt"));
+
+        // Phiếu đã hoàn tất (completedAt != null) hoặc chưa chờ phản hồi (PENDING_APPROVAL) -> chặn.
+        returnRequest.setCompletedAt(NOW);
+        assertSame(ReturnRequestErrorCode.RETURN_CONTACT_LOG_NOT_ALLOWED,
+                assertThrows(AppException.class, () -> adminService.recordCustomerContactLog(1L,
+                        ReturnRequestContactLogRequest.builder().contactNote("x").build())).getErrorCode());
+
+        returnRequest.setCompletedAt(null);
+        returnRequest.setStatus(ReturnRequestStatus.PENDING_APPROVAL);
+        assertSame(ReturnRequestErrorCode.RETURN_CONTACT_LOG_NOT_ALLOWED,
+                assertThrows(AppException.class, () -> adminService.recordCustomerContactLog(1L,
+                        ReturnRequestContactLogRequest.builder().contactNote("x").build())).getErrorCode());
+
+        // Kiểm tra hàm lấy danh sách mốc 30 ngày trả về đúng phân trang đã ánh xạ DTO.
+        returnRequest.setStatus(ReturnRequestStatus.WAITING_CUSTOMER_FEEDBACK);
+        returnRequest.setDormantReviewNotifiedAt(NOW.minusDays(1));
+        when(returnRequestRepository.findDormantReviewRequests(PageRequest.of(0, 10)))
+                .thenReturn(new PageImpl<>(List.of(returnRequest), PageRequest.of(0, 10), 1));
+
+        var dormantPage = adminService.getDormantReviewRequests(PageRequest.of(0, 10));
+        assertEquals(1, dormantPage.getTotalElements());
+        assertEquals(NOW.minusDays(1), dormantPage.getContent().get(0).getDormantReviewNotifiedAt());
     }
 }
