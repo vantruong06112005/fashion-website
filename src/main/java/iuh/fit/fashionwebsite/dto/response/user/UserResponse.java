@@ -5,6 +5,8 @@ import iuh.fit.fashionwebsite.enums.RoleUser;
 import iuh.fit.fashionwebsite.enums.StatusUser;
 import lombok.*;
 
+import java.time.LocalDate;
+
 @AllArgsConstructor
 @NoArgsConstructor
 @Getter
@@ -15,6 +17,7 @@ public class UserResponse {
     private String username;
     private String fullname;
     private Gender gender;
+    private LocalDate dateOfBirth;
     private String email;
     private String phone;
     private String address;
