@@ -225,22 +225,43 @@ public class ReturnRequestController {
 
     /**
      * Chức năng: Khách hàng xác nhận đồng ý hoặc từ chối phương án xử lý khi đơn đang chờ phản hồi
-     * (hỗ trợ cả PATCH /{id}/confirm-plan và POST /{id}/confirm-resolution).
+     * qua endpoint {@code PATCH /{id}/confirm-plan}.
      *
      * @param id      Mã ID phiếu trả hàng (> 0).
      * @param request DTO chứa lựa chọn đồng ý/từ chối, ghi chú và STK kèm theo (nếu có).
      * @return {@link ResponseEntity} mã 200 OK kèm thông tin phiếu sau khi ghi nhận phản hồi.
      */
-    @RequestMapping(
-            value = {"/{id}/confirm-plan", "/{id}/confirm-resolution"},
-            method = {RequestMethod.PATCH, RequestMethod.POST}
-    )
+    @PatchMapping("/{id}/confirm-plan")
     @PreAuthorize("hasRole('CUSTOMER')")
     public ResponseEntity<ApiResponse<ReturnRequestResponse>> confirmResolutionPlan(
             @PathVariable
             @NotNull(message = "Vui lòng chọn mã yêu cầu trả hàng.")
             @Positive(message = "Mã yêu cầu trả hàng phải lớn hơn 0.") Long id,
             @RequestBody @Valid ReturnRequestConfirmPlanRequest request) {
+        return buildConfirmResolutionResponse(id, request);
+    }
+
+    /**
+     * Chức năng: Khách hàng xác nhận đồng ý hoặc từ chối phương án xử lý sau kiểm định kho
+     * qua endpoint {@code POST /{id}/confirm-resolution}.
+     *
+     * @param id      Mã ID phiếu trả hàng (> 0).
+     * @param request DTO chứa lựa chọn đồng ý/từ chối, ghi chú và STK kèm theo (nếu có).
+     * @return {@link ResponseEntity} mã 200 OK kèm thông tin phiếu sau khi ghi nhận phản hồi.
+     */
+    @PostMapping("/{id}/confirm-resolution")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ResponseEntity<ApiResponse<ReturnRequestResponse>> confirmResolution(
+            @PathVariable
+            @NotNull(message = "Vui lòng chọn mã yêu cầu trả hàng.")
+            @Positive(message = "Mã yêu cầu trả hàng phải lớn hơn 0.") Long id,
+            @RequestBody @Valid ReturnRequestConfirmPlanRequest request) {
+        return buildConfirmResolutionResponse(id, request);
+    }
+
+    private ResponseEntity<ApiResponse<ReturnRequestResponse>> buildConfirmResolutionResponse(
+            Long id,
+            ReturnRequestConfirmPlanRequest request) {
         ReturnRequestResponse response = returnRequestService.confirmResolutionPlan(id, request);
         return ResponseEntity.ok(ApiResponse.<ReturnRequestResponse>builder()
                 .code(HttpStatus.OK.value())
