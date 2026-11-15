@@ -3,6 +3,7 @@ package iuh.fit.fashionwebsite.entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.BatchSize;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,8 +49,12 @@ public class ProductReview extends BaseEntity {
     @Column(name = "fit_rating")
     private Integer fitRating;
 
+    // Ảnh luôn trả về theo thứ tự hiển thị; BatchSize gom truy vấn ảnh của nhiều đánh giá trong 1 trang
+    // thành vài câu IN (...) thay vì mỗi đánh giá một câu (tránh N+1 khi danh sách đánh giá nhúng ảnh)
     @JsonIgnore
     @OneToMany(mappedBy = "productReview", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OrderBy("displayOrder ASC, id ASC")
+    @BatchSize(size = 50)
     @Builder.Default
     private List<ProductReviewImage> images = new ArrayList<>();
 }

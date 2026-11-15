@@ -1,4 +1,4 @@
-package iuh.fit.fashionwebsite.dto.response;
+package iuh.fit.fashionwebsite.dto.response.review;
 
 import java.util.Map;
 // Tóm tắt đánh giá sản phẩm: điểm trung bình, tổng lượt đánh giá và số lượt theo từng mức sao

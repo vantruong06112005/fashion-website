@@ -2,7 +2,7 @@ package iuh.fit.fashionwebsite.controller.user;
 
 import iuh.fit.fashionwebsite.dto.request.TrackBehaviorRequest;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
-import iuh.fit.fashionwebsite.dto.response.ProductScoreResponse;
+import iuh.fit.fashionwebsite.dto.response.review.ProductScoreResponse;
 import iuh.fit.fashionwebsite.dto.response.UserPreferenceProfileResponse;
 import iuh.fit.fashionwebsite.enums.BehaviorType;
 import iuh.fit.fashionwebsite.exception.AppException;

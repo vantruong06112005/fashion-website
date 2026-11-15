@@ -81,14 +81,4 @@ public class SpecialOfferController {
                 .data(specialOfferService.updateActive(id, value))
                 .build();
     }
-
-//    // Xóa ưu đãi theo ID
-//    @DeleteMapping("/{id}")
-//    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
-//    public ApiResponse<Void> delete(@PathVariable Long id) {
-//        specialOfferService.delete(id);
-//        return ApiResponse.<Void>builder()
-//                .message("Special offer has been deleted successfully")
-//                .build();
-//    }
 }

@@ -1,6 +1,6 @@
 package iuh.fit.fashionwebsite.service.ai.impl;
 
-import iuh.fit.fashionwebsite.dto.response.ProductScoreResponse;
+import iuh.fit.fashionwebsite.dto.response.review.ProductScoreResponse;
 import iuh.fit.fashionwebsite.dto.response.ProductResponse;
 import iuh.fit.fashionwebsite.dto.response.ai.ProductAiMetadataResponse;
 import iuh.fit.fashionwebsite.dto.response.ai.RecommendedProductAiResponse;

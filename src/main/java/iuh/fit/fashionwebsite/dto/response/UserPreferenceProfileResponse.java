@@ -1,5 +1,6 @@
 package iuh.fit.fashionwebsite.dto.response;
 
+import iuh.fit.fashionwebsite.dto.response.review.ProductScoreResponse;
 import lombok.Builder;
 import java.util.List;
 

@@ -1,7 +1,7 @@
 //package iuh.fit.fashionwebsite.service.product;
 //
 //import iuh.fit.fashionwebsite.dto.response.CategoryScoreResponse;
-//import iuh.fit.fashionwebsite.dto.response.ProductScoreResponse;
+//import iuh.fit.fashionwebsite.dto.response.review.ProductScoreResponse;
 //import iuh.fit.fashionwebsite.dto.response.UserPreferenceProfileResponse;
 //import iuh.fit.fashionwebsite.entity.Product;
 //import iuh.fit.fashionwebsite.repository.ProductRepository;
