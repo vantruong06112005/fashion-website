@@ -77,6 +77,9 @@ public class UserService {
         );
 
         user.setGender(request.getGender() != null ? request.getGender() : Gender.OTHER);
+        if (request.getDateOfBirth() != null) {
+            user.setDateOfBirth(request.getDateOfBirth());
+        }
         user.setRole(request.getRole() != null ? request.getRole() : RoleUser.CUSTOMER);
         user.setStatus(StatusUser.ACTIVE);
 
@@ -110,6 +113,10 @@ public class UserService {
 
         if (request.getGender() != null) {
             user.setGender(request.getGender());
+        }
+
+        if (request.getDateOfBirth() != null) {
+            user.setDateOfBirth(request.getDateOfBirth());
         }
 
         if (request.getRole() != null) {

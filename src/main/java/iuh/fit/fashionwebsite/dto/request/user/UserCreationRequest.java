@@ -2,12 +2,16 @@ package iuh.fit.fashionwebsite.dto.request.user;
 
 import iuh.fit.fashionwebsite.enums.Gender;
 import iuh.fit.fashionwebsite.enums.RoleUser;
+import iuh.fit.fashionwebsite.validator.anotation.ValidDateOfBirth;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.*;
+import org.springframework.format.annotation.DateTimeFormat;
+
+import java.time.LocalDate;
 @AllArgsConstructor
 @NoArgsConstructor
 @Getter
@@ -32,6 +36,10 @@ public class UserCreationRequest {
 
     @NotNull(message = "Gender cannot be null")
     private Gender gender;
+
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    @ValidDateOfBirth
+    private LocalDate dateOfBirth;
 
     @NotBlank(message = "Email cannot be blank")
     @Email(message = "Invalid email format")

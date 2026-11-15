@@ -3,10 +3,14 @@ package iuh.fit.fashionwebsite.dto.request.user;
 import iuh.fit.fashionwebsite.enums.Gender;
 import iuh.fit.fashionwebsite.enums.RoleUser;
 import iuh.fit.fashionwebsite.enums.StatusUser;
+import iuh.fit.fashionwebsite.validator.anotation.ValidDateOfBirth;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.*;
+import org.springframework.format.annotation.DateTimeFormat;
+
+import java.time.LocalDate;
 
 @AllArgsConstructor
 @NoArgsConstructor
@@ -24,6 +28,10 @@ public class UserUpdateRequest {
     private String fullname;
 
     private Gender gender;
+
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    @ValidDateOfBirth
+    private LocalDate dateOfBirth;
 
     @Email(message = "Invalid email format")
     @Size(max = 100,
