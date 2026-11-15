@@ -84,4 +84,28 @@ public class ChatController {
                 .data(chatService.getHistory(username))
                 .build();
     }
+
+    @org.springframework.web.bind.annotation.DeleteMapping({"/admin/chat/cleanup", "/api/admin/chat/cleanup"})
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
+    public ApiResponse<Integer> cleanupExpiredChat(
+            @RequestParam(defaultValue = "30") int days
+    ) {
+        int deletedCount = chatService.cleanupExpiredMessages(days);
+        return ApiResponse.<Integer>builder()
+                .code(200)
+                .message("Đã dọn dẹp " + deletedCount + " tin nhắn cũ hơn " + days + " ngày thành công")
+                .data(deletedCount)
+                .build();
+    }
+
+    @org.springframework.web.bind.annotation.DeleteMapping({"/admin/chat/{username}", "/api/admin/chat/{username}"})
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
+    public ApiResponse<Integer> deleteConversation(@PathVariable String username) {
+        int deletedCount = chatService.deleteConversation(username);
+        return ApiResponse.<Integer>builder()
+                .code(200)
+                .message("Đã xóa toàn bộ cuộc trò chuyện với @" + username + " thành công (" + deletedCount + " tin nhắn)")
+                .data(deletedCount)
+                .build();
+    }
 }

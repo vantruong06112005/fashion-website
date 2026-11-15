@@ -20,4 +20,8 @@ public interface ChatService {
     List<ChatMessageResponse> getHistory(String customerUsername);
 
     List<String> getConversations();
+
+    int cleanupExpiredMessages(int retentionDays);
+
+    int deleteConversation(String customerUsername);
 }
