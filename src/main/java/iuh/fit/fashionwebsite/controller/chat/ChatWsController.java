@@ -29,7 +29,7 @@ public class ChatWsController {
         if (principal == null) {
             throw new AccessDeniedException("Chưa xác thực người dùng");
         }
-        chatService.customerSend(principal.getName(), req.content());
+        chatService.customerSend(principal.getName(), req.content(), req.imageUrl());
     }
 
     @MessageMapping("/chat.reply")
@@ -37,14 +37,14 @@ public class ChatWsController {
         if (!WsSecurityUtils.isStaffOrAdmin(principal)) {
             throw new AccessDeniedException("Chỉ ADMIN/STAFF được trả lời");
         }
-        chatService.staffReply(principal.getName(), req.toUsername(), req.content());
+        chatService.staffReply(principal.getName(), req.toUsername(), req.content(), req.imageUrl());
     }
 
     @MessageExceptionHandler
     @SendToUser("/queue/errors")
     public WsErrorResponse handleError(Exception ex) {
         log.warn("WebSocket error: {}", ex.getMessage());
-        if (ex instanceof AccessDeniedException) {
+        if (ex instanceof AccessDeniedException || ex instanceof IllegalArgumentException) {
             return new WsErrorResponse(ex.getMessage());
         }
         return new WsErrorResponse("Gửi tin nhắn thất bại");

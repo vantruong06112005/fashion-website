@@ -30,25 +30,33 @@ public class ChatServiceImpl implements ChatService {
 
     @Override
     @Transactional
-    public void customerSend(String customer, String content) {
-        saveAndDeliver(customer, customer, ChatRole.CUSTOMER, content);
+    public void customerSend(String customer, String content, String imageUrl) {
+        saveAndDeliver(customer, customer, ChatRole.CUSTOMER, content, imageUrl);
     }
 
     @Override
     @Transactional
-    public void staffReply(String staff, String customer, String content) {
+    public void staffReply(String staff, String customer, String content, String imageUrl) {
         if (!userRepository.existsByUsername(customer)) {
             throw new AppException(ErrorCode.USER_NOT_FOUND);
         }
-        saveAndDeliver(customer, staff, ChatRole.ADMIN, content);
+        saveAndDeliver(customer, staff, ChatRole.ADMIN, content, imageUrl);
     }
 
-    private void saveAndDeliver(String customer, String sender, ChatRole role, String content) {
+    private void saveAndDeliver(String customer, String sender, ChatRole role, String content, String imageUrl) {
+        String cleanContent = content == null ? "" : content.trim();
+        String cleanImageUrl = (imageUrl == null || imageUrl.isBlank()) ? null : imageUrl.trim();
+
+        if (cleanContent.isEmpty() && cleanImageUrl == null) {
+            throw new IllegalArgumentException("Nội dung tin nhắn hoặc hình ảnh không được để trống");
+        }
+
         ChatMessage m = new ChatMessage();
         m.setCustomerUsername(customer);
         m.setSenderUsername(sender);
         m.setSenderRole(role);
-        m.setContent(content.trim());
+        m.setContent(cleanContent);
+        m.setImageUrl(cleanImageUrl);
         ChatMessageResponse res = mapper.toResponse(repo.save(m));
 
         if (TransactionSynchronizationManager.isSynchronizationActive()) {

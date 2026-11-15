@@ -32,4 +32,7 @@ public class ChatMessage extends BaseEntity {
 
     @Column(nullable = false, length = 1000)
     private String content;
+
+    @Column(name = "image_url", length = 500)
+    private String imageUrl;
 }

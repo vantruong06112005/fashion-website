@@ -10,5 +10,6 @@ public record ChatMessageResponse(
         String senderUsername,
         ChatRole senderRole,
         String content,
+        String imageUrl,
         LocalDateTime createdAt
 ) {}

@@ -5,8 +5,19 @@ import iuh.fit.fashionwebsite.dto.response.ChatMessageResponse;
 import java.util.List;
 
 public interface ChatService {
-    void customerSend(String customerUsername, String content);
-    void staffReply(String staffUsername, String customerUsername, String content);
+    default void customerSend(String customerUsername, String content) {
+        customerSend(customerUsername, content, null);
+    }
+
+    void customerSend(String customerUsername, String content, String imageUrl);
+
+    default void staffReply(String staffUsername, String customerUsername, String content) {
+        staffReply(staffUsername, customerUsername, content, null);
+    }
+
+    void staffReply(String staffUsername, String customerUsername, String content, String imageUrl);
+
     List<ChatMessageResponse> getHistory(String customerUsername);
+
     List<String> getConversations();
 }

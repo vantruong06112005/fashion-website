@@ -81,7 +81,7 @@ public class InitData implements CommandLineRunner {
             "productVariant", "oldVariant", "description", "reasonDetail",
             "inspectionNote", "userHeight", "userWeight", "fitRating",
             "discountPercent", "discountAmount", "minOrderAmount", "maxDiscountAmount",
-            "iconUrl", "acceptedQuantity", "itemRefundAmount"
+            "iconUrl", "acceptedQuantity", "itemRefundAmount", "imageUrl"
     );
 
     // Tham chiếu các thực thể gốc để liên kết khóa ngoại giữa các bảng
@@ -184,11 +184,14 @@ public class InitData implements CommandLineRunner {
                 null, false);
 
         seedChatMessage("truong01", "truong01", ChatRole.CUSTOMER,
-                "Chào shop, mình cao 1m72 nặng 65kg thì mặc Áo Sơ Mi Oxford size M hay L vừa ạ?");
+                "Chào shop, mình cao 1m72 nặng 65kg thì mặc Áo Sơ Mi Oxford size M hay L vừa ạ?",
+                "https://res.cloudinary.com/n8agmdkc/image/upload/v1792905166/fashion_website/demo/fashion-v1/products/p004-01-921ca58a3161752e.jpg");
         seedChatMessage("truong01", "staff01", ChatRole.ADMIN,
-                "Dạ chào anh Trường! Với chiều cao 1m72 và 65kg, anh mặc size M sẽ ôm vừa vặn chuẩn form Smart Casual ạ.");
+                "Dạ chào anh Trường! Với chiều cao 1m72 và 65kg, anh mặc size M sẽ ôm vừa vặn chuẩn form Smart Casual ạ.",
+                null);
         seedChatMessage("an01", "an01", ChatRole.CUSTOMER,
-                "Shop kiểm tra giúp mình đơn hàng gần nhất khi nào giao tới Quận Gò Vấp nhé!");
+                "Shop kiểm tra giúp mình đơn hàng gần nhất khi nào giao tới Quận Gò Vấp nhé!",
+                null);
     }
 
     private Notification seedNotification(String username, NotificationType type, String title,
@@ -216,7 +219,7 @@ public class InitData implements CommandLineRunner {
     }
 
     private ChatMessage seedChatMessage(String customerUsername, String senderUsername,
-                                        ChatRole senderRole, String content) {
+                                        ChatRole senderRole, String content, String imageUrl) {
         List<ChatMessage> existing = entityManager.createQuery(
                         "SELECT c FROM ChatMessage c WHERE c.customerUsername = :cu "
                                 + "AND c.senderUsername = :su AND c.senderRole = :sr AND c.content = :ct",
@@ -228,14 +231,22 @@ public class InitData implements CommandLineRunner {
                 .setMaxResults(1)
                 .getResultList();
 
-        ChatMessage msg = existing.isEmpty()
-                ? chatMessageRepository.save(ChatMessage.builder()
-                        .customerUsername(customerUsername)
-                        .senderUsername(senderUsername)
-                        .senderRole(senderRole)
-                        .content(content)
-                        .build())
-                : existing.get(0);
+        ChatMessage msg;
+        if (existing.isEmpty()) {
+            msg = chatMessageRepository.save(ChatMessage.builder()
+                    .customerUsername(customerUsername)
+                    .senderUsername(senderUsername)
+                    .senderRole(senderRole)
+                    .content(content)
+                    .imageUrl(imageUrl)
+                    .build());
+        } else {
+            msg = existing.get(0);
+            if (imageUrl != null && (msg.getImageUrl() == null || msg.getImageUrl().isBlank())) {
+                msg.setImageUrl(imageUrl);
+                msg = chatMessageRepository.save(msg);
+            }
+        }
 
         trackSeeded(msg, msg.getId());
         return msg;
