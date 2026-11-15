@@ -20,7 +20,7 @@ public class ProductReviewImage extends BaseEntity {
     @JoinColumn(name = "product_review_id", nullable = false)
     private ProductReview productReview;
 
-    @Column(name = "image_url", length = 255, nullable = false)
+    @Column(name = "image_url", columnDefinition = "TEXT", nullable = false)
     private String imageUrl;
 
     @Column(name = "media_type", length = 20)

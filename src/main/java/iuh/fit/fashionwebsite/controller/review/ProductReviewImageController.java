@@ -1,15 +1,17 @@
 package iuh.fit.fashionwebsite.controller.review;
 
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
-import iuh.fit.fashionwebsite.dto.response.ProductReviewImageResponse;
+import iuh.fit.fashionwebsite.dto.response.review.ProductReviewImageResponse;
 import iuh.fit.fashionwebsite.entity.ProductReviewImage;
 import iuh.fit.fashionwebsite.service.review.ProductReviewImageService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -47,6 +49,21 @@ public class ProductReviewImageController {
         return ApiResponse.<ProductReviewImageResponse>builder()
                 .message("Product review image has been created successfully")
                 .data(productReviewImageService.create(productReviewImage))
+                .build();
+    }
+
+    // Tải file ảnh đánh giá thực tế lên (Multipart)
+    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
+    public ApiResponse<ProductReviewImageResponse> upload(
+            @RequestParam("reviewId") Long reviewId,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "displayOrder", required = false) Integer displayOrder
+    ) {
+        return ApiResponse.<ProductReviewImageResponse>builder()
+                .message("Product review image has been uploaded successfully")
+                .data(productReviewImageService.upload(reviewId, file, displayOrder))
                 .build();
     }
 

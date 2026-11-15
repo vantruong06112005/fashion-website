@@ -1,23 +1,53 @@
 package iuh.fit.fashionwebsite.service.review;
 
-import iuh.fit.fashionwebsite.dto.response.ProductReviewImageResponse;
+import iuh.fit.fashionwebsite.dto.response.review.ProductReviewImageResponse;
+import iuh.fit.fashionwebsite.entity.ProductReview;
 import iuh.fit.fashionwebsite.entity.ProductReviewImage;
+import iuh.fit.fashionwebsite.entity.User;
+import iuh.fit.fashionwebsite.enums.RoleUser;
+import iuh.fit.fashionwebsite.exception.AppException;
+import iuh.fit.fashionwebsite.exception.ErrorCode;
 import iuh.fit.fashionwebsite.exception.offer.ProductRevImageNotFound;
+import iuh.fit.fashionwebsite.exception.offer.ProductRevNotFoundException;
 import iuh.fit.fashionwebsite.mapper.ProductReviewImageMapper;
 import iuh.fit.fashionwebsite.repository.ProductReviewImageRepository;
+import iuh.fit.fashionwebsite.repository.ProductReviewRepository;
+import iuh.fit.fashionwebsite.service.cloudinary.CloudinaryService;
+import iuh.fit.fashionwebsite.service.user.UserService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.util.Base64;
 import java.util.List;
 
 @Service
 public class ProductReviewImageService {
+    private static final long MAX_IMAGE_BYTES = 5L * 1024 * 1024;
     private final ProductReviewImageRepository productReviewImageRepository;
     private final ProductReviewImageMapper productReviewImageMapper;
+    private final ProductReviewRepository productReviewRepository;
+    private final CloudinaryService cloudinaryService;
+    private final UserService userService;
 
-    public ProductReviewImageService(ProductReviewImageRepository productReviewImageRepository, ProductReviewImageMapper productReviewImageMapper) {
+    public ProductReviewImageService(ProductReviewImageRepository productReviewImageRepository,
+                                     ProductReviewImageMapper productReviewImageMapper) {
+        this(productReviewImageRepository, productReviewImageMapper, null, null, null);
+    }
+
+    @Autowired
+    public ProductReviewImageService(ProductReviewImageRepository productReviewImageRepository,
+                                     ProductReviewImageMapper productReviewImageMapper,
+                                     ProductReviewRepository productReviewRepository,
+                                     CloudinaryService cloudinaryService,
+                                     UserService userService) {
         this.productReviewImageRepository = productReviewImageRepository;
         this.productReviewImageMapper = productReviewImageMapper;
+        this.productReviewRepository = productReviewRepository;
+        this.cloudinaryService = cloudinaryService;
+        this.userService = userService;
     }
 
     // Lấy tất cả ảnh đánh giá
@@ -40,34 +70,83 @@ public class ProductReviewImageService {
     // Thêm ảnh vào đánh giá, giới hạn tối đa 5 ảnh mỗi đánh giá
     @Transactional
     public ProductReviewImageResponse create(ProductReviewImage productReviewImage) {
-        if (productReviewImageRepository.countByProductReviewId(
-                productReviewImage.getProductReview().getId()) >= 5) {
+        Long reviewId = productReviewImage.getProductReview() != null
+                ? productReviewImage.getProductReview().getId()
+                : null;
+        if (reviewId != null && productReviewRepository != null) {
+            ProductReview review = productReviewRepository.findById(reviewId)
+                    .orElseThrow(ProductRevNotFoundException::new);
+            ensureCanModifyReviewImage(review);
+        }
+        if (reviewId != null && productReviewImageRepository.countByProductReviewId(reviewId) >= 5) {
             throw new IllegalStateException("A review can have at most 5 images");
         }
         return productReviewImageMapper.toProductReviewImageResponse(productReviewImageRepository
                 .save(productReviewImage));
     }
 
+    // Tải file ảnh thực tế lên cho một đánh giá (tối đa 5 ảnh, mỗi ảnh không quá 5MB)
+    @Transactional
+    public ProductReviewImageResponse upload(Long reviewId, MultipartFile file, Integer displayOrder) {
+        if (file == null || file.isEmpty() || file.getSize() > MAX_IMAGE_BYTES) {
+            throw new AppException(ErrorCode.INVALID_FILE);
+        }
+        ProductReview review = productReviewRepository != null
+                ? productReviewRepository.findById(reviewId).orElseThrow(ProductRevNotFoundException::new)
+                : ProductReview.builder().id(reviewId).build();
+        ensureCanModifyReviewImage(review);
+
+        long currentCount = productReviewImageRepository.countByProductReviewId(reviewId);
+        if (currentCount >= 5) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        String imageUrl;
+        try {
+            if (cloudinaryService != null) {
+                imageUrl = cloudinaryService.uploadImage(file, "fashion_website/reviews");
+            } else {
+                imageUrl = toDataUrl(file);
+            }
+        } catch (AppException ex) {
+            if (ex.getErrorCode() == ErrorCode.FILE_UPLOAD_FAILED) {
+                imageUrl = toDataUrl(file);
+            } else {
+                throw ex;
+            }
+        }
+
+        ProductReviewImage entity = ProductReviewImage.builder()
+                .productReview(review)
+                .imageUrl(imageUrl)
+                .mediaType("IMAGE")
+                .displayOrder(displayOrder != null ? displayOrder : (int) currentCount + 1)
+                .build();
+        return productReviewImageMapper.toProductReviewImageResponse(productReviewImageRepository.save(entity));
+    }
+
     // Cập nhật thông tin ảnh (đường dẫn, loại media, thứ tự hiển thị, đánh giá chứa ảnh)
     @Transactional
     public ProductReviewImageResponse update(Long id, ProductReviewImage productReviewImage) {
         ProductReviewImage productReviewImg = productReviewImageRepository.findById(id).orElseThrow(ProductRevImageNotFound::new);
+        ensureCanModifyReviewImage(productReviewImg.getProductReview());
         productReviewImg.setImageUrl(productReviewImage.getImageUrl());
         productReviewImg.setMediaType(productReviewImage.getMediaType());
-        productReviewImg.setProductReview(productReviewImage.getProductReview());
+        if (productReviewImage.getProductReview() != null) {
+            productReviewImg.setProductReview(productReviewImage.getProductReview());
+        }
         productReviewImg.setDisplayOrder(productReviewImage.getDisplayOrder());
         return productReviewImageMapper
                 .toProductReviewImageResponse(productReviewImageRepository
                         .save(productReviewImg));
     }
 
-    // Xóa ảnh theo ID
+    // Xóa ảnh theo ID (chỉ chủ sở hữu đánh giá hoặc ADMIN)
     @Transactional
     public void delete(Long id) {
-        if (!productReviewImageRepository.existsById(id)) {
-            throw new ProductRevImageNotFound();
-        }
-        productReviewImageRepository.deleteById(id);
+        ProductReviewImage img = productReviewImageRepository.findById(id).orElseThrow(ProductRevImageNotFound::new);
+        ensureCanModifyReviewImage(img.getProductReview());
+        productReviewImageRepository.delete(img);
     }
 
     // Lấy tất cả ảnh thuộc một đánh giá (theo ID của đánh giá)
@@ -77,5 +156,35 @@ public class ProductReviewImageService {
                 .stream()
                 .map(productReviewImageMapper::toProductReviewImageResponse)
                 .toList();
+    }
+
+    private void ensureCanModifyReviewImage(ProductReview review) {
+        if (userService == null || review == null || review.getUser() == null) {
+            return;
+        }
+        User currentUser;
+        try {
+            currentUser = userService.getCurrentUserEntity();
+        } catch (Exception ex) {
+            currentUser = null;
+        }
+        if (currentUser == null || currentUser.getRole() == RoleUser.ADMIN) {
+            return;
+        }
+        if (!currentUser.getId().equals(review.getUser().getId())) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+    }
+
+    private String toDataUrl(MultipartFile file) {
+        try {
+            String contentType = file.getContentType();
+            if (contentType == null || contentType.isBlank()) {
+                contentType = "image/jpeg";
+            }
+            return "data:" + contentType + ";base64," + Base64.getEncoder().encodeToString(file.getBytes());
+        } catch (IOException e) {
+            throw new AppException(ErrorCode.FILE_UPLOAD_FAILED);
+        }
     }
 }

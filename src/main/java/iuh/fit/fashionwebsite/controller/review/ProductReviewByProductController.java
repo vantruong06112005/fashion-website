@@ -1,8 +1,8 @@
 package iuh.fit.fashionwebsite.controller.review;
 
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
-import iuh.fit.fashionwebsite.dto.response.ProductReviewResponse;
-import iuh.fit.fashionwebsite.dto.response.ReviewSummaryResponse;
+import iuh.fit.fashionwebsite.dto.response.review.ProductReviewResponse;
+import iuh.fit.fashionwebsite.dto.response.review.ReviewSummaryResponse;
 import iuh.fit.fashionwebsite.service.review.ProductReviewService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

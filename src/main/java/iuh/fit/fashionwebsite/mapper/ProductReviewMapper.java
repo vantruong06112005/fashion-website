@@ -2,11 +2,9 @@ package iuh.fit.fashionwebsite.mapper;
 
 import iuh.fit.fashionwebsite.dto.request.ProductReviewCreationRequest;
 import iuh.fit.fashionwebsite.dto.request.ProductReviewUpdateRequest;
-import iuh.fit.fashionwebsite.dto.response.ProductReviewResponse;
+import iuh.fit.fashionwebsite.dto.response.review.ProductReviewResponse;
 import iuh.fit.fashionwebsite.entity.ProductReview;
 import org.mapstruct.*;
-
-import java.util.List;
 
 @Mapper(componentModel = "spring", uses = ProductReviewImageMapper.class)
 public interface ProductReviewMapper {
@@ -19,8 +17,11 @@ public interface ProductReviewMapper {
     ProductReview toProductReview(ProductReviewCreationRequest request);
 
     @Mapping(target = "userId", source = "user.id")
+    @Mapping(target = "userName", source = "user.username")
+    @Mapping(target = "fullName", source = "user.fullname")
     @Mapping(target = "productId", source = "product.id")
     @Mapping(target = "orderItemId", source = "orderItem.id")
+    @Mapping(target = "verifiedPurchase", expression = "java(productReview.getOrderItem() != null && productReview.getOrderItem().getId() != null)")
     ProductReviewResponse toProductReviewResponse(ProductReview productReview);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)

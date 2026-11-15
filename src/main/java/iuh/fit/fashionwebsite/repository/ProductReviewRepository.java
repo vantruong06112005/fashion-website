@@ -3,6 +3,7 @@ package iuh.fit.fashionwebsite.repository;
 import iuh.fit.fashionwebsite.entity.ProductReview;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -16,10 +17,12 @@ import java.util.Optional;
 @Repository
 public interface ProductReviewRepository extends JpaRepository<ProductReview, Long> {
     Optional<ProductReview> findFirstByOrderItemIdAndProductId(Long orderItemId, Long productId);
-    // Lấy đánh giá của một sản phẩm, có phân trang
+    // Lấy đánh giá của một sản phẩm, có phân trang (kèm thông tin người đánh giá để tránh N+1)
+    @EntityGraph(attributePaths = {"user"})
     Page<ProductReview> findByProductId(Long productId, Pageable pageable);
 
-    // Lấy đánh giá của một sản phẩm theo đúng số sao, có phân trang
+    // Lấy đánh giá của một sản phẩm theo đúng số sao, có phân trang (kèm thông tin người đánh giá)
+    @EntityGraph(attributePaths = {"user"})
     Page<ProductReview> findByProductIdAndRating(Long productId, int rating, Pageable pageable);
 
     // Lấy tất cả đánh giá của một người dùng
