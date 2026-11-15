@@ -21,6 +21,10 @@ import iuh.fit.fashionwebsite.repository.UserRepository;
 import iuh.fit.fashionwebsite.service.cloudinary.CloudinaryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -174,6 +178,38 @@ public class UserService {
                 .stream()
                 .map(userMapper::toUserResponse)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<UserResponse> getUsersPaged(
+            int page,
+            int size,
+            String search,
+            RoleUser role,
+            Gender gender,
+            StatusUser status,
+            String sortBy
+    ) {
+        log.info("Fetching paged users: page={}, size={}, search={}, role={}, gender={}, status={}, sortBy={}",
+                page, size, search, role, gender, status, sortBy);
+
+        int safePage = Math.max(0, page);
+        int safeSize = Math.min(Math.max(1, size), 100);
+
+        Sort sort = Sort.by(Sort.Direction.DESC, "id");
+        if ("id_asc".equalsIgnoreCase(sortBy)) {
+            sort = Sort.by(Sort.Direction.ASC, "id");
+        } else if ("name_asc".equalsIgnoreCase(sortBy)) {
+            sort = Sort.by(Sort.Direction.ASC, "fullname");
+        } else if ("name_desc".equalsIgnoreCase(sortBy)) {
+            sort = Sort.by(Sort.Direction.DESC, "fullname");
+        }
+
+        Pageable pageable = PageRequest.of(safePage, safeSize, sort);
+        String trimmedKeyword = (search != null && !search.trim().isEmpty()) ? search.trim() : null;
+
+        return userRepository.searchUsers(trimmedKeyword, role, gender, status, pageable)
+                .map(userMapper::toUserResponse);
     }
 
     public void deleteUser(Long id) {
