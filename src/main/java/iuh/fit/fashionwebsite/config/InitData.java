@@ -25,7 +25,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -74,14 +73,14 @@ public class InitData implements CommandLineRunner {
     // Các trường hợp lệ có thể null ở dữ liệu tự tạo (không cảnh báo khi audit dữ liệu cũ ngoài InitData).
     private static final Set<String> OPTIONAL_AUDIT_FIELDS = Set.of(
             "id", "createdAt", "updatedAt", "deletedAt", "preserveTimestamps",
-            "passwordChangedAt", "avt", "phone", "dateOfBirth", "notes", "deliveredAt",
+            "passwordChangedAt", "avt", "phone", "notes", "deliveredAt",
             "trackingCode", "extensionReason", "previousHandoverDeadline",
             "refundProofImageUrl", "refundTransactionCode", "gatewayResponse",
             "paidAt", "requestId", "payUrl", "referenceId", "parentCategory",
             "productVariant", "oldVariant", "description", "reasonDetail",
             "inspectionNote", "userHeight", "userWeight", "fitRating",
             "discountPercent", "discountAmount", "minOrderAmount", "maxDiscountAmount",
-            "iconUrl", "acceptedQuantity", "itemRefundAmount", "imageUrl"
+            "iconUrl", "acceptedQuantity", "itemRefundAmount"
     );
 
     // Tham chiếu các thực thể gốc để liên kết khóa ngoại giữa các bảng
@@ -184,14 +183,11 @@ public class InitData implements CommandLineRunner {
                 null, false);
 
         seedChatMessage("truong01", "truong01", ChatRole.CUSTOMER,
-                "Chào shop, mình cao 1m72 nặng 65kg thì mặc Áo Sơ Mi Oxford size M hay L vừa ạ?",
-                "https://res.cloudinary.com/n8agmdkc/image/upload/v1792905166/fashion_website/demo/fashion-v1/products/p004-01-921ca58a3161752e.jpg");
+                "Chào shop, mình cao 1m72 nặng 65kg thì mặc Áo Sơ Mi Oxford size M hay L vừa ạ?");
         seedChatMessage("truong01", "staff01", ChatRole.ADMIN,
-                "Dạ chào anh Trường! Với chiều cao 1m72 và 65kg, anh mặc size M sẽ ôm vừa vặn chuẩn form Smart Casual ạ.",
-                null);
+                "Dạ chào anh Trường! Với chiều cao 1m72 và 65kg, anh mặc size M sẽ ôm vừa vặn chuẩn form Smart Casual ạ.");
         seedChatMessage("an01", "an01", ChatRole.CUSTOMER,
-                "Shop kiểm tra giúp mình đơn hàng gần nhất khi nào giao tới Quận Gò Vấp nhé!",
-                null);
+                "Shop kiểm tra giúp mình đơn hàng gần nhất khi nào giao tới Quận Gò Vấp nhé!");
     }
 
     private Notification seedNotification(String username, NotificationType type, String title,
@@ -219,7 +215,7 @@ public class InitData implements CommandLineRunner {
     }
 
     private ChatMessage seedChatMessage(String customerUsername, String senderUsername,
-                                        ChatRole senderRole, String content, String imageUrl) {
+                                        ChatRole senderRole, String content) {
         List<ChatMessage> existing = entityManager.createQuery(
                         "SELECT c FROM ChatMessage c WHERE c.customerUsername = :cu "
                                 + "AND c.senderUsername = :su AND c.senderRole = :sr AND c.content = :ct",
@@ -231,22 +227,14 @@ public class InitData implements CommandLineRunner {
                 .setMaxResults(1)
                 .getResultList();
 
-        ChatMessage msg;
-        if (existing.isEmpty()) {
-            msg = chatMessageRepository.save(ChatMessage.builder()
-                    .customerUsername(customerUsername)
-                    .senderUsername(senderUsername)
-                    .senderRole(senderRole)
-                    .content(content)
-                    .imageUrl(imageUrl)
-                    .build());
-        } else {
-            msg = existing.get(0);
-            if (imageUrl != null && (msg.getImageUrl() == null || msg.getImageUrl().isBlank())) {
-                msg.setImageUrl(imageUrl);
-                msg = chatMessageRepository.save(msg);
-            }
-        }
+        ChatMessage msg = existing.isEmpty()
+                ? chatMessageRepository.save(ChatMessage.builder()
+                        .customerUsername(customerUsername)
+                        .senderUsername(senderUsername)
+                        .senderRole(senderRole)
+                        .content(content)
+                        .build())
+                : existing.get(0);
 
         trackSeeded(msg, msg.getId());
         return msg;
@@ -408,7 +396,7 @@ public class InitData implements CommandLineRunner {
     // =========================================================================
 
     private User seedUser(String username, String passwordHash, String fullname, Gender gender,
-                          LocalDate dateOfBirth, String phone, String email, RoleUser role, StatusUser status) {
+                          String phone, String email, RoleUser role, StatusUser status) {
         User u = userRepository.findByUsername(username)
                 .orElse(new User());
 
@@ -418,7 +406,6 @@ public class InitData implements CommandLineRunner {
         }
         u.setFullname(fullname);
         u.setGender(gender);
-        u.setDateOfBirth(dateOfBirth);
         u.setPhone(phone);
         u.setEmail(email);
         u.setRole(role);
@@ -793,17 +780,17 @@ public class InitData implements CommandLineRunner {
     private void seedAllUsersAndAddresses() {
         String password = passwordEncoder.encode(defaultPassword);
 
-        admin01 = seedUser("admin01", password, "Nguyen Van Admin", Gender.MALE, LocalDate.of(1995, 5, 15), "0901000001", "admin01@gmail.com", RoleUser.ADMIN, StatusUser.ACTIVE);
-        staff01 = seedUser("staff01", password, "Tran Thi Staff", Gender.FEMALE, LocalDate.of(1998, 8, 20), "0901000099", "staff01@gmail.com", RoleUser.STAFF, StatusUser.ACTIVE);
-        truong01 = seedUser("truong01", password, "Nguyen Van Truong", Gender.MALE, LocalDate.of(2005, 11, 6), "0901000002", "truong01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        an01 = seedUser("an01", password, "Tran Van An", Gender.MALE, LocalDate.of(1999, 3, 12), "0901000003", "an01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        binh01 = seedUser("binh01", password, "Le Van Binh", Gender.MALE, LocalDate.of(1997, 7, 25), "0901000004", "binh01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        cuong01 = seedUser("cuong01", password, "Pham Van Cuong", Gender.MALE, LocalDate.of(1994, 10, 8), "0901000005", "cuong01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        dung01 = seedUser("dung01", password, "Hoang Van Dung", Gender.MALE, LocalDate.of(2000, 1, 18), "0901000006", "dung01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        ha01 = seedUser("ha01", password, "Nguyen Thi Ha", Gender.FEMALE, LocalDate.of(2001, 4, 22), "0901000007", "ha01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        lan01 = seedUser("lan01", password, "Tran Thi Lan", Gender.FEMALE, LocalDate.of(1996, 9, 14), "0901000008", "lan01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        mai01 = seedUser("mai01", password, "Le Thi Mai", Gender.FEMALE, LocalDate.of(2002, 12, 3), "0901000009", "mai01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        nam01 = seedUser("nam01", password, "Pham Van Nam", Gender.MALE, LocalDate.of(1998, 6, 30), "0901000010", "nam01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        admin01 = seedUser("admin01", password, "Nguyen Van Admin", Gender.MALE, "0901000001", "admin01@gmail.com", RoleUser.ADMIN, StatusUser.ACTIVE);
+        staff01 = seedUser("staff01", password, "Tran Thi Staff", Gender.FEMALE, "0901000099", "staff01@gmail.com", RoleUser.STAFF, StatusUser.ACTIVE);
+        truong01 = seedUser("truong01", password, "Nguyen Van Truong", Gender.MALE, "0901000002", "truong01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        an01 = seedUser("an01", password, "Tran Van An", Gender.MALE, "0901000003", "an01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        binh01 = seedUser("binh01", password, "Le Van Binh", Gender.MALE, "0901000004", "binh01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        cuong01 = seedUser("cuong01", password, "Pham Van Cuong", Gender.MALE, "0901000005", "cuong01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        dung01 = seedUser("dung01", password, "Hoang Van Dung", Gender.MALE, "0901000006", "dung01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        ha01 = seedUser("ha01", password, "Nguyen Thi Ha", Gender.FEMALE, "0901000007", "ha01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        lan01 = seedUser("lan01", password, "Tran Thi Lan", Gender.FEMALE, "0901000008", "lan01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        mai01 = seedUser("mai01", password, "Le Thi Mai", Gender.FEMALE, "0901000009", "mai01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        nam01 = seedUser("nam01", password, "Pham Van Nam", Gender.MALE, "0901000010", "nam01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
 
         seedUserAddress(truong01, "12 Nguyễn Văn Bảo, Phường 4, Quận Gò Vấp, TP. Hồ Chí Minh", "Hồ Chí Minh", "Phường Bến Thành", AddressType.HOME, true);
         seedUserAddress(truong01, "Tòa nhà Bitexco, 2 Hải Triều, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh", "Hồ Chí Minh", "Phường Bến Thành", AddressType.OFFICE, false);
