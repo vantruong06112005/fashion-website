@@ -37,9 +37,11 @@ public class ReturnRequestResponse {
     private LocalDateTime previousHandoverDeadline;
     private String extensionReason;
     private LocalDateTime handedOverAt;
+    private String handoverNote;
     private LocalDateTime handedOverToShipperAt;
     private LocalDateTime handoverReminderSentAt;
     private LocalDateTime receivedAt;
+    private String receiveNote;
     private LocalDateTime inspectedAt;
     private LocalDateTime inspectionResultSentAt;
     private LocalDateTime customerRespondedAt;

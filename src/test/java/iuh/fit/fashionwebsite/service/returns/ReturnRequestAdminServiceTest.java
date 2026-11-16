@@ -228,6 +228,8 @@ class ReturnRequestAdminServiceTest {
 
         assertEquals(ReturnRequestStatus.WAITING_FOR_RETURN_DELIVERY, res.getStatus());
         assertEquals(NOW, res.getHandedOverAt());
+        assertEquals("Đã giao GHTK", res.getHandoverNote());
+        assertTrue(res.getStaffContactLog().contains("Đã giao GHTK"));
         // Mới bàn giao shipper, kho chưa nhận và kiểm định hàng nên tuyệt đối chưa được tính/hoàn tiền
         assertNull(res.getRefundAmount());
 
@@ -286,6 +288,8 @@ class ReturnRequestAdminServiceTest {
 
         assertEquals(ReturnRequestStatus.INSPECTING, res.getStatus());
         assertEquals(NOW, res.getReceivedAt());
+        assertEquals("Đã ký nhận tại kho", res.getReceiveNote());
+        assertTrue(res.getStaffContactLog().contains("Đã ký nhận tại kho"));
         // Phải tách bước nhận kiện hàng và bước mở kiện kiểm tra chất lượng, tránh hoàn tiền mù trước khi kiểm hàng
         assertNull(res.getRefundAmount());
         assertNull(res.getRefundedAt());
@@ -487,17 +491,21 @@ class ReturnRequestAdminServiceTest {
     }
 
     /**
-     * Kiểm thử nhập kho lại hàng trả về (restock) cộng tồn kho đúng 1 lần (ngay cả trước khi hoàn tiền) và chặn gọi lần 2.
+     * Kiểm thử nhập kho cộng dồn nhiều lần cho tới khi đủ {@code acceptedQuantity}, chặn nhập vượt phần còn lại
+     * và chặn gọi thêm sau khi đã nhập đủ toàn bộ hàng đạt chuẩn.
      * <p>
      * Đầu vào / ngữ cảnh giả lập: Phiếu ở {@code WAITING_REFUND}, biến thể đang có {@code stockQuantity = 10},
-     * {@code acceptedQuantity = 2}, nhân viên gọi {@code restockReturnItems} với {@code restockQuantity = 1} hai lần.
+     * {@code acceptedQuantity = 2}; lần 1 nhập 1 chiếc, lần 2 thử nhập 2 chiếc (vượt phần còn lại),
+     * lần 3 nhập nốt 1 chiếc còn lại, lần 4 gọi thêm 1 chiếc khi đã nhập đủ 2/2.
      * <p>
-     * Kỳ vọng: Lần 1 tồn kho tăng từ 10 lên 11, {@code isRestocked = true}, {@code restockedAt = NOW}, gọi {@code save(variant)} 1 lần;
-     * lần 2 ném {@code RETURN_ALREADY_RESTOCKED} và tồn kho vẫn giữ nguyên là 11.
+     * Kỳ vọng: Lần 1 tồn kho tăng từ 10 lên 11, {@code restockedQuantity = 1}, {@code isRestocked = true},
+     * {@code restockedAt = null} (chưa nhập xong hết); lần 2 ném {@code INVALID_RESTOCK_QUANTITY};
+     * lần 3 tồn kho tăng lên 12, {@code restockedQuantity = 2}, {@code restockedAt = NOW};
+     * lần 4 ném {@code RETURN_ALREADY_RESTOCKED} và tồn kho giữ nguyên là 12.
      */
     @Test
     void restockUpdatesVariantStockOnlyOnceEvenBeforeRefund() {
-        // Bước 6 & Tình huống 8: Đã kiểm định xong (WAITING_REFUND) có thể nhập kho bán lại đúng 1 lần.
+        // Bước 6 & BUG-12: Cho phép nhập kho cộng dồn nhiều đợt nhưng không bao giờ vượt quá acceptedQuantity.
         returnRequest.setStatus(ReturnRequestStatus.WAITING_REFUND);
         returnRequest.setInspectedAt(NOW.minusHours(1));
         returnItem.setAcceptedQuantity(2);
@@ -505,24 +513,44 @@ class ReturnRequestAdminServiceTest {
 
         var res = adminService.restockReturnItems(1L, ReturnRequestRestockRequest.builder()
                 .items(List.of(ReturnRequestRestockItemRequest.builder()
-                        .returnRequestItemId(501L).restockQuantity(1).note("1 chiếc đạt chuẩn, 1 chiếc hỏng").build()))
+                        .returnRequestItemId(501L).restockQuantity(1).note("Đợt 1 nhập 1 chiếc đạt chuẩn").build()))
                 .build());
 
         assertEquals(11, variant.getStockQuantity());
         assertEquals(1, res.getItems().getFirst().getRestockedQuantity());
         assertTrue(res.getItems().getFirst().getIsRestocked());
-        assertEquals(NOW, res.getRestockedAt());
+        assertNull(res.getRestockedAt());
+        assertTrue(res.getStaffContactLog().contains("Đợt 1 nhập 1 chiếc đạt chuẩn"));
         verify(productVariantRepository, times(1)).save(variant);
 
-        // Bấm nhập kho lần 2 bị chặn, không bao giờ cộng tồn kho thêm lần nữa.
+        // Nhập vượt phần còn lại (chỉ còn 1 nhưng gửi 2) -> chặn bằng INVALID_RESTOCK_QUANTITY.
+        AppException overQty = assertThrows(AppException.class, () -> adminService.restockReturnItems(1L,
+                ReturnRequestRestockRequest.builder()
+                        .items(List.of(ReturnRequestRestockItemRequest.builder()
+                                .returnRequestItemId(501L).restockQuantity(2).build()))
+                        .build()));
+        assertSame(ReturnRequestErrorCode.INVALID_RESTOCK_QUANTITY, overQty.getErrorCode());
+        assertEquals(11, variant.getStockQuantity());
+
+        // Đợt 2 nhập nốt 1 chiếc còn lại -> cộng dồn thành 2/2 và chốt restockedAt = NOW.
+        var res2 = adminService.restockReturnItems(1L, ReturnRequestRestockRequest.builder()
+                .items(List.of(ReturnRequestRestockItemRequest.builder()
+                        .returnRequestItemId(501L).restockQuantity(1).note("Đợt 2 nhập nốt chiếc còn lại").build()))
+                .build());
+
+        assertEquals(12, variant.getStockQuantity());
+        assertEquals(2, res2.getItems().getFirst().getRestockedQuantity());
+        assertEquals(NOW, res2.getRestockedAt());
+        verify(productVariantRepository, times(2)).save(variant);
+
+        // Khi đã nhập đủ 2/2 và restockedAt đã chốt -> gọi thêm lần nữa bị chặn, tuyệt đối không cộng lố thành 13.
         AppException dup = assertThrows(AppException.class, () -> adminService.restockReturnItems(1L,
                 ReturnRequestRestockRequest.builder()
                         .items(List.of(ReturnRequestRestockItemRequest.builder()
                                 .returnRequestItemId(501L).restockQuantity(1).build()))
                         .build()));
         assertSame(ReturnRequestErrorCode.RETURN_ALREADY_RESTOCKED, dup.getErrorCode());
-        // Xác nhận tồn kho tuyệt đối không bị cộng đúp thành 12
-        assertEquals(11, variant.getStockQuantity());
+        assertEquals(12, variant.getStockQuantity());
     }
 
     /**

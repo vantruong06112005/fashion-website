@@ -93,6 +93,10 @@ public class ReturnRequest extends BaseEntity {
     @Column(name = "handed_over_at")
     private LocalDateTime handedOverAt;
 
+    // Ghi chú khi bàn giao kiện hàng trả cho đơn vị vận chuyển/shipper (Bước 3).
+    @Column(name = "handover_note", length = 500)
+    private String handoverNote;
+
     // Thời điểm hệ thống đã gửi thông báo nhắc nhở bàn giao kiện hàng trước hạn chót 1 ngày
     // (dùng để chống gửi trùng thông báo và giữ dấu vết đối soát khi quá hạn theo Tình huống 17).
     @Column(name = "handover_reminder_sent_at")
@@ -101,6 +105,10 @@ public class ReturnRequest extends BaseEntity {
     // Thời điểm kho ký nhận được hàng hoàn gửi về (Bước 4).
     @Column(name = "received_at")
     private LocalDateTime receivedAt;
+
+    // Ghi chú khi kho tiếp nhận kiện hàng hoàn trả (Bước 4).
+    @Column(name = "receive_note", length = 500)
+    private String receiveNote;
 
     // Thời điểm kho hoàn tất kiểm định chất lượng hàng trả (Bước 4).
     @Column(name = "inspected_at")
