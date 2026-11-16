@@ -3,6 +3,7 @@ package iuh.fit.fashionwebsite.service.order;
 import iuh.fit.fashionwebsite.dto.request.checkout.OrderCreationRequest;
 import iuh.fit.fashionwebsite.dto.response.OrderResponse;
 import iuh.fit.fashionwebsite.entity.*;
+import iuh.fit.fashionwebsite.enums.BehaviorType;
 import iuh.fit.fashionwebsite.enums.OrderStatus;
 import iuh.fit.fashionwebsite.enums.PaymentStatus;
 import iuh.fit.fashionwebsite.enums.ShippingProvider;
@@ -15,8 +16,10 @@ import iuh.fit.fashionwebsite.exception.order.PaymentMethodNotFoundException;
 import iuh.fit.fashionwebsite.exception.user.UserAddressNotFoundException;
 import iuh.fit.fashionwebsite.mapper.OrderMapper;
 import iuh.fit.fashionwebsite.repository.*;
+import iuh.fit.fashionwebsite.service.user.UserBehaviorService;
 import iuh.fit.fashionwebsite.service.user.UserService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +32,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
@@ -40,6 +44,7 @@ public class OrderService {
     private final UserService userService;
     private final PaymentMethodRepository paymentMethodRepository;
     private final ApplicationEventPublisher events;
+    private final UserBehaviorService userBehaviorService;
 
     @Transactional(readOnly = true)
     public List<OrderResponse> getAllOrders() {
@@ -167,6 +172,24 @@ public class OrderService {
 
         // Xóa giỏ hàng sau khi đặt hàng thành công
         cartItemRepository.deleteAllByCartId(cart.getId());
+
+        // Ghi nhận hành vi PURCHASE (+10 điểm vào Feature Store)
+        if (userBehaviorService != null) {
+            for (OrderItem item : orderItems) {
+                try {
+                    if (item.getProductVariant() != null && item.getProductVariant().getProduct() != null) {
+                        userBehaviorService.track(
+                                user.getId(),
+                                item.getProductVariant().getProduct().getId(),
+                                item.getProductVariant().getId(),
+                                BehaviorType.PURCHASE
+                        );
+                    }
+                } catch (Exception ex) {
+                    log.warn("Không thể ghi nhận hành vi PURCHASE cho user {}: {}", user.getId(), ex.getMessage());
+                }
+            }
+        }
 
         // Phát sự kiện thông báo đơn hàng mới cho khách
         events.publishEvent(new OrderStatusChangedEvent(
