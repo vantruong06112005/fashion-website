@@ -1,9 +1,6 @@
 package iuh.fit.fashionwebsite.controller.order;
 
-<<<<<<< HEAD
-=======
 import iuh.fit.fashionwebsite.dto.request.OrderStatusUpdateRequest;
->>>>>>> 0891769f43ddbe19ed9e522fef0cf2b84186403c
 import iuh.fit.fashionwebsite.dto.request.checkout.OrderCreationRequest;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
 import iuh.fit.fashionwebsite.dto.response.OrderResponse;
