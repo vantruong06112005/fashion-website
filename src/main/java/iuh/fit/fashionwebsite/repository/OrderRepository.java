@@ -15,6 +15,14 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     Optional<Order> findByOrderCode(String orderCode);
 
+    @Query(value = """
+            SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(order_code, '-', -1) AS UNSIGNED)), 0)
+            FROM orders
+            WHERE order_code LIKE 'FWD1-%'
+              AND SUBSTRING_INDEX(order_code, '-', -1) REGEXP '^[0-9]+$'
+            """, nativeQuery = true)
+    long findMaxOrderCodeSequence();
+
     // Khóa đơn đến khi tạo phiếu xong, tránh hai yêu cầu cùng dùng số lượng còn lại.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select o from Order o where o.id = :orderId and o.user.id = :userId")

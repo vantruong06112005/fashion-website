@@ -1,8 +1,10 @@
 package iuh.fit.fashionwebsite.controller.order;
 
+import iuh.fit.fashionwebsite.dto.request.checkout.OrderCreationRequest;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
 import iuh.fit.fashionwebsite.dto.response.OrderResponse;
 import iuh.fit.fashionwebsite.service.order.OrderService;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
@@ -41,7 +43,18 @@ public class OrderController {
                 .build();
     }
 
-    //@PostMapping
+    @PostMapping
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ApiResponse<OrderResponse> createOrder(
+            @Valid @RequestBody OrderCreationRequest request
+    ) {
+        return ApiResponse.<OrderResponse>builder()
+                .code(200)
+                .message("Order created successfully")
+                .data(orderService.createOrder(request))
+                .build();
+    }
+
     //@PutMapping("/{id}")
 
     @DeleteMapping("/{id}")

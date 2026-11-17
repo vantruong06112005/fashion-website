@@ -24,7 +24,7 @@ public class PaymentMethodController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN', 'STAFF')")
     public ApiResponse<List<PaymentMethodResponse>> getAllPaymentMethods() {
         return ApiResponse.<List<PaymentMethodResponse>>builder()
                 .code(200)

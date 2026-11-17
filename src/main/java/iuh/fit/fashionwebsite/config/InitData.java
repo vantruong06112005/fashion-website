@@ -1660,8 +1660,8 @@ public class InitData implements CommandLineRunner {
     }
 
     private void seedAllPaymentMethodsAndOffers() {
-        pm_cod = seedPaymentMethod("FWDEMO1_COD", "COD (demo)", "Thu tiền khi giao hàng — giao dịch giả lập.", null, true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
-        pm_bank = seedPaymentMethod("FWDEMO1_BANK", "Chuyển khoản (giả lập)", "Không có tài khoản ngân hàng hoặc giao dịch thật.", null, true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
+        pm_cod = seedPaymentMethod("FWDEMO1_COD", "Thanh toán khi nhận hàng (COD)", "Thu tiền khi giao hàng — giao dịch giả lập.", null, true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
+        pm_bank = seedPaymentMethod("FWDEMO1_BANK", "Thanh toán online (VietQR)", "Không có tài khoản ngân hàng hoặc giao dịch thật.", null, true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         offer1 = seedSpecialOffer("FW-DEMO-V1 | Đầu năm", 10, null, "PRODUCT", new BigDecimal("0"), null, dt("2026-01-01 00:00:00"), dt("2026-03-01 00:00:00"), false, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         offer2 = seedSpecialOffer("FW-DEMO-V1 | Hè", 15, null, "PRODUCT", new BigDecimal("0"), null, dt("2026-05-01 00:00:00"), dt("2026-08-01 00:00:00"), false, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         offer3 = seedSpecialOffer("FW-DEMO-V1 | Thu", 10, null, "PRODUCT", new BigDecimal("0"), null, dt("2026-09-01 00:00:00"), dt("2026-10-01 00:00:00"), false, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));

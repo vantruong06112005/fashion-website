@@ -8,6 +8,7 @@ import iuh.fit.fashionwebsite.dto.response.shipping.GhnWardDto;
 import iuh.fit.fashionwebsite.service.shipping.GhnService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,6 +21,7 @@ public class GhnController {
     private final GhnService ghnService;
 
     @GetMapping("/provinces")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN', 'STAFF')")
     public ApiResponse<List<GhnProvinceDto>> getProvinces() {
         return ApiResponse.<List<GhnProvinceDto>>builder()
                 .code(200)
@@ -29,6 +31,7 @@ public class GhnController {
     }
 
     @GetMapping("/wards")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN', 'STAFF')")
     public ApiResponse<List<GhnWardDto>> getWards(
             @RequestParam Long provinceId
     ) {
@@ -40,6 +43,7 @@ public class GhnController {
     }
 
     @PostMapping("/order-preview")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN', 'STAFF')")
     public ApiResponse<GhnOrderPreviewResponse> getGhnOrderPreview(
             @Valid @RequestBody OrderCreationRequest request
     ) {
