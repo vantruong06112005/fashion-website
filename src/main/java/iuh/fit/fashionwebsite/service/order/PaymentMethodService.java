@@ -2,7 +2,7 @@ package iuh.fit.fashionwebsite.service.order;
 
 import iuh.fit.fashionwebsite.dto.request.checkout.PaymentMethodCreationRequest;
 import iuh.fit.fashionwebsite.dto.request.checkout.PaymentMethodUpdateRequest;
-import iuh.fit.fashionwebsite.dto.response.PaymentMethodResponse;
+import iuh.fit.fashionwebsite.dto.response.checkout.PaymentMethodResponse;
 import iuh.fit.fashionwebsite.entity.PaymentMethod;
 import iuh.fit.fashionwebsite.exception.order.PaymentDuplicateCodeException;
 import iuh.fit.fashionwebsite.exception.order.PaymentMethodNotFoundException;

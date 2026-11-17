@@ -1,6 +1,6 @@
 package iuh.fit.fashionwebsite.mapper;
 
-import iuh.fit.fashionwebsite.dto.response.PaymentTransactionResponse;
+import iuh.fit.fashionwebsite.dto.response.checkout.PaymentTransactionResponse;
 import iuh.fit.fashionwebsite.entity.PaymentTransaction;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;

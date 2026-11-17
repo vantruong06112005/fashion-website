@@ -3,7 +3,7 @@ package iuh.fit.fashionwebsite.controller.order;
 import iuh.fit.fashionwebsite.dto.request.OrderStatusUpdateRequest;
 import iuh.fit.fashionwebsite.dto.request.checkout.OrderCreationRequest;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
-import iuh.fit.fashionwebsite.dto.response.OrderResponse;
+import iuh.fit.fashionwebsite.dto.response.checkout.OrderResponse;
 import iuh.fit.fashionwebsite.service.order.OrderService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -51,14 +51,17 @@ public class OrderController {
     }
 
     @PostMapping
-    public ApiResponse<OrderResponse> createOrder(@Valid @RequestBody OrderCreationRequest request) {
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ApiResponse<OrderResponse> createOrder(
+            @Valid @RequestBody OrderCreationRequest request
+    ) {
         return ApiResponse.<OrderResponse>builder()
                 .code(201)
                 .message("Create order successfully")
                 .data(orderService.createOrder(request))
                 .build();
     }
-
+    
     @RequestMapping(value = "/{id}/status", method = {RequestMethod.PATCH, RequestMethod.PUT})
     @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ApiResponse<OrderResponse> updateOrderStatus(
