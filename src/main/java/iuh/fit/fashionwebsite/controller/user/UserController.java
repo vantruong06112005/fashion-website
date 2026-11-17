@@ -152,6 +152,15 @@ public class UserController {
                 .build();
     }
 
+    @DeleteMapping("/info")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
+    public ApiResponse<Void> deleteCurrentUser() {
+        userService.deleteCurrentUser();
+        return ApiResponse.<Void>builder()
+                .message("Tài khoản đã được xóa thành công")
+                .build();
+    }
+
     @GetMapping("/info")
     @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
     public ApiResponse<UserResponse> getCurrentUser() {

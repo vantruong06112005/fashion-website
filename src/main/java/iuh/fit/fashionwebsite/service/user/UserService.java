@@ -223,12 +223,24 @@ public class UserService {
         User user = userRepository.findById(id)
                 .orElseThrow(UserNotFoundException::new);
 
-        // Xóa mềm: Chuyển trạng thái sang INACTIVE và vô hiệu hoá toàn bộ token cũ
-        user.setStatus(StatusUser.INACTIVE);
+        // Xóa mềm: Gán deletedAt, vô hiệu hoá toàn bộ token cũ
+        user.setDeletedAt(java.time.LocalDateTime.now());
         user.setPasswordChangedAt(Instant.now());
         userRepository.save(user);
 
-        log.info("Soft-deleted (deactivated) user with id: {}", id);
+        log.info("Soft-deleted user with id: {}", id);
+    }
+
+    public void deleteCurrentUser() {
+        String username = SecurityContextHolder
+                .getContext()
+                .getAuthentication()
+                .getName();
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(UserNotFoundException::new);
+
+        deleteUser(user.getId());
     }
 
     @Transactional(readOnly = true)
