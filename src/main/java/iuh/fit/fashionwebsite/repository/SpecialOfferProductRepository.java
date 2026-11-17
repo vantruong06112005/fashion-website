@@ -16,6 +16,11 @@ import java.util.Optional;
 
 @Repository
 public interface SpecialOfferProductRepository extends JpaRepository<SpecialOfferProduct, Long>, JpaSpecificationExecutor<SpecialOfferProduct> {
+    @Query("select s from SpecialOfferProduct s join fetch s.specialOffer o " +
+           "left join fetch s.productVariant where s.product.id in :ids " +
+           "and o.isActive = true and o.startDate <= :now and o.endDate >= :now")
+    List<SpecialOfferProduct> findActiveForProducts(@Param("ids") java.util.Collection<Long> ids, @Param("now") LocalDateTime now);
+
     Optional<SpecialOfferProduct> findFirstBySpecialOfferIdAndProductId(Long specialOfferId, Long productId);
 
     Optional<SpecialOfferProduct> findFirstBySpecialOfferIdAndProductIdAndProductVariantIsNull(Long specialOfferId, Long productId);
