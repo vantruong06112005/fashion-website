@@ -19,7 +19,7 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 @ToString(exclude = {"products"})
-@SQLDelete(sql = "UPDATE special_offers SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?")
+@SQLDelete(sql = "UPDATE special_offers SET deleted_at = CURRENT_TIMESTAMP, is_active = false WHERE id = ?")
 @SQLRestriction("deleted_at IS NULL")
 public class SpecialOffer extends BaseEntity {
 
