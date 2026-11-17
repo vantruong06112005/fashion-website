@@ -24,4 +24,5 @@ public class UserResponse {
     private RoleUser role;
     private StatusUser status;
     private String avt;
+    private java.time.LocalDateTime deletedAt;
 }

@@ -35,6 +35,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
                        @Param("changedAt") java.time.Instant changedAt);
 
     @Query("SELECT u FROM User u WHERE " +
+            "u.deletedAt IS NULL AND " +
             "(:keyword IS NULL OR :keyword = '' OR " +
             "LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
             "LOWER(u.fullname) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
