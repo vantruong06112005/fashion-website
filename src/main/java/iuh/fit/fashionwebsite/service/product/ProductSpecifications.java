@@ -25,6 +25,14 @@ final class ProductSpecifications {
                 conditions.add(cb.greaterThanOrEqualTo(root.get("createdAt"), now.minusDays(filter.getNewWithinDays())));
                 conditions.add(cb.lessThanOrEqualTo(root.get("createdAt"), now));
             }
+            if (manager && filter.getIsActive() != null) conditions.add(cb.equal(root.get("isActive"), filter.getIsActive()));
+            if (filter.getInStock() != null) {
+                var stocks = query.subquery(Long.class);
+                var v = stocks.from(ProductVariant.class);
+                stocks.select(v.get("id")).where(cb.equal(v.get("product"), root),
+                        cb.isTrue(v.get("isActive")), cb.gt(v.get("stockQuantity"), 0));
+                conditions.add(filter.getInStock() ? cb.exists(stocks) : cb.not(cb.exists(stocks)));
+            }
             if (categoryIds != null) conditions.add(root.get("category").get("id").in(categoryIds));
             if (hasText(filter.getKeyword())) {
                 String keyword = filter.getKeyword().trim().toLowerCase(Locale.ROOT)
@@ -41,7 +49,8 @@ final class ProductSpecifications {
                 var variantConditions = new ArrayList<Predicate>();
                 variantConditions.add(cb.equal(variant.get("product"), root));
                 variantConditions.add(cb.isTrue(variant.get("isActive")));
-                variantConditions.add(cb.gt(variant.get("stockQuantity"), 0));
+                if (!manager || Boolean.TRUE.equals(filter.getInStock()))
+                    variantConditions.add(cb.gt(variant.get("stockQuantity"), 0));
                 if (hasText(filter.getSize())) {
                     String size = filter.getSize().trim().toUpperCase(Locale.ROOT);
                     if (size.equals("XXL") || size.equals("2XL")) {

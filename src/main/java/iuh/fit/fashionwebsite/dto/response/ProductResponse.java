@@ -8,6 +8,8 @@ import java.util.List;
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class ProductResponse {
     private Long id;
+    private ProductOfferResponse bestOffer;
+    private BigDecimal discountedPrice;
     private String name;
     private String slug;
     private String description;

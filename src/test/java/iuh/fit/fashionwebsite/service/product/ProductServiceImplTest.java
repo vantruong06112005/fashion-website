@@ -24,7 +24,26 @@ class ProductServiceImplTest {
     private final UserUnderstandingService userUnderstandingService = mock(UserUnderstandingService.class);
     private final ProductCatalogCache productCatalogCache = mock(ProductCatalogCache.class);
     private final ProductServiceImpl service =
-            new ProductServiceImpl(products, categories, mapper, userUnderstandingService, productCatalogCache);
+            new ProductServiceImpl(products, categories, mapper, userUnderstandingService, productCatalogCache, mock(ProductPricingService.class));
+
+    @Test
+    void rejectsDuplicateVariantsAndInvalidImageReferenceBeforeSaving() {
+        var category = Category.builder().id(1L).isActive(true).build();
+        when(categories.findById(1L)).thenReturn(Optional.of(category));
+        when(mapper.toEntity(any())).thenAnswer(invocation -> new Product());
+        var request = new ProductCreationRequest(); request.setCategoryId(1L);
+        var a = new ProductCreationRequest.VariantInput();
+        a.setColor("Black"); a.setSize("2XL"); a.setPrice(java.math.BigDecimal.TEN); a.setStockQuantity(1);
+        var b = new ProductCreationRequest.VariantInput();
+        b.setColor(" black "); b.setSize("xxl"); b.setPrice(java.math.BigDecimal.TEN); b.setStockQuantity(1);
+        request.setVariants(java.util.List.of(a, b));
+        assertThrows(AppException.class, () -> service.create(request));
+        request.setVariants(java.util.List.of(a));
+        var image = new ProductCreationRequest.ImageInput(); image.setImageUrl("https://example.test/image.jpg"); image.setVariantIndex(1);
+        request.setImages(java.util.List.of(image));
+        assertThrows(AppException.class, () -> service.create(request));
+        verify(products, never()).save(any());
+    }
 
     @Test
     void createSyncsEmbeddingForSavedProduct() {
