@@ -8,7 +8,7 @@ Hệ thống backend cho website bán quần áo, xây dựng theo mô hình **l
 
 - **Java** + **Spring Boot**
 - **Spring Data JPA** — thao tác với database
-- **Spring Security** (+ JWT Stateless OAuth2 Resource Server) — xác thực, phân quyền (Chi tiết xem tại [SECURITY.md](SECURITY.md))
+- **Spring Security** (+ JWT Stateless OAuth2 Resource Server) — xác thực, phân quyền (Chi tiết xem tại [SECURITY.md](security/SECURITY.md))
 - **Jakarta Bean Validation** — xác thực dữ liệu đầu vào DTO Request (Chi tiết xem tại [VALIDATION_AND_SCHEMA.md](VALIDATION_AND_SCHEMA.md))
 - **Exception Handling** — xử lý ngoại lệ tập trung (Chi tiết xem tại [ExceptionDocs.md](ExceptionDocs.md))
 - **MapStruct** — mapping giữa Entity và DTO
@@ -20,8 +20,8 @@ Hệ thống backend cho website bán quần áo, xây dựng theo mô hình **l
 - [CATALOG_FILTERS.md](CATALOG_FILTERS.md) — API lọc danh mục, giá, size/màu và quy tắc tồn kho.
 - [PRODUCT_CART_FLOW.md](PRODUCT_CART_FLOW.md) — Luồng chi tiết sản phẩm, contract và kiểm thử giỏ hàng.
 - [CATALOG_PERMISSIONS.md](CATALOG_PERMISSIONS.md) — Quyền STAFF/ADMIN, xóa mềm và endpoint hàng mới về.
-- 🔐 [SECURITY.md](SECURITY.md) — Xác thực, phân quyền JWT & OAuth2 Resource Server
-- 🌐 [GOOGLE_LOGIN.md](GOOGLE_LOGIN.md) — Đăng nhập bằng Google (OAuth2 / OIDC ID Token, Account Linking & Auto-Registration)
+- 🔐 [SECURITY.md](security/SECURITY.md) — Xác thực, phân quyền JWT & OAuth2 Resource Server
+- 🌐 [GOOGLE_LOGIN.md](security/GOOGLE_LOGIN.md) — Đăng nhập bằng Google (OAuth2 / OIDC ID Token, Account Linking & Auto-Registration)
 - 🔑 [FORGOT_PASSWORD.md](FORGOT_PASSWORD.md) — Quên mật khẩu, đặt lại mật khẩu & cấu hình Gmail SMTP
 - ☁️ [CLOUDINARY.md](CLOUDINARY.md) — Tích hợp & quản lý hình ảnh Cloudinary (CDN, Upload, Clean-up)
 - 📋 [VALIDATION_AND_SCHEMA.md](VALIDATION_AND_SCHEMA.md) — Quy chuẩn Validation & danh mục DTO Request
