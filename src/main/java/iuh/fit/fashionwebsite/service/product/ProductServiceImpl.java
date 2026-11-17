@@ -41,6 +41,7 @@ public class ProductServiceImpl implements ProductService {
     private final UserUnderstandingService userUnderstandingService;
     private final ProductCatalogCache productCatalogCache;
     private final ProductPricingService pricing;
+    private final ProductAssetUpdateService assetUpdates;
 
 
     @Override
@@ -63,7 +64,7 @@ public class ProductServiceImpl implements ProductService {
                 product.getVariants().add(ProductVariant.builder()
                         .product(product).sku("SKU-" + UUID.randomUUID())
                         .color(color).size(size).price(input.getPrice()).stockQuantity(input.getStockQuantity())
-                        .isActive(true).packageWeight(input.getPackageWeight()).packageLength(input.getPackageLength())
+                        .isActive(input.getIsActive() == null || input.getIsActive()).packageWeight(input.getPackageWeight()).packageLength(input.getPackageLength())
                         .packageWidth(input.getPackageWidth()).packageHeight(input.getPackageHeight()).build());
             }
         }
@@ -185,6 +186,7 @@ public class ProductServiceImpl implements ProductService {
         if (request.getCategoryId() != null) {
             product.setCategory(getActiveCategory(request.getCategoryId()));
         }
+        assetUpdates.apply(product, request);
         mapper.update(product, request);
         Product savedProduct = productRepository.save(product);
         // build lại vector cho sản phẩm vừa cập nhật
@@ -192,6 +194,10 @@ public class ProductServiceImpl implements ProductService {
         productCatalogCache.refreshAfterCommit();
         return mapper.toResponse(savedProduct);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Map<String, List<String>> getOptions() { return assetUpdates.options(); }
 
     @Override
     public void delete(Long id) {

@@ -24,7 +24,7 @@ class ProductServiceImplTest {
     private final UserUnderstandingService userUnderstandingService = mock(UserUnderstandingService.class);
     private final ProductCatalogCache productCatalogCache = mock(ProductCatalogCache.class);
     private final ProductServiceImpl service =
-            new ProductServiceImpl(products, categories, mapper, userUnderstandingService, productCatalogCache, mock(ProductPricingService.class));
+            new ProductServiceImpl(products, categories, mapper, userUnderstandingService, productCatalogCache, mock(ProductPricingService.class), mock(ProductAssetUpdateService.class));
 
     @Test
     void rejectsDuplicateVariantsAndInvalidImageReferenceBeforeSaving() {

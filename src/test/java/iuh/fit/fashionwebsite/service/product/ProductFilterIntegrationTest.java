@@ -1,6 +1,7 @@
 package iuh.fit.fashionwebsite.service.product;
 
 import iuh.fit.fashionwebsite.dto.request.ProductFilterRequest;
+import iuh.fit.fashionwebsite.dto.request.ProductUpdateRequest;
 import iuh.fit.fashionwebsite.entity.*;
 import iuh.fit.fashionwebsite.mapper.ProductMapperImpl;
 import iuh.fit.fashionwebsite.mapper.CategoryMapperImpl;
@@ -28,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.*;
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.jpa.show-sql=false"
 }, showSql = false)
-@Import({ProductPricingService.class, ProductServiceImpl.class, ProductMapperImpl.class, CategoryServiceImpl.class, CategoryMapperImpl.class})
+@Import({ProductAssetUpdateService.class, ProductPricingService.class, ProductServiceImpl.class, ProductMapperImpl.class, CategoryServiceImpl.class, CategoryMapperImpl.class})
 class ProductFilterIntegrationTest {
     @Autowired EntityManager em;
     @Autowired ProductService service;
@@ -214,6 +215,77 @@ class ProductFilterIntegrationTest {
         em.persist(offer);
         em.persist(SpecialOfferProduct.builder().specialOffer(offer).product(shirt).build());
         return offer;
+    }
+
+    @Test
+    void updatesImagesAndVariantsWithoutReplacingExistingSkuOrDeletingRetiredVariant() {
+        em.flush(); em.clear();
+        var managed = products.findById(shirt.getId()).orElseThrow();
+        var oldVariants = managed.getVariants();
+        assertEquals(2, oldVariants.size());
+        var keep = oldVariants.getFirst(); var retireId = oldVariants.getLast().getId();
+        String oldSku = keep.getSku();
+        var oldImage = ProductImage.builder().product(managed).imageUrl("https://example.test/old.jpg")
+                .isMain(true).displayOrder(0).productVariant(keep).build();
+        em.persist(oldImage); managed.getImages().add(oldImage); em.flush();
+        var request = new ProductUpdateRequest();
+        var row = new ProductUpdateRequest.VariantInput();
+        row.setId(keep.getId()); row.setColor(keep.getColor()); row.setSize(keep.getSize());
+        row.setPrice(new BigDecimal("225000")); row.setStockQuantity(9); row.setIsActive(true);
+        row.setPackageWeight(350);
+        var added = new ProductUpdateRequest.VariantInput();
+        added.setColor("Purple"); added.setSize("2XL"); added.setPrice(new BigDecimal("250000")); added.setStockQuantity(3);
+        request.setVariants(java.util.List.of(row, added));
+        var replacement = new ProductUpdateRequest.ImageInput();
+        replacement.setId(oldImage.getId()); replacement.setImageUrl("https://example.test/replaced.jpg"); replacement.setVariantIndex(0);
+        var newImage = new ProductUpdateRequest.ImageInput();
+        newImage.setImageUrl("https://example.test/purple.jpg"); newImage.setVariantIndex(1);
+        request.setImages(java.util.List.of(newImage, replacement));
+        service.update(shirt.getId(), request); em.flush(); em.clear();
+        var saved = products.findById(shirt.getId()).orElseThrow();
+        var existing = saved.getVariants().stream().filter(v -> v.getId().equals(keep.getId())).findFirst().orElseThrow();
+        assertEquals(oldSku, existing.getSku()); assertEquals(9, existing.getStockQuantity());
+        assertEquals(350, existing.getPackageWeight());
+        assertFalse(em.find(ProductVariant.class, retireId).getIsActive());
+        assertEquals(3, saved.getVariants().size());
+        assertEquals("https://example.test/purple.jpg", saved.getImages().getFirst().getImageUrl());
+        assertEquals("XXL", saved.getImages().getFirst().getProductVariant().getSize());
+        assertTrue(saved.getImages().getFirst().getIsMain());
+        assertEquals("https://example.test/replaced.jpg", em.find(ProductImage.class, oldImage.getId()).getImageUrl());
+        assertFalse(em.find(ProductImage.class, oldImage.getId()).getIsMain());
+        var detail = service.getById(shirt.getId());
+        assertEquals(350, detail.getVariants().stream().filter(v -> v.getId().equals(keep.getId())).findFirst().orElseThrow().getPackageWeight());
+    }
+
+    @Test
+    void replacingImageListDeletesRemovedDatabaseImages() {
+        var managed = products.findById(shirt.getId()).orElseThrow();
+        var old = ProductImage.builder().product(managed).imageUrl("https://example.test/remove.jpg").isMain(true).displayOrder(0).build();
+        em.persist(old); managed.getImages().add(old); em.flush();
+        Long oldId = old.getId();
+        var request = new ProductUpdateRequest(); var next = new ProductUpdateRequest.ImageInput();
+        next.setImageUrl("https://example.test/next.jpg"); request.setImages(java.util.List.of(next));
+        service.update(shirt.getId(), request); em.flush(); em.clear();
+        assertNull(em.find(ProductImage.class, oldId));
+        assertEquals("https://example.test/next.jpg", service.getById(shirt.getId()).getProductImages().getFirst().getImageUrl());
+    }
+
+    @Test
+    void rejectsCrossProductVariantAndImageIdsAndDuplicateSizeAliases() {
+        var request = new ProductUpdateRequest(); var row = new ProductUpdateRequest.VariantInput();
+        row.setId(999999L); row.setColor("Black"); row.setSize("M"); row.setPrice(BigDecimal.TEN); row.setStockQuantity(1);
+        request.setVariants(java.util.List.of(row));
+        assertThrows(iuh.fit.fashionwebsite.exception.AppException.class, () -> service.update(shirt.getId(), request));
+        request.setVariants(null); var image = new ProductUpdateRequest.ImageInput();
+        image.setId(999999L); image.setImageUrl("https://example.test/wrong.jpg"); request.setImages(java.util.List.of(image));
+        assertThrows(iuh.fit.fashionwebsite.exception.AppException.class, () -> service.update(shirt.getId(), request));
+    }
+
+    @Test
+    void managerOptionsComeFromPersistedVariants() {
+        var options = service.getOptions();
+        assertTrue(options.get("colors").contains("Đen"));
+        assertTrue(options.get("sizes").contains("M"));
     }
 
     private Product product(String name, String slug, int price, Category category, boolean active) {
