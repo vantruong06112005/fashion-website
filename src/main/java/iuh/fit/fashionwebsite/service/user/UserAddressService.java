@@ -51,6 +51,28 @@ public class UserAddressService {
         );
     }
 
+    public UserAddressResponse createAddressForUser(Long userId, UserAddressCreationRequest request) {
+        User targetUser = userRepository.findById(userId)
+                .orElseThrow(UserNotFoundException::new);
+        boolean hasAddresses = userAddressRepository.existsByUserId(userId);
+
+        // Ràng buộc: Địa chỉ đầu tiên luôn tự động là địa chỉ mặc định
+        boolean isDefault = !hasAddresses || Boolean.TRUE.equals(request.getIsDefault());
+
+        // Ràng buộc: Nếu đặt làm mặc định và đã có địa chỉ trước đó, reset toàn bộ địa chỉ cũ
+        if (isDefault && hasAddresses) {
+            userAddressRepository.resetDefaultAddressByUserId(userId);
+        }
+
+        UserAddress address = userAddressMapper.toUserAddress(request);
+        address.setUser(targetUser);
+        address.setIsDefault(isDefault);
+
+        return userAddressMapper.toUserAddressResponse(
+                userAddressRepository.save(address)
+        );
+    }
+
     @Transactional(readOnly = true)
     public List<UserAddressResponse> getMyAddresses() {
         User currentUser = userService.getCurrentUserEntity();

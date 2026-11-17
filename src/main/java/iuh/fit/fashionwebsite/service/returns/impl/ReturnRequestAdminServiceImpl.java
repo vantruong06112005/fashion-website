@@ -26,6 +26,7 @@ import iuh.fit.fashionwebsite.entity.ReturnRequestItem;
 import iuh.fit.fashionwebsite.entity.User;
 import iuh.fit.fashionwebsite.enums.ReturnRequestStatus;
 import iuh.fit.fashionwebsite.enums.TransactionStatus;
+import iuh.fit.fashionwebsite.event.StockChangedEvent;
 import iuh.fit.fashionwebsite.exception.AppException;
 import iuh.fit.fashionwebsite.exception.returns.ReturnRequestErrorCode;
 import iuh.fit.fashionwebsite.mapper.ReturnRequestMapper;
@@ -239,12 +240,21 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
         LocalDateTime handedOverAt = (request != null && request.getHandedOverAt() != null)
                 ? request.getHandedOverAt()
                 : now;
+        String rawNote = (request != null && request.getNote() != null && !request.getNote().isBlank())
+                ? request.getNote().trim()
+                : null;
+
         // Tình huống 2 & 13: Chỉ ghi nhận thời điểm bàn giao để khóa nút tự hủy, tuyệt đối chưa hoàn tiền.
         returnRequest.setHandedOverAt(handedOverAt);
+        if (rawNote != null) {
+            // Lưu riêng handoverNote và nối vào staffContactLog để FE hiển thị đồng bộ ở cả 2 vị trí.
+            returnRequest.setHandoverNote(rawNote);
+            appendOperationalNoteToContactLog(returnRequest, now, "Bàn giao vận chuyển", rawNote);
+        }
 
         ReturnRequest saved = returnRequestRepository.save(returnRequest);
-        String detail = (request != null && request.getNote() != null && !request.getNote().isBlank())
-                ? request.getNote().trim()
+        String detail = rawNote != null
+                ? rawNote
                 : "Đơn vị vận chuyển đã tiếp nhận kiện hàng trả và đang vận chuyển về kho.";
         publishStatusEvent(saved, "HANDED_OVER", detail, now);
         return returnRequestMapper.toReturnRequestResponse(saved);
@@ -310,15 +320,23 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
         LocalDateTime receivedAt = (request != null && request.getReceivedAt() != null)
                 ? request.getReceivedAt()
                 : now;
+        String rawNote = (request != null && request.getNote() != null && !request.getNote().isBlank())
+                ? request.getNote().trim()
+                : null;
 
         // Tình huống 3: Hàng về kho chỉ chuyển sang Đang kiểm tra hàng, tuyệt đối chưa duyệt hoàn tiền.
         returnRequest.setStatus(ReturnRequestStatus.INSPECTING);
         returnRequest.setReceivedAt(receivedAt);
+        if (rawNote != null) {
+            // Lưu riêng receiveNote và nối vào staffContactLog để FE hiển thị đồng bộ ở cả 2 vị trí.
+            returnRequest.setReceiveNote(rawNote);
+            appendOperationalNoteToContactLog(returnRequest, now, "Tiếp nhận tại kho", rawNote);
+        }
         clearCurrentStepOverdueState(returnRequest);
 
         ReturnRequest saved = returnRequestRepository.save(returnRequest);
-        String detail = (request != null && request.getNote() != null && !request.getNote().isBlank())
-                ? request.getNote().trim()
+        String detail = rawNote != null
+                ? rawNote
                 : "Kho đã tiếp nhận kiện hàng trả và đang tiến hành kiểm định chất lượng.";
         publishStatusEvent(saved, "RECEIVED_AT_WAREHOUSE", detail, now);
         return returnRequestMapper.toReturnRequestResponse(saved);
@@ -345,7 +363,7 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
         List<ReturnRequestItem> existingItems = returnRequest.getItems() == null ? List.of() : returnRequest.getItems();
         // Đảm bảo danh sách kiểm định khớp 1-1 toàn bộ các dòng hàng có trong phiếu (không thiếu, không thừa, không trùng).
         Map<Long, ReturnRequestInspectItemRequest> inspectByItemId = indexAndValidateItems(
-                existingItems, request.getItems(), ReturnRequestInspectItemRequest::getReturnRequestItemId);
+                existingItems, request.getItems(), ReturnRequestInspectItemRequest::getReturnRequestItemId, true);
 
         // Tình huống 18 & 19: Nếu khách báo lỗi shop nhưng kiểm tra không có lỗi, kho đề xuất chuyển sang CHANGE_OF_MIND (khách chịu ship trả).
         boolean reclassifyToChangeOfMind = Boolean.TRUE.equals(request.getReclassifyToChangeOfMind())
@@ -537,12 +555,12 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
     }
 
     /**
-     * Chức năng (Bước 6): Phân loại hàng trả đạt chuẩn bán lại và cộng lại tồn kho cho {@link ProductVariant}.
-     * Đảm bảo khóa idempotent để nhân viên có bấm nhiều lần cũng chỉ cộng tồn kho đúng 1 lần duy nhất.
+     * Chức năng (Bước 6): Phân loại hàng trả đạt chuẩn bán lại và cộng dồn lại tồn kho cho {@link ProductVariant}.
+     * Hỗ trợ nhập kho một phần qua nhiều đợt cho tới khi đủ {@code acceptedQuantity} và khóa chống cộng vượt / lặp.
      *
      * @param id      Mã ID phiếu trả hàng (đã qua bước kiểm định chất lượng).
      * @param request DTO chứa danh sách số lượng nhập lại kho cho từng dòng {@code ReturnRequestItem}.
-     * @return {@link ReturnRequestResponse} phiếu đã cập nhật số lượng nhập kho và cờ {@code restockedAt}.
+     * @return {@link ReturnRequestResponse} phiếu đã cập nhật số lượng nhập kho cộng dồn và mốc {@code restockedAt} khi hoàn tất.
      */
     @Override
     @Transactional
@@ -558,28 +576,50 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
                 && status != ReturnRequestStatus.REFUNDED)) {
             throw new AppException(ReturnRequestErrorCode.RETURN_NOT_INSPECTED);
         }
-        // Tình huống 8: Khóa chống bấm nhập kho nhiều lần.
+        // Khi restockedAt đã chốt nghĩa là toàn bộ số lượng đạt chuẩn (hoặc phương án bỏ kho = 0) đã kết thúc nhập kho.
         if (returnRequest.getRestockedAt() != null) {
             throw new AppException(ReturnRequestErrorCode.RETURN_ALREADY_RESTOCKED);
         }
 
         List<ReturnRequestItem> existingItems = returnRequest.getItems() == null ? List.of() : returnRequest.getItems();
         Map<Long, ReturnRequestRestockItemRequest> restockByItemId = indexAndValidateItems(
-                existingItems, request.getItems(), ReturnRequestRestockItemRequest::getReturnRequestItemId);
+                existingItems, request.getItems(), ReturnRequestRestockItemRequest::getReturnRequestItemId, false);
+
+        // Nếu tất cả dòng hàng đạt chuẩn trước đó đều đã nhập đủ số lượng -> chặn gọi thêm.
+        int totalAcceptedAcrossAll = existingItems.stream()
+                .mapToInt(item -> item.getAcceptedQuantity() == null ? 0 : item.getAcceptedQuantity())
+                .sum();
+        boolean alreadyAllFullyRestocked = totalAcceptedAcrossAll > 0 && existingItems.stream().allMatch(item -> {
+            int accepted = item.getAcceptedQuantity() == null ? 0 : item.getAcceptedQuantity();
+            int restocked = item.getRestockedQuantity() == null ? 0 : item.getRestockedQuantity();
+            return restocked >= accepted;
+        });
+        if (alreadyAllFullyRestocked) {
+            throw new AppException(ReturnRequestErrorCode.RETURN_ALREADY_RESTOCKED);
+        }
 
         LocalDateTime now = LocalDateTime.now(returnRequestClock);
+        int totalAddedThisBatch = 0;
+
         for (ReturnRequestItem item : existingItems) {
-            // Kiểm tra cờ từng dòng để chắc chắn không bao giờ cộng dồn tồn kho lần 2.
-            if (Boolean.TRUE.equals(item.getIsRestocked())
-                    || (item.getRestockedQuantity() != null && item.getRestockedQuantity() > 0)) {
-                throw new AppException(ReturnRequestErrorCode.RETURN_ALREADY_RESTOCKED);
+            ReturnRequestRestockItemRequest reqItem = restockByItemId.get(item.getId());
+            if (reqItem == null) {
+                continue;
             }
 
-            ReturnRequestRestockItemRequest reqItem = restockByItemId.get(item.getId());
             int acceptedQty = item.getAcceptedQuantity() == null ? 0 : item.getAcceptedQuantity();
-            int restockQty = reqItem.getRestockQuantity();
-            // Chỉ được nhập kho tối đa bằng số lượng đã chấp nhận (hàng hỏng/không đạt thì nhập 0 để tiêu hủy/xử lý riêng).
-            if (restockQty < 0 || restockQty > acceptedQty) {
+            int alreadyRestocked = item.getRestockedQuantity() == null ? 0 : item.getRestockedQuantity();
+            int remainingQty = Math.max(0, acceptedQty - alreadyRestocked);
+            int restockQty = reqItem.getRestockQuantity() == null ? 0 : reqItem.getRestockQuantity();
+
+            if (restockQty < 0) {
+                throw new AppException(ReturnRequestErrorCode.INVALID_RESTOCK_QUANTITY);
+            }
+            if (restockQty > 0 && acceptedQty > 0 && remainingQty == 0) {
+                throw new AppException(ReturnRequestErrorCode.RETURN_ALREADY_RESTOCKED);
+            }
+            // Chỉ được nhập thêm tối đa bằng phần còn lại chưa nhập của dòng hàng (chống cộng lố tồn kho).
+            if (restockQty > remainingQty) {
                 throw new AppException(ReturnRequestErrorCode.INVALID_RESTOCK_QUANTITY);
             }
 
@@ -593,15 +633,37 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
                 ProductVariant variant = productVariantRepository.findById(variantRef.getId())
                         .orElseThrow(() -> new AppException(ReturnRequestErrorCode.VARIANT_NOT_FOUND_FOR_RESTOCK));
                 int currentStock = variant.getStockQuantity() == null ? 0 : variant.getStockQuantity();
-                variant.setStockQuantity(currentStock + restockQty);
+                int newStock = currentStock + restockQty;
+                variant.setStockQuantity(newStock);
                 productVariantRepository.save(variant);
 
-                item.setRestockedQuantity(restockQty);
+                if (variant.getProduct() != null && variant.getProduct().getId() != null) {
+                    eventPublisher.publishEvent(new StockChangedEvent(
+                            variant.getProduct().getId(),
+                            variant.getId(),
+                            newStock
+                    ));
+                }
+
+                item.setRestockedQuantity(alreadyRestocked + restockQty);
                 item.setIsRestocked(true);
+                totalAddedThisBatch += restockQty;
+            }
+
+            if (reqItem.getNote() != null && !reqItem.getNote().isBlank()) {
+                appendOperationalNoteToContactLog(returnRequest, now, "Nhập kho", reqItem.getNote().trim());
             }
         }
 
-        returnRequest.setRestockedAt(now);
+        boolean allAcceptedFullyRestocked = existingItems.stream().allMatch(item -> {
+            int accepted = item.getAcceptedQuantity() == null ? 0 : item.getAcceptedQuantity();
+            int restocked = item.getRestockedQuantity() == null ? 0 : item.getRestockedQuantity();
+            return restocked >= accepted;
+        });
+        // Chỉ chốt mốc restockedAt khi đã nhập đủ toàn bộ hàng đạt chuẩn (hoặc đợt gọi xác nhận nhập 0 món do hàng hỏng).
+        if (allAcceptedFullyRestocked || totalAddedThisBatch == 0) {
+            returnRequest.setRestockedAt(now);
+        }
         returnRequest.setRestockedBy(staff.getId());
         ReturnRequest saved = returnRequestRepository.save(returnRequest);
         return returnRequestMapper.toReturnRequestResponse(saved);
@@ -803,11 +865,7 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
                 request.getContactNote().trim());
 
         // Nối tiếp dòng nhật ký mới xuống dưới để bảo toàn toàn bộ lịch sử các lần gọi điện/liên hệ trước đó.
-        String existingLog = returnRequest.getStaffContactLog();
-        String updatedLog = (existingLog == null || existingLog.isBlank())
-                ? entry
-                : existingLog + "\n" + entry;
-        returnRequest.setStaffContactLog(updatedLog);
+        appendStaffContactLogEntry(returnRequest, entry);
 
         ReturnRequest saved = returnRequestRepository.save(returnRequest);
         publishStatusEvent(saved, "CUSTOMER_CONTACT_LOG_RECORDED", entry, now);
@@ -870,18 +928,24 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
 
     /**
      * Chức năng: Đối chiếu và lập bản đồ các dòng item do client gửi lên theo ID của {@link ReturnRequestItem},
-     * đảm bảo đủ từng món, không có ID lạ và không bị gửi trùng ID.
+     * đảm bảo không có ID lạ, không bị gửi trùng ID và đủ toàn bộ dòng hàng khi {@code requireAllItems = true}.
      *
-     * @param <T>            Kiểu DTO phần tử kiểm định hoặc nhập kho.
-     * @param existingItems  Danh sách {@link ReturnRequestItem} đang có trong phiếu.
-     * @param requestedItems Danh sách item trong payload request.
-     * @param idExtractor    Hàm trích xuất {@code returnRequestItemId} từ mỗi phần tử DTO.
+     * @param <T>             Kiểu DTO phần tử kiểm định hoặc nhập kho.
+     * @param existingItems   Danh sách {@link ReturnRequestItem} đang có trong phiếu.
+     * @param requestedItems  Danh sách item trong payload request.
+     * @param idExtractor     Hàm trích xuất {@code returnRequestItemId} từ mỗi phần tử DTO.
+     * @param requireAllItems {@code true} nếu bắt buộc phải gửi đủ mọi dòng hàng trong phiếu (kiểm định QC);
+     *                        {@code false} nếu cho phép gửi từng phần (nhập kho theo đợt).
      * @return {@link Map} ánh xạ từ {@code returnRequestItemId} sang DTO tương ứng.
      */
     private <T> Map<Long, T> indexAndValidateItems(
             List<ReturnRequestItem> existingItems,
             List<T> requestedItems,
-            Function<T, Long> idExtractor) {
+            Function<T, Long> idExtractor,
+            boolean requireAllItems) {
+        if (existingItems == null || existingItems.isEmpty() || requestedItems == null || requestedItems.isEmpty()) {
+            throw new AppException(ReturnRequestErrorCode.INSPECTION_ITEMS_MISMATCH);
+        }
         Map<Long, ReturnRequestItem> existingById = new LinkedHashMap<>();
         for (ReturnRequestItem item : existingItems) {
             existingById.put(item.getId(), item);
@@ -897,11 +961,45 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
             }
             indexed.put(itemId, reqItem);
         }
-        // Bắt buộc phải gửi đủ số lượng dòng hàng hiện có của phiếu (không được bỏ sót item khi kiểm định/nhập kho).
-        if (indexed.size() != existingById.size()) {
+        // Bắt buộc gửi đủ số lượng dòng hàng hiện có của phiếu khi ở chế độ yêu cầu đầy đủ.
+        if (requireAllItems && indexed.size() != existingById.size()) {
             throw new AppException(ReturnRequestErrorCode.INSPECTION_ITEMS_MISMATCH);
         }
         return indexed;
+    }
+
+    /**
+     * Chức năng: Định dạng và nối thêm một dòng ghi chú nghiệp vụ (bàn giao, nhận kho, nhập kho) vào {@code staffContactLog}.
+     *
+     * @param returnRequest Phiếu trả hàng cần ghi vết nhật ký.
+     * @param now           Thời điểm phát sinh thao tác.
+     * @param actionLabel   Nhãn thao tác (ví dụ: "Bàn giao vận chuyển", "Tiếp nhận tại kho", "Nhập kho").
+     * @param note          Nội dung ghi chú đã cắt khoảng trắng hai đầu.
+     */
+    private void appendOperationalNoteToContactLog(
+            ReturnRequest returnRequest,
+            LocalDateTime now,
+            String actionLabel,
+            String note) {
+        String entry = String.format("[%s - %s]: %s",
+                now.format(CONTACT_LOG_FORMATTER),
+                actionLabel,
+                note);
+        appendStaffContactLogEntry(returnRequest, entry);
+    }
+
+    /**
+     * Chức năng: Nối tiếp một dòng nhật ký mới vào trường {@code staffContactLog} mà không làm mất lịch sử trước đó.
+     *
+     * @param returnRequest Phiếu trả hàng cần cập nhật nhật ký.
+     * @param entry         Chuỗi nhật ký đã định dạng sẵn.
+     */
+    private void appendStaffContactLogEntry(ReturnRequest returnRequest, String entry) {
+        String existingLog = returnRequest.getStaffContactLog();
+        String updatedLog = (existingLog == null || existingLog.isBlank())
+                ? entry
+                : existingLog + "\n" + entry;
+        returnRequest.setStaffContactLog(updatedLog);
     }
 
     /**

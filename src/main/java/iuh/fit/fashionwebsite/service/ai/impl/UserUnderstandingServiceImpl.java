@@ -1,6 +1,6 @@
 package iuh.fit.fashionwebsite.service.ai.impl;
 
-import iuh.fit.fashionwebsite.dto.response.ProductScoreResponse;
+import iuh.fit.fashionwebsite.dto.response.review.ProductScoreResponse;
 import iuh.fit.fashionwebsite.dto.response.ProductResponse;
 import iuh.fit.fashionwebsite.dto.response.ai.ProductAiMetadataResponse;
 import iuh.fit.fashionwebsite.dto.response.ai.RecommendedProductAiResponse;
@@ -662,9 +662,18 @@ public class UserUnderstandingServiceImpl implements UserUnderstandingService {
                 ? user.getFullname()
                 : user.getUsername();
 
+        String genderLabel = "Chưa xác định";
+        if (user.getGender() != null) {
+            genderLabel = switch (user.getGender()) {
+                case MALE -> "Nam";
+                case FEMALE -> "Nữ";
+                case OTHER -> "Khác";
+            };
+        }
+
         return String.format("""
                 [HỒ SƠ THẤU HIỂU NGƯỜI DÙNG - USER UNDERSTANDING CONTEXT]
-                - Khách hàng: %s (ID: %d)
+                - Khách hàng: %s (ID: %d) | Giới tính: %s
                 - Phong cách chủ đạo: %s
                 - Danh mục quan tâm nhất: %s
                 - Tông màu & Size ưu tiên: %s | Size: %s
@@ -673,6 +682,7 @@ public class UserUnderstandingServiceImpl implements UserUnderstandingService {
                 """.stripIndent(),
                 displayName,
                 user.getId(),
+                genderLabel,
                 styles,
                 categories,
                 colors,

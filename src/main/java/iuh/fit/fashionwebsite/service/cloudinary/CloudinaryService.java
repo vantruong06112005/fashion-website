@@ -22,12 +22,23 @@ public class CloudinaryService {
     @Value("${cloudinary.cloud-name:}")
     private String cloudName;
 
+    private String getEffectiveCloudName() {
+        if (cloudName != null && !cloudName.isBlank()) {
+            return cloudName.trim();
+        }
+        if (cloudinary != null && cloudinary.config != null && cloudinary.config.cloudName != null) {
+            return cloudinary.config.cloudName.trim();
+        }
+        return null;
+    }
+
     public String uploadImage(MultipartFile file, String folder) {
         if (file == null || file.isEmpty()) {
             throw new AppException(ErrorCode.INVALID_FILE);
         }
 
-        if (cloudName == null || cloudName.isBlank()) {
+        String effectiveCloudName = getEffectiveCloudName();
+        if (effectiveCloudName == null || effectiveCloudName.isBlank()) {
             log.error("Cloudinary cloud-name is missing in application.properties! Please configure cloudinary.cloud-name, cloudinary.api-key, and cloudinary.api-secret.");
             throw new AppException(ErrorCode.FILE_UPLOAD_FAILED);
         }
@@ -52,7 +63,8 @@ public class CloudinaryService {
             return;
         }
 
-        if (cloudName == null || cloudName.isBlank()) {
+        String effectiveCloudName = getEffectiveCloudName();
+        if (effectiveCloudName == null || effectiveCloudName.isBlank()) {
             log.warn("Cloudinary cloud-name is not configured. Skipping image deletion: {}", imageUrl);
             return;
         }
@@ -63,9 +75,26 @@ public class CloudinaryService {
             return;
         }
 
+        // Không xóa ảnh demo mẫu của hệ thống
+        if (publicId.startsWith("fashion_website/demo/")) {
+            log.info("Preserving demo seed asset, skipping deletion: {}", publicId);
+            return;
+        }
+
         try {
-            Map<?, ?> result = cloudinary.uploader().destroy(publicId, ObjectUtils.emptyMap());
-            log.info("Cloudinary delete result for {}: {}", publicId, result.get("result"));
+            Map<?, ?> result = cloudinary.uploader().destroy(
+                    publicId,
+                    ObjectUtils.asMap(
+                            "invalidate", Boolean.TRUE,
+                            "resource_type", "image"
+                    )
+            );
+            String status = result != null ? String.valueOf(result.get("result")) : "unknown";
+            if ("ok".equalsIgnoreCase(status)) {
+                log.info("Successfully deleted image from Cloudinary (publicId: {})", publicId);
+            } else {
+                log.warn("Cloudinary destroy returned non-ok result for publicId '{}': {}", publicId, result);
+            }
         } catch (Exception e) {
             log.error("Failed to delete image from Cloudinary (publicId: {}): {}", publicId, e.getMessage(), e);
         }
@@ -74,6 +103,18 @@ public class CloudinaryService {
     public String extractPublicId(String imageUrl) {
         if (imageUrl == null || imageUrl.isBlank()) {
             return null;
+        }
+
+        imageUrl = imageUrl.trim();
+
+        // Loại bỏ query parameter và fragment nếu có
+        int queryIndex = imageUrl.indexOf('?');
+        if (queryIndex != -1) {
+            imageUrl = imageUrl.substring(0, queryIndex);
+        }
+        int hashIndex = imageUrl.indexOf('#');
+        if (hashIndex != -1) {
+            imageUrl = imageUrl.substring(0, hashIndex);
         }
 
         // If it's already a publicId path (does not start with http:// or https://)
@@ -91,8 +132,8 @@ public class CloudinaryService {
             String pathAfterUpload = imageUrl.substring(uploadIndex + "/upload/".length());
 
             // Remove transformation and/or version segment if present, e.g. "v1234567/" or "c_fill,w_100/v1234567/"
-            if (pathAfterUpload.matches("^(?:[^/]+/)*v\\d+/.+")) {
-                pathAfterUpload = pathAfterUpload.replaceFirst("^(?:[^/]+/)*v\\d+/", "");
+            if (pathAfterUpload.matches("^(?:[^/]+/)*?v\\d+/.+")) {
+                pathAfterUpload = pathAfterUpload.replaceFirst("^(?:[^/]+/)*?v\\d+/", "");
             }
 
             // Remove file extension
@@ -108,4 +149,3 @@ public class CloudinaryService {
         }
     }
 }
-

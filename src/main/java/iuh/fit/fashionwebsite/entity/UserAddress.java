@@ -3,12 +3,18 @@ package iuh.fit.fashionwebsite.entity;
 import iuh.fit.fashionwebsite.enums.AddressType;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
+
+import java.time.LocalDateTime;
 
 @Entity
 @Table(
         name = "user_addresses",
         indexes = {@Index(name = "idx_user_addresses_user_id", columnList = "user_id")}
 )
+@SQLDelete(sql = "UPDATE user_addresses SET deleted_at = CURRENT_TIMESTAMP, is_default = false WHERE id = ?")
+@SQLRestriction("deleted_at IS NULL")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -37,6 +43,9 @@ public class UserAddress extends BaseEntity {
     @Builder.Default
     @Column(name = "is_default", nullable = false)
     private Boolean isDefault = false;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)

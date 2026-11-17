@@ -3,7 +3,7 @@ package iuh.fit.fashionwebsite.service.user;
 import iuh.fit.fashionwebsite.dto.internal.UserBehaviorEvent;
 import iuh.fit.fashionwebsite.dto.request.TrackBehaviorRequest;
 import iuh.fit.fashionwebsite.dto.response.CategoryScoreResponse;
-import iuh.fit.fashionwebsite.dto.response.ProductScoreResponse;
+import iuh.fit.fashionwebsite.dto.response.review.ProductScoreResponse;
 import iuh.fit.fashionwebsite.dto.response.UserPreferenceProfileResponse;
 import iuh.fit.fashionwebsite.entity.UserBehavior;
 import iuh.fit.fashionwebsite.enums.BehaviorType;

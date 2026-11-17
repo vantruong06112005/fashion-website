@@ -18,6 +18,7 @@ import iuh.fit.fashionwebsite.dto.response.auth.IntrospectResponse;
 import iuh.fit.fashionwebsite.dto.response.user.UserResponse;
 import iuh.fit.fashionwebsite.entity.PasswordResetToken;
 import iuh.fit.fashionwebsite.entity.User;
+import iuh.fit.fashionwebsite.enums.Gender;
 import iuh.fit.fashionwebsite.enums.RoleUser;
 import iuh.fit.fashionwebsite.enums.StatusUser;
 import iuh.fit.fashionwebsite.enums.TokenType;
@@ -354,6 +355,10 @@ public class AuthenticationService {
                 passwordEncoder.encode(request.getPassword())
         );
 
+        user.setGender(request.getGender() != null ? request.getGender() : Gender.OTHER);
+        if (request.getDateOfBirth() != null) {
+            user.setDateOfBirth(request.getDateOfBirth());
+        }
         user.setRole(RoleUser.CUSTOMER);
         user.setStatus(StatusUser.ACTIVE);
 
@@ -538,6 +543,7 @@ public class AuthenticationService {
                 .username(username)
                 .email(email)
                 .fullname(fullName != null && !fullName.isBlank() ? fullName : username)
+                .gender(Gender.OTHER)
                 .avt(picture)
                 .passwordHash(passwordEncoder.encode(UUID.randomUUID().toString()))
                 .role(RoleUser.CUSTOMER)

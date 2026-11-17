@@ -18,6 +18,8 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import java.math.BigDecimal;
 
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 @DataJpaTest(properties = {
@@ -33,6 +35,8 @@ class ProductFilterIntegrationTest {
     @Autowired ProductRepository products;
     @Autowired CategoryRepository categories;
     @Autowired CategoryService categoryService;
+    @MockitoBean private iuh.fit.fashionwebsite.service.ai.UserUnderstandingService userUnderstandingService;
+    @MockitoBean private iuh.fit.fashionwebsite.service.ai.ProductCatalogCache productCatalogCache;
     Category parent;
     Category child;
     Product shirt;

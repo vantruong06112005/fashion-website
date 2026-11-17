@@ -2,11 +2,9 @@ package iuh.fit.fashionwebsite.mapper;
 
 import iuh.fit.fashionwebsite.dto.request.ProductReviewImageCreationRequest;
 import iuh.fit.fashionwebsite.dto.request.ProductReviewImageUpdateRequest;
-import iuh.fit.fashionwebsite.dto.response.ProductReviewImageResponse;
+import iuh.fit.fashionwebsite.dto.response.review.ProductReviewImageResponse;
 import iuh.fit.fashionwebsite.entity.ProductReviewImage;
 import org.mapstruct.*;
-
-import java.util.List;
 
 @Mapper(componentModel = "spring")
 public interface ProductReviewImageMapper {

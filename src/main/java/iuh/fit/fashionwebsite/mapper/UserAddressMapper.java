@@ -15,6 +15,7 @@ public interface UserAddressMapper {
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "user", ignore = true)
+    @Mapping(target = "deletedAt", ignore = true)
     UserAddress toUserAddress(UserAddressCreationRequest request);
 
     @Mapping(target = "userId", source = "user.id")
@@ -26,5 +27,6 @@ public interface UserAddressMapper {
     @Mapping(target = "isDefault", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "deletedAt", ignore = true)
     void updateUserAddress(@MappingTarget UserAddress userAddress, UserAddressUpdateRequest request);
 }

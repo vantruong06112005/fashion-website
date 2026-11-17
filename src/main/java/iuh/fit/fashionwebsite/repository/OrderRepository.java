@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import jakarta.persistence.LockModeType;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -22,6 +23,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
               AND SUBSTRING_INDEX(order_code, '-', -1) REGEXP '^[0-9]+$'
             """, nativeQuery = true)
     long findMaxOrderCodeSequence();
+
+    List<Order> findByUserIdOrderByCreatedAtDesc(Long userId);
 
     // Khóa đơn đến khi tạo phiếu xong, tránh hai yêu cầu cùng dùng số lượng còn lại.
     @Lock(LockModeType.PESSIMISTIC_WRITE)

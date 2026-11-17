@@ -8,6 +8,9 @@ import iuh.fit.fashionwebsite.enums.OrderStatus;
 import iuh.fit.fashionwebsite.enums.PaymentStatus;
 import iuh.fit.fashionwebsite.enums.ShippingProvider;
 import iuh.fit.fashionwebsite.enums.TransactionStatus;
+import iuh.fit.fashionwebsite.enums.BehaviorType;
+import iuh.fit.fashionwebsite.event.OrderStatusChangedEvent;
+import iuh.fit.fashionwebsite.event.StockChangedEvent;
 import iuh.fit.fashionwebsite.exception.AppException;
 import iuh.fit.fashionwebsite.exception.ErrorCode;
 import iuh.fit.fashionwebsite.exception.order.OrderNotFoundException;
@@ -18,12 +21,16 @@ import iuh.fit.fashionwebsite.repository.*;
 import iuh.fit.fashionwebsite.service.cart.CartService;
 import iuh.fit.fashionwebsite.service.shipping.GhnOrderCodeGenerator;
 import iuh.fit.fashionwebsite.service.shipping.GhnService;
+import iuh.fit.fashionwebsite.service.user.UserBehaviorService;
 import iuh.fit.fashionwebsite.service.user.UserService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -32,24 +39,31 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.UUID;
+
 
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 public class OrderService {
     private final OrderRepository orderRepository;
+    private final OrderItemRepository orderItemRepository;
     private final UserAddressRepository userAddressRepository;
+    private final CartRepository cartRepository;
+    private final CartItemRepository cartItemRepository;
+    private final ProductVariantRepository productVariantRepository;
     private final OrderMapper orderMapper;
     private final UserService userService;
     private final PaymentMethodRepository paymentMethodRepository;
-    private final OrderItemRepository orderItemRepository;
-    private final ProductVariantRepository productVariantRepository;
     private final GhnOrderCodeGenerator ghnOrderCodeGenerator;
     private final GhnService ghnService;
     private final SpecialOfferRepository specialOfferRepository;
     private final CartService cartService;
+    private final ApplicationEventPublisher events;
+    private final UserBehaviorService userBehaviorService;
 
-    // Get all orders
     @Transactional(readOnly = true)
     public List<OrderResponse> getAllOrders() {
         return orderRepository.findAll().stream()
@@ -57,25 +71,33 @@ public class OrderService {
                 .toList();
     }
 
-    // Get an order by ID
+    @Transactional(readOnly = true)
+    public List<OrderResponse> getMyOrders() {
+        User user = userService.getCurrentUserEntity();
+        return orderRepository.findByUserIdOrderByCreatedAtDesc(user.getId()).stream()
+                .map(orderMapper::toOrderResponse)
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public OrderResponse getOrderById(Long id) {
         return orderMapper.toOrderResponse(orderRepository.findById(id).orElseThrow(OrderNotFoundException::new));
     }
 
-    // Delete an order by ID
     public void deleteOrder(Long id) {
-        if(!orderRepository.existsById(id)) {
+        if (!orderRepository.existsById(id)) {
             throw new OrderNotFoundException();
         }
         orderRepository.deleteById(id);
     }
 
-    // Create a new order with COD payment method
+    /**
+     * Đặt hàng từ giỏ hàng hiện tại, trừ tồn kho từng ProductVariant và phát sự kiện realtime:
+     * - StockChangedEvent cho từng biến thể sản phẩm
+     * - OrderStatusChangedEvent cho chủ đơn hàng
+     */
     public OrderResponse createOrder(OrderCreationRequest request) {
-        // Get user information from the security context
         User user = userService.getCurrentUserEntity();
-        // Check addressId -> get address from user addresses
         Long addressId = request.getUserAddressId();
         UserAddress userAddress = userAddressRepository.findByIdAndUserId(addressId, user.getId()).orElseThrow((UserAddressNotFoundException::new));
         // Get payment method by code "COD"
@@ -248,9 +270,23 @@ public class OrderService {
         }
     }
 
-    // Create a new order with MoMo payment method
+    /**
+     * Cập nhật trạng thái đơn hàng và phát sự kiện OrderStatusChangedEvent để gửi thông báo realtime.
+     */
+    public OrderResponse updateStatus(Long orderId, OrderStatus status) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(OrderNotFoundException::new);
+        order.setOrderStatus(status);
+        Order saved = orderRepository.save(order);
 
+        if (saved.getUser() != null && saved.getUser().getUsername() != null) {
+            events.publishEvent(new OrderStatusChangedEvent(
+                    saved.getId(),
+                    saved.getUser().getUsername(),
+                    status.name()
+            ));
+        }
 
-    // Update an existing order by ID
-
+        return orderMapper.toOrderResponse(saved);
+    }
 }

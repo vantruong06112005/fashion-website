@@ -10,9 +10,11 @@ import iuh.fit.fashionwebsite.dto.request.user.UserCreationRequest;
 import iuh.fit.fashionwebsite.dto.request.user.UserUpdateRequest;
 import iuh.fit.fashionwebsite.dto.response.user.UserResponse;
 import iuh.fit.fashionwebsite.entity.User;
+import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
+import org.mapstruct.NullValuePropertyMappingStrategy;
 
 /*
  * @description
@@ -38,9 +40,11 @@ public interface UserMapper {
 
     UserResponse toUserResponse(User user);
 
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     @Mapping(target = "id", ignore = true) //“field này MapStruct không được tự map, tôi sẽ tự xử lý nó.”
     @Mapping(target = "username", ignore = true)
     @Mapping(target = "passwordHash", ignore = true)
+    @Mapping(target = "gender", ignore = true)
     @Mapping(target = "role", ignore = true)
     @Mapping(target = "status", ignore = true)
     @Mapping(target = "createdAt", ignore = true)

@@ -34,6 +34,21 @@ public interface UserRepository extends JpaRepository<User, Long> {
                        @Param("passwordHash") String passwordHash,
                        @Param("changedAt") java.time.Instant changedAt);
 
+    @Query("SELECT u FROM User u WHERE " +
+            "(:keyword IS NULL OR :keyword = '' OR " +
+            "LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+            "LOWER(u.fullname) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+            "LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+            "LOWER(u.phone) LIKE LOWER(CONCAT('%', :keyword, '%'))) AND " +
+            "(:role IS NULL OR u.role = :role) AND " +
+            "(:gender IS NULL OR u.gender = :gender) AND " +
+            "(:status IS NULL OR u.status = :status)")
+    org.springframework.data.domain.Page<User> searchUsers(
+            @Param("keyword") String keyword,
+            @Param("role") iuh.fit.fashionwebsite.enums.RoleUser role,
+            @Param("gender") iuh.fit.fashionwebsite.enums.Gender gender,
+            @Param("status") iuh.fit.fashionwebsite.enums.StatusUser status,
+            org.springframework.data.domain.Pageable pageable);
 }
 
 

@@ -10,6 +10,10 @@ import iuh.fit.fashionwebsite.enums.*;
 import iuh.fit.fashionwebsite.repository.*;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.FlushModeType;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,11 +22,19 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Component
 @RequiredArgsConstructor
@@ -46,19 +58,32 @@ public class InitData implements CommandLineRunner {
     private final ReturnRequestRepository returnRequestRepository;
     private final ReturnRequestItemRepository returnRequestItemRepository;
     private final ReturnRequestImageRepository returnRequestImageRepository;
+    private final ReturnRequestHolidayRepository returnRequestHolidayRepository;
     private final ProductReviewRepository productReviewRepository;
     private final ProductReviewImageRepository productReviewImageRepository;
+    private final NotificationRepository notificationRepository;
+    private final ChatMessageRepository chatMessageRepository;
     private final PasswordEncoder passwordEncoder;
     private final EntityManager entityManager;
 
     @Value("${app.seed.default-password}")
     private String defaultPassword;
 
-    @Value("${app.seed.enabled:true}")
+    @Value("${app.seed.enabled:false}")
     private boolean seedEnabled;
 
-    @Value("${app.seed.force:false}")
-    private boolean seedForce;
+    // Các trường hợp lệ có thể null ở dữ liệu tự tạo (không cảnh báo khi audit dữ liệu cũ ngoài InitData).
+    private static final Set<String> OPTIONAL_AUDIT_FIELDS = Set.of(
+            "id", "createdAt", "updatedAt", "deletedAt", "preserveTimestamps",
+            "passwordChangedAt", "avt", "phone", "notes", "deliveredAt",
+            "trackingCode", "extensionReason", "previousHandoverDeadline",
+            "refundProofImageUrl", "refundTransactionCode", "gatewayResponse",
+            "paidAt", "requestId", "payUrl", "referenceId", "parentCategory",
+            "productVariant", "oldVariant", "description", "reasonDetail",
+            "inspectionNote", "userHeight", "userWeight", "fitRating",
+            "discountPercent", "discountAmount", "minOrderAmount", "maxDiscountAmount",
+            "iconUrl", "acceptedQuantity", "itemRefundAmount"
+    );
 
     // Tham chiếu các thực thể gốc để liên kết khóa ngoại giữa các bảng
     private User admin01, staff01, truong01, an01, binh01, cuong01, dung01, ha01, lan01, mai01, nam01;
@@ -79,6 +104,7 @@ public class InitData implements CommandLineRunner {
     private final Map<String, Order> orders = new HashMap<>();
     private final Map<String, OrderItem> orderItems = new HashMap<>();
     private final Map<String, ProductReview> reviews = new HashMap<>();
+    private final Map<Class<?>, Set<Long>> seededEntityIds = new LinkedHashMap<>();
 
     private static LocalDateTime dt(String value) {
         return value == null ? null : LocalDateTime.parse(value, DT_FMT);
@@ -92,12 +118,8 @@ public class InitData implements CommandLineRunner {
             return;
         }
 
-        if (!seedForce && userRepository.count() > 0) {
-            log.info("Database already contains data (users count = {}). Skipping InitData to preserve existing data.", userRepository.count());
-            return;
-        }
-
-        log.info("Initializing demo data...");
+        seededEntityIds.clear();
+        log.info("Running InitData (Sync-Seed Mode: dong bo du lieu mau, giu nguyen du lieu tu tao)...");
         entityManager.setFlushMode(FlushModeType.COMMIT);
 
         seedAllUsersAndAddresses();
@@ -136,17 +158,250 @@ public class InitData implements CommandLineRunner {
 
         seedAllReturnsAndReviews();
         entityManager.flush();
-        log.info("Demo data initialization completed successfully.");
+
+        seedAllReturnRequestHolidays();
+        entityManager.flush();
+
+        seedRealtimeNotificationsAndChat();
+        entityManager.flush();
+
+        auditUnseededRecordsMissingFields();
+        log.info("InitData completed successfully.");
+    }
+
+    private void seedRealtimeNotificationsAndChat() {
+        seedNotification("truong01", NotificationType.ORDER_STATUS,
+                "Đơn hàng #1 đã được cập nhật",
+                "Trạng thái mới: DELIVERED — Đơn hàng của bạn đã giao thành công.",
+                1L, false);
+        seedNotification("truong01", NotificationType.PROMOTION,
+                "Ưu đãi thành viên VIP 15%",
+                "Nhập mã VIP15 khi thanh toán bộ sưu tập Thu Đông Minimalist.",
+                null, false);
+        seedNotification("an01", NotificationType.ORDER_STATUS,
+                "Đơn hàng #2 đang vận chuyển",
+                "Trạng thái mới: SHIPPING — Đơn vị vận chuyển GHN đã nhận kiện hàng.",
+                2L, false);
+        seedNotification("admin01", NotificationType.SYSTEM,
+                "Hệ thống WebSocket STOMP đã sẵn sàng",
+                "Đã kết nối kênh thông báo đơn hàng, tồn kho realtime và chat hỗ trợ.",
+                null, false);
+
+        seedChatMessage("truong01", "truong01", ChatRole.CUSTOMER,
+                "Chào shop, mình cao 1m72 nặng 65kg thì mặc Áo Sơ Mi Oxford size M hay L vừa ạ?");
+        seedChatMessage("truong01", "staff01", ChatRole.ADMIN,
+                "Dạ chào anh Trường! Với chiều cao 1m72 và 65kg, anh mặc size M sẽ ôm vừa vặn chuẩn form Smart Casual ạ.");
+        seedChatMessage("an01", "an01", ChatRole.CUSTOMER,
+                "Shop kiểm tra giúp mình đơn hàng gần nhất khi nào giao tới Quận Gò Vấp nhé!");
+    }
+
+    private Notification seedNotification(String username, NotificationType type, String title,
+                                          String content, Long referenceId, boolean seen) {
+        List<Notification> existing = entityManager.createQuery(
+                        "SELECT n FROM Notification n WHERE n.username = :u AND n.type = :t AND n.title = :title",
+                        Notification.class)
+                .setParameter("u", username)
+                .setParameter("t", type)
+                .setParameter("title", title)
+                .setMaxResults(1)
+                .getResultList();
+
+        Notification n = existing.isEmpty() ? new Notification() : existing.get(0);
+        n.setUsername(username);
+        n.setType(type);
+        n.setTitle(title);
+        n.setContent(content);
+        n.setReferenceId(referenceId);
+        n.setSeen(seen);
+
+        Notification saved = notificationRepository.save(n);
+        trackSeeded(saved, saved.getId());
+        return saved;
+    }
+
+    private ChatMessage seedChatMessage(String customerUsername, String senderUsername,
+                                        ChatRole senderRole, String content) {
+        List<ChatMessage> existing = entityManager.createQuery(
+                        "SELECT c FROM ChatMessage c WHERE c.customerUsername = :cu "
+                                + "AND c.senderUsername = :su AND c.senderRole = :sr AND c.content = :ct",
+                        ChatMessage.class)
+                .setParameter("cu", customerUsername)
+                .setParameter("su", senderUsername)
+                .setParameter("sr", senderRole)
+                .setParameter("ct", content)
+                .setMaxResults(1)
+                .getResultList();
+
+        ChatMessage msg = existing.isEmpty()
+                ? chatMessageRepository.save(ChatMessage.builder()
+                        .customerUsername(customerUsername)
+                        .senderUsername(senderUsername)
+                        .senderRole(senderRole)
+                        .content(content)
+                        .build())
+                : existing.get(0);
+
+        trackSeeded(msg, msg.getId());
+        return msg;
     }
 
     // =========================================================================
-    // CÁC HÀM KHỞI TẠO / CẬP NHẬT DỮ LIỆU MẪU (THEO CÁCH 1)
+    // HÀM HỖ TRỢ MERGE & AUDIT DỮ LIỆU TỰ TẠO NGOÀI INITDATA
+    // =========================================================================
+
+    private void trackSeeded(Object entity, Long id) {
+        if (entity == null || id == null) {
+            return;
+        }
+        seededEntityIds.computeIfAbsent(entity.getClass(), k -> new HashSet<>()).add(id);
+    }
+
+    private void restoreIfSoftDeleted(String tableName, String keyColumn, String keyValue) {
+        entityManager.createNativeQuery(
+                        "UPDATE " + tableName + " SET deleted_at = NULL WHERE " + keyColumn + " = :keyVal AND deleted_at IS NOT NULL")
+                .setParameter("keyVal", keyValue)
+                .executeUpdate();
+    }
+
+    private void auditUnseededRecordsMissingFields() {
+        List<String> warnings = new ArrayList<>();
+
+        for (Map.Entry<Class<?>, Set<Long>> entry : seededEntityIds.entrySet()) {
+            Class<?> entityClass = entry.getKey();
+            Set<Long> seededIds = entry.getValue();
+            if (seededIds.isEmpty()) {
+                continue;
+            }
+
+            List<?> allRows = entityManager.createQuery(
+                    "SELECT e FROM " + entityClass.getSimpleName() + " e", entityClass)
+                    .getResultList();
+
+            List<Object> seededRows = new ArrayList<>();
+            List<Object> customRows = new ArrayList<>();
+            for (Object row : allRows) {
+                Long id = extractId(row);
+                if (id != null && seededIds.contains(id)) {
+                    seededRows.add(row);
+                } else {
+                    customRows.add(row);
+                }
+            }
+
+            if (seededRows.isEmpty() || customRows.isEmpty()) {
+                continue;
+            }
+
+            List<Field> expectedNonNullFields = findExpectedNonNullFields(entityClass, seededRows);
+            if (expectedNonNullFields.isEmpty()) {
+                continue;
+            }
+
+            String tableName = resolveTableName(entityClass);
+            for (Object customRow : customRows) {
+                List<String> missingFields = new ArrayList<>();
+                for (Field field : expectedNonNullFields) {
+                    if (readFieldValue(field, customRow) == null) {
+                        missingFields.add(field.getName());
+                    }
+                }
+                if (!missingFields.isEmpty()) {
+                    warnings.add(String.format(" - Bảng [%s] | id=%s%s -> thiếu trường: %s",
+                            tableName,
+                            extractId(customRow),
+                            extractKeyHint(customRow),
+                            missingFields));
+                }
+            }
+        }
+
+        if (!warnings.isEmpty()) {
+            StringBuilder banner = new StringBuilder();
+            banner.append("\n================================================================================\n");
+            banner.append("[INITDATA AUDIT] PHÁT HIỆN DỮ LIỆU TỰ TẠO TRONG DB ĐANG THIẾU CỘT MỚI\n");
+            banner.append("Các bản ghi dưới đây do lập trình viên tự tạo trước đó (không thuộc InitData)\n");
+            banner.append("và đang bị NULL ở cột mà toàn bộ dữ liệu mẫu InitData đều có giá trị:\n");
+            for (String w : warnings) {
+                banner.append(w).append("\n");
+            }
+            banner.append("=> Gợi ý: Cập nhật thủ công trong DB hoặc qua API trước khi test các luồng liên quan.\n");
+            banner.append("================================================================================");
+            log.warn("{}", banner);
+        }
+    }
+
+    private List<Field> findExpectedNonNullFields(Class<?> entityClass, List<Object> seededRows) {
+        List<Field> result = new ArrayList<>();
+        for (Field field : entityClass.getDeclaredFields()) {
+            if (Modifier.isStatic(field.getModifiers())
+                    || OPTIONAL_AUDIT_FIELDS.contains(field.getName())
+                    || field.isAnnotationPresent(Transient.class)
+                    || field.isAnnotationPresent(OneToMany.class)
+                    || field.isAnnotationPresent(OneToOne.class)) {
+                continue;
+            }
+            field.setAccessible(true);
+            boolean allSeededHaveValue = true;
+            for (Object seededRow : seededRows) {
+                if (readFieldValue(field, seededRow) == null) {
+                    allSeededHaveValue = false;
+                    break;
+                }
+            }
+            if (allSeededHaveValue) {
+                result.add(field);
+            }
+        }
+        return result;
+    }
+
+    private static Object readFieldValue(Field field, Object target) {
+        try {
+            return field.get(target);
+        } catch (IllegalAccessException e) {
+            return null;
+        }
+    }
+
+    private static Long extractId(Object entity) {
+        try {
+            Field idField = entity.getClass().getDeclaredField("id");
+            idField.setAccessible(true);
+            Object val = idField.get(entity);
+            return val instanceof Long l ? l : null;
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            return null;
+        }
+    }
+
+    private static String extractKeyHint(Object entity) {
+        for (String candidate : List.of("username", "orderCode", "sku", "slug", "returnCode", "code", "title", "email")) {
+            try {
+                Field f = entity.getClass().getDeclaredField(candidate);
+                f.setAccessible(true);
+                Object val = f.get(entity);
+                if (val != null) {
+                    return " (" + candidate + "=" + val + ")";
+                }
+            } catch (NoSuchFieldException | IllegalAccessException ignored) {
+            }
+        }
+        return "";
+    }
+
+    private static String resolveTableName(Class<?> entityClass) {
+        Table table = entityClass.getAnnotation(Table.class);
+        return (table != null && !table.name().isBlank()) ? table.name() : entityClass.getSimpleName();
+    }
+
+    // =========================================================================
+    // CÁC HÀM KHỞI TẠO / CẬP NHẬT DỮ LIỆU MẪU (CÁCH A: ĐỒNG BỘ THEO INITDATA)
     // Khi thêm thuộc tính mới vào Entity, chỉ cần thêm tham số và dòng .set...()
     // tương ứng vào hàm seed của bảng đó dưới đây.
     // =========================================================================
 
-    private User seedUser(String username, String passwordHash, String fullname, String phone,
-                          String email, RoleUser role, StatusUser status) {
+    private User seedUser(String username, String passwordHash, String fullname, Gender gender,
+                          String phone, String email, RoleUser role, StatusUser status) {
         User u = userRepository.findByUsername(username)
                 .orElse(new User());
 
@@ -155,12 +410,15 @@ public class InitData implements CommandLineRunner {
             u.setPasswordHash(passwordHash);
         }
         u.setFullname(fullname);
+        u.setGender(gender);
         u.setPhone(phone);
         u.setEmail(email);
         u.setRole(role);
         u.setStatus(status);
 
-        return userRepository.save(u);
+        User saved = userRepository.save(u);
+        trackSeeded(saved, saved.getId());
+        return saved;
     }
 
     private UserAddress seedUserAddress(User user, String fullAddress, String provinceName,
@@ -175,11 +433,14 @@ public class InitData implements CommandLineRunner {
         a.setAddressType(addressType);
         a.setIsDefault(isDefault);
 
-        return userAddressRepository.save(a);
+        UserAddress saved = userAddressRepository.save(a);
+        trackSeeded(saved, saved.getId());
+        return saved;
     }
 
     private Category seedCategory(String name, String slug, boolean isActive, Category parentCategory,
                                   LocalDateTime createdAt, LocalDateTime updatedAt) {
+        restoreIfSoftDeleted("categories", "slug", slug);
         Category c = categoryRepository.findBySlug(slug)
                 .orElse(new Category());
 
@@ -190,13 +451,16 @@ public class InitData implements CommandLineRunner {
         c.setCreatedAt(createdAt);
         c.setUpdatedAt(updatedAt);
 
-        return categoryRepository.save(c);
+        Category saved = categoryRepository.save(c);
+        trackSeeded(saved, saved.getId());
+        return saved;
     }
 
     private Product seedProduct(String name, String slug, String description, BigDecimal basePrice,
                                 BigDecimal averageRating, Integer reviewCount, boolean isActive,
                                 LocalDateTime deletedAt, Category category,
                                 LocalDateTime createdAt, LocalDateTime updatedAt) {
+        restoreIfSoftDeleted("products", "slug", slug);
         Product p = productRepository.findBySlug(slug)
                 .orElse(new Product());
 
@@ -212,7 +476,9 @@ public class InitData implements CommandLineRunner {
         p.setCreatedAt(createdAt);
         p.setUpdatedAt(updatedAt);
 
-        return productRepository.save(p);
+        Product saved = productRepository.save(p);
+        trackSeeded(saved, saved.getId());
+        return saved;
     }
 
     private ProductVariant seedVariant(Product product, String sku, String color, String size,
@@ -238,6 +504,7 @@ public class InitData implements CommandLineRunner {
 
         ProductVariant saved = productVariantRepository.save(v);
         variants.put(sku, saved);
+        trackSeeded(saved, saved.getId());
         return saved;
     }
 
@@ -255,7 +522,9 @@ public class InitData implements CommandLineRunner {
         img.setCreatedAt(createdAt);
         img.setUpdatedAt(updatedAt);
 
-        return productImageRepository.save(img);
+        ProductImage saved = productImageRepository.save(img);
+        trackSeeded(saved, saved.getId());
+        return saved;
     }
 
     private PaymentMethod seedPaymentMethod(String code, String name, String description, String iconUrl,
@@ -271,13 +540,16 @@ public class InitData implements CommandLineRunner {
         pm.setCreatedAt(createdAt);
         pm.setUpdatedAt(updatedAt);
 
-        return paymentMethodRepository.save(pm);
+        PaymentMethod saved = paymentMethodRepository.save(pm);
+        trackSeeded(saved, saved.getId());
+        return saved;
     }
 
     private SpecialOffer seedSpecialOffer(String title, Integer discountPercent, BigDecimal discountAmount,
                                           String offerType, BigDecimal minOrderAmount, BigDecimal maxDiscountAmount,
                                           LocalDateTime startDate, LocalDateTime endDate, boolean isActive,
                                           LocalDateTime createdAt, LocalDateTime updatedAt) {
+        restoreIfSoftDeleted("special_offers", "title", title);
         SpecialOffer so = specialOfferRepository.findFirstByTitle(title)
                 .orElse(new SpecialOffer());
 
@@ -293,7 +565,9 @@ public class InitData implements CommandLineRunner {
         so.setCreatedAt(createdAt);
         so.setUpdatedAt(updatedAt);
 
-        return specialOfferRepository.save(so);
+        SpecialOffer saved = specialOfferRepository.save(so);
+        trackSeeded(saved, saved.getId());
+        return saved;
     }
 
     private SpecialOfferProduct seedSpecialOfferProduct(SpecialOffer specialOffer, Product product,
@@ -309,7 +583,9 @@ public class InitData implements CommandLineRunner {
         sop.setCreatedAt(createdAt);
         sop.setUpdatedAt(updatedAt);
 
-        return specialOfferProductRepository.save(sop);
+        SpecialOfferProduct saved = specialOfferProductRepository.save(sop);
+        trackSeeded(saved, saved.getId());
+        return saved;
     }
 
     private Order seedOrder(String orderCode, User user, String shippingRecipientName, String shippingPhone,
@@ -341,6 +617,7 @@ public class InitData implements CommandLineRunner {
 
         Order saved = orderRepository.save(o);
         orders.put(orderCode, saved);
+        trackSeeded(saved, saved.getId());
         return saved;
     }
 
@@ -364,6 +641,7 @@ public class InitData implements CommandLineRunner {
 
         OrderItem saved = orderItemRepository.save(oi);
         orderItems.put(itemKey, saved);
+        trackSeeded(saved, saved.getId());
         return saved;
     }
 
@@ -387,7 +665,9 @@ public class InitData implements CommandLineRunner {
         pt.setCreatedAt(createdAt);
         pt.setUpdatedAt(updatedAt);
 
-        return paymentTransactionRepository.save(pt);
+        PaymentTransaction saved = paymentTransactionRepository.save(pt);
+        trackSeeded(saved, saved.getId());
+        return saved;
     }
 
     private ReturnRequest seedReturnRequest(String returnCode, User user, Order order,
@@ -395,6 +675,7 @@ public class InitData implements CommandLineRunner {
                                             ReturnRequestStatus status, boolean isOverdue,
                                             boolean customerConfirmedPlan,
                                             LocalDateTime createdAt, LocalDateTime updatedAt) {
+        restoreIfSoftDeleted("return_requests", "return_code", returnCode);
         ReturnRequest rr = returnRequestRepository.findByReturnCode(returnCode)
                 .orElse(new ReturnRequest());
 
@@ -410,12 +691,66 @@ public class InitData implements CommandLineRunner {
         rr.setCreatedAt(createdAt);
         rr.setUpdatedAt(updatedAt);
 
-        return returnRequestRepository.save(rr);
+        ReturnRequest saved = returnRequestRepository.save(rr);
+        trackSeeded(saved, saved.getId());
+        return saved;
+    }
+
+    private void seedRefundedReturnDetails(ReturnRequest rr,
+                                           BigDecimal itemsRefundAmount,
+                                           BigDecimal returnShippingFee,
+                                           BigDecimal refundAmount,
+                                           String bankName,
+                                           String accountNumber,
+                                           String accountHolderName,
+                                           String refundTransactionCode,
+                                           LocalDateTime approvedAt,
+                                           LocalDateTime customerRespondedAt,
+                                           LocalDateTime handoverDeadline,
+                                           LocalDateTime handedOverAt,
+                                           LocalDateTime receivedAt,
+                                           LocalDateTime inspectedAt,
+                                           LocalDateTime refundedAt) {
+        rr.setCustomerConfirmedPlan(true);
+        rr.setItemsRefundAmount(itemsRefundAmount);
+        rr.setReturnShippingFee(returnShippingFee);
+        rr.setRefundAmount(refundAmount);
+        rr.setBankName(bankName);
+        rr.setAccountNumber(accountNumber);
+        rr.setAccountHolderName(accountHolderName);
+        rr.setRefundTransactionCode(refundTransactionCode);
+        rr.setApprovedAt(approvedAt);
+        rr.setCustomerRespondedAt(customerRespondedAt);
+        rr.setHandoverDeadline(handoverDeadline);
+        rr.setHandedOverAt(handedOverAt);
+        rr.setReceivedAt(receivedAt);
+        rr.setInspectedAt(inspectedAt);
+        rr.setInspectionResultSentAt(inspectedAt);
+        rr.setRefundEligibleAt(inspectedAt);
+        rr.setRefundedAt(refundedAt);
+        rr.setResolvedAt(refundedAt);
+        rr.setCompletedAt(refundedAt);
+        rr.setRestockedAt(refundedAt);
+        rr.setApprovedBy(staff01.getId());
+        rr.setInspectedBy(staff01.getId());
+        rr.setRefundedBy(admin01.getId());
+        rr.setRestockedBy(staff01.getId());
+        returnRequestRepository.save(rr);
     }
 
     private ReturnRequestItem seedReturnRequestItem(ReturnRequest returnRequest, OrderItem orderItem,
                                                     ProductVariant oldVariant, Integer quantity,
                                                     Integer restockedQuantity, boolean isRestocked,
+                                                    LocalDateTime createdAt, LocalDateTime updatedAt) {
+        return seedReturnRequestItem(returnRequest, orderItem, oldVariant, quantity,
+                null, restockedQuantity, isRestocked, null, null, createdAt, updatedAt);
+    }
+
+    private ReturnRequestItem seedReturnRequestItem(ReturnRequest returnRequest, OrderItem orderItem,
+                                                    ProductVariant oldVariant, Integer quantity,
+                                                    Integer acceptedQuantity, Integer restockedQuantity,
+                                                    boolean isRestocked, BigDecimal itemRefundAmount,
+                                                    String inspectionNote,
                                                     LocalDateTime createdAt, LocalDateTime updatedAt) {
         ReturnRequestItem rri = returnRequestItemRepository
                 .findFirstByReturnRequestIdAndOrderItemId(returnRequest.getId(), orderItem.getId())
@@ -425,12 +760,17 @@ public class InitData implements CommandLineRunner {
         rri.setOrderItem(orderItem);
         rri.setOldVariant(oldVariant);
         rri.setQuantity(quantity);
+        rri.setAcceptedQuantity(acceptedQuantity);
         rri.setRestockedQuantity(restockedQuantity);
         rri.setIsRestocked(isRestocked);
+        rri.setItemRefundAmount(itemRefundAmount);
+        rri.setInspectionNote(inspectionNote);
         rri.setCreatedAt(createdAt);
         rri.setUpdatedAt(updatedAt);
 
-        return returnRequestItemRepository.save(rri);
+        ReturnRequestItem saved = returnRequestItemRepository.save(rri);
+        trackSeeded(saved, saved.getId());
+        return saved;
     }
 
     private ReturnRequestImage seedReturnRequestImage(ReturnRequest returnRequest, String imageUrl,
@@ -444,7 +784,30 @@ public class InitData implements CommandLineRunner {
         img.setCreatedAt(createdAt);
         img.setUpdatedAt(updatedAt);
 
-        return returnRequestImageRepository.save(img);
+        ReturnRequestImage saved = returnRequestImageRepository.save(img);
+        trackSeeded(saved, saved.getId());
+        return saved;
+    }
+
+    private ReturnRequestHoliday seedReturnRequestHoliday(LocalDate holidayDate, String name, String description,
+                                                          LocalDateTime createdAt, LocalDateTime updatedAt) {
+        List<ReturnRequestHoliday> existing = entityManager.createQuery(
+                        "SELECT h FROM ReturnRequestHoliday h WHERE h.holidayDate = :d",
+                        ReturnRequestHoliday.class)
+                .setParameter("d", holidayDate)
+                .setMaxResults(1)
+                .getResultList();
+
+        ReturnRequestHoliday holiday = existing.isEmpty() ? new ReturnRequestHoliday() : existing.get(0);
+        holiday.setHolidayDate(holidayDate);
+        holiday.setName(name);
+        holiday.setDescription(description);
+        holiday.setCreatedAt(createdAt);
+        holiday.setUpdatedAt(updatedAt);
+
+        ReturnRequestHoliday saved = returnRequestHolidayRepository.save(holiday);
+        trackSeeded(saved, saved.getId());
+        return saved;
     }
 
     private ProductReview seedProductReview(String reviewKey, User user, Product product, OrderItem orderItem,
@@ -468,6 +831,7 @@ public class InitData implements CommandLineRunner {
 
         ProductReview saved = productReviewRepository.save(pr);
         reviews.put(reviewKey, saved);
+        trackSeeded(saved, saved.getId());
         return saved;
     }
 
@@ -485,7 +849,9 @@ public class InitData implements CommandLineRunner {
         img.setCreatedAt(createdAt);
         img.setUpdatedAt(updatedAt);
 
-        return productReviewImageRepository.save(img);
+        ProductReviewImage saved = productReviewImageRepository.save(img);
+        trackSeeded(saved, saved.getId());
+        return saved;
     }
 
     // =========================================================================
@@ -495,17 +861,17 @@ public class InitData implements CommandLineRunner {
     private void seedAllUsersAndAddresses() {
         String password = passwordEncoder.encode(defaultPassword);
 
-        admin01 = seedUser("admin01", password, "Nguyen Van Admin", "0901000001", "admin01@gmail.com", RoleUser.ADMIN, StatusUser.ACTIVE);
-        staff01 = seedUser("staff01", password, "Tran Thi Staff", "0901000099", "staff01@gmail.com", RoleUser.STAFF, StatusUser.ACTIVE);
-        truong01 = seedUser("truong01", password, "Nguyen Van Truong", "0901000002", "truong01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        an01 = seedUser("an01", password, "Tran Van An", "0901000003", "an01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        binh01 = seedUser("binh01", password, "Le Van Binh", "0901000004", "binh01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        cuong01 = seedUser("cuong01", password, "Pham Van Cuong", "0901000005", "cuong01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        dung01 = seedUser("dung01", password, "Hoang Van Dung", "0901000006", "dung01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        ha01 = seedUser("ha01", password, "Nguyen Thi Ha", "0901000007", "ha01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        lan01 = seedUser("lan01", password, "Tran Thi Lan", "0901000008", "lan01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        mai01 = seedUser("mai01", password, "Le Thi Mai", "0901000009", "mai01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
-        nam01 = seedUser("nam01", password, "Pham Van Nam", "0901000010", "nam01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        admin01 = seedUser("admin01", password, "Nguyen Van Admin", Gender.MALE, "0901000001", "admin01@gmail.com", RoleUser.ADMIN, StatusUser.ACTIVE);
+        staff01 = seedUser("staff01", password, "Tran Thi Staff", Gender.FEMALE, "0901000099", "staff01@gmail.com", RoleUser.STAFF, StatusUser.ACTIVE);
+        truong01 = seedUser("truong01", password, "Nguyen Van Truong", Gender.MALE, "0901000002", "truong01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        an01 = seedUser("an01", password, "Tran Van An", Gender.MALE, "0901000003", "an01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        binh01 = seedUser("binh01", password, "Le Van Binh", Gender.MALE, "0901000004", "binh01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        cuong01 = seedUser("cuong01", password, "Pham Van Cuong", Gender.MALE, "0901000005", "cuong01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        dung01 = seedUser("dung01", password, "Hoang Van Dung", Gender.MALE, "0901000006", "dung01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        ha01 = seedUser("ha01", password, "Nguyen Thi Ha", Gender.FEMALE, "0901000007", "ha01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        lan01 = seedUser("lan01", password, "Tran Thi Lan", Gender.FEMALE, "0901000008", "lan01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        mai01 = seedUser("mai01", password, "Le Thi Mai", Gender.FEMALE, "0901000009", "mai01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
+        nam01 = seedUser("nam01", password, "Pham Van Nam", Gender.MALE, "0901000010", "nam01@gmail.com", RoleUser.CUSTOMER, StatusUser.ACTIVE);
 
         seedUserAddress(truong01, "12 Nguyễn Văn Bảo, Phường 4, Quận Gò Vấp, TP. Hồ Chí Minh", "Hồ Chí Minh", "Phường Bến Thành", AddressType.HOME, true);
         seedUserAddress(truong01, "Tòa nhà Bitexco, 2 Hải Triều, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh", "Hồ Chí Minh", "Phường Bến Thành", AddressType.OFFICE, false);
@@ -3063,23 +3429,45 @@ public class InitData implements CommandLineRunner {
     }
 
     private void seedAllReturnsAndReviews() {
-        r01 = seedReturnRequest("FWR1-001", binh01, orders.get("FWD1-20261004-261"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-07 12:34:00\",\"requested_at\":\"2026-10-08 12:34:00\",\"merchandise_refund\":365000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":340000,\"approved_at\":\"2026-10-08 13:34:00\",\"fee_consent_at\":\"2026-10-08 13:49:00\",\"customer_bank_details_confirmed_at\":\"2026-10-08 14:04:00\",\"handover_at\":\"2026-10-08 15:34:00\",\"warehouse_received_at\":\"2026-10-09 15:34:00\",\"inspection_accepted_at\":\"2026-10-09 16:34:00\",\"refund_completed_at\":\"2026-10-12 09:00:00\",\"refund_reference\":\"DEMO-BANK-RETURN-001\",\"inspection_result\":\"ACCEPTED_NEW_ITEM\",\"workflow_state\":\"REFUNDED\"}", ReturnRequestStatus.REFUNDED, false, false, dt("2026-10-08 12:34:00"), dt("2026-10-12 09:00:00"));
-        r02 = seedReturnRequest("FWR1-002", truong01, orders.get("FWD1-20261005-262"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-08 20:15:00\",\"requested_at\":\"2026-10-09 20:15:00\",\"merchandise_refund\":262000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":237000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":\"2026-10-12 11:00:00\",\"warehouse_received_at\":\"2026-10-13 11:00:00\",\"inspection_accepted_at\":\"2026-10-13 12:00:00\",\"refund_completed_at\":\"2026-10-13 13:00:00\",\"refund_reference\":\"DEMO-BANK-RETURN-002\",\"inspection_result\":\"ACCEPTED_NEW_ITEM\",\"workflow_state\":\"REFUNDED\"}", ReturnRequestStatus.REFUNDED, false, false, dt("2026-10-09 20:15:00"), dt("2026-10-13 13:00:00"));
-        r03 = seedReturnRequest("FWR1-003", mai01, orders.get("FWD1-20261006-263"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-09 13:37:00\",\"requested_at\":\"2026-10-10 13:37:00\",\"merchandise_refund\":478000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":453000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"AWAITING_RETURN_HANDOVER\",\"handover_due_at\":\"2026-10-19 09:00:00\",\"sla_overdue\":true,\"overdue_notice\":\"Tình huống bàn giao đang quá hạn giả lập; nhân viên liên hệ khách/đơn vị vận chuyển, không tự hoàn tiền hoặc tự gia hạn nhiều lần.\"}", ReturnRequestStatus.WAITING_FOR_RETURN_DELIVERY, false, false, dt("2026-10-10 13:37:00"), dt("2026-10-12 09:30:00"));
-        r04 = seedReturnRequest("FWR1-004", ha01, orders.get("FWD1-20261006-264"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-09 19:44:00\",\"requested_at\":\"2026-10-10 19:44:00\",\"merchandise_refund\":224000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":199000,\"approved_at\":null,\"fee_consent_at\":null,\"customer_bank_details_confirmed_at\":null,\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"AWAITING_APPROVAL\",\"sla_overdue\":true,\"overdue_notice\":\"Tình huống shop chậm duyệt giả lập; giữ quyền trả hàng, chưa nhận hàng và chưa hoàn tiền.\"}", ReturnRequestStatus.PENDING_APPROVAL, false, false, dt("2026-10-10 19:44:00"), dt("2026-10-10 19:44:00"));
-        r05 = seedReturnRequest("FWR1-005", cuong01, orders.get("FWD1-20261006-265"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-09 21:02:00\",\"requested_at\":\"2026-10-10 21:02:00\",\"merchandise_refund\":598000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":573000,\"approved_at\":null,\"fee_consent_at\":null,\"customer_bank_details_confirmed_at\":null,\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"REJECTED_BEFORE_PICKUP\",\"rejection_reason\":\"Khách xác nhận đã sử dụng sản phẩm; không đáp ứng điều kiện còn mới đối với trả hàng do đổi ý.\"}", ReturnRequestStatus.REJECTED, false, false, dt("2026-10-10 21:02:00"), dt("2026-10-12 09:00:00"));
-        r06 = seedReturnRequest("FWR1-006", ha01, orders.get("FWD1-20261007-266"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-10 10:43:00\",\"requested_at\":\"2026-10-11 10:43:00\",\"merchandise_refund\":718000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":693000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":\"2026-10-12 11:00:00\",\"warehouse_received_at\":\"2026-10-13 11:00:00\",\"inspection_accepted_at\":\"2026-10-13 12:00:00\",\"refund_completed_at\":\"2026-10-13 13:00:00\",\"refund_reference\":\"DEMO-BANK-RETURN-006\",\"inspection_result\":\"ACCEPTED_NEW_ITEM\",\"workflow_state\":\"REFUNDED\"}", ReturnRequestStatus.REFUNDED, false, false, dt("2026-10-11 10:43:00"), dt("2026-10-13 13:00:00"));
-        r07 = seedReturnRequest("FWR1-007", cuong01, orders.get("FWD1-20261007-267"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-10 11:33:00\",\"requested_at\":\"2026-10-11 11:33:00\",\"merchandise_refund\":598000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":573000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":\"2026-10-12 11:00:00\",\"warehouse_received_at\":\"2026-10-13 11:00:00\",\"inspection_accepted_at\":\"2026-10-13 12:00:00\",\"refund_completed_at\":\"2026-10-13 13:00:00\",\"refund_reference\":\"DEMO-BANK-RETURN-007\",\"inspection_result\":\"ACCEPTED_NEW_ITEM\",\"workflow_state\":\"REFUNDED\"}", ReturnRequestStatus.REFUNDED, false, false, dt("2026-10-11 11:33:00"), dt("2026-10-13 13:00:00"));
-        r08 = seedReturnRequest("FWR1-008", an01, orders.get("FWD1-20261007-268"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-10 16:58:00\",\"requested_at\":\"2026-10-11 16:58:00\",\"merchandise_refund\":524000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":499000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"AWAITING_RETURN_HANDOVER\",\"handover_due_at\":\"2026-10-19 09:00:00\",\"sla_overdue\":true,\"overdue_notice\":\"Tình huống bàn giao đang quá hạn giả lập; nhân viên liên hệ khách/đơn vị vận chuyển, không tự hoàn tiền hoặc tự gia hạn nhiều lần.\"}", ReturnRequestStatus.WAITING_FOR_RETURN_DELIVERY, false, false, dt("2026-10-11 16:58:00"), dt("2026-10-12 09:30:00"));
-        r09 = seedReturnRequest("FWR1-009", nam01, orders.get("FWD1-20261008-269"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-11 18:58:00\",\"requested_at\":\"2026-10-12 18:58:00\",\"merchandise_refund\":447000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":422000,\"approved_at\":null,\"fee_consent_at\":null,\"customer_bank_details_confirmed_at\":null,\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"AWAITING_APPROVAL\",\"sla_overdue\":true,\"overdue_notice\":\"Tình huống shop chậm duyệt giả lập; giữ quyền trả hàng, chưa nhận hàng và chưa hoàn tiền.\"}", ReturnRequestStatus.PENDING_APPROVAL, false, false, dt("2026-10-12 18:58:00"), dt("2026-10-12 18:58:00"));
-        r10 = seedReturnRequest("FWR1-010", lan01, orders.get("FWD1-20261010-270"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-13 10:16:00\",\"requested_at\":\"2026-10-14 10:16:00\",\"merchandise_refund\":478000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":453000,\"approved_at\":null,\"fee_consent_at\":null,\"customer_bank_details_confirmed_at\":null,\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"REJECTED_BEFORE_PICKUP\",\"rejection_reason\":\"Khách xác nhận đã sử dụng sản phẩm; không đáp ứng điều kiện còn mới đối với trả hàng do đổi ý.\"}", ReturnRequestStatus.REJECTED, false, false, dt("2026-10-14 10:16:00"), dt("2026-10-14 11:16:00"));
-        seedReturnRequestItem(r01, orderItems.get("oi261_1"), variants.get("FWDEMO1-P041-V002"), 1, 0, false, dt("2026-10-08 12:34:00"), dt("2026-10-08 12:34:00"));
-        seedReturnRequestItem(r02, orderItems.get("oi262_1"), variants.get("FWDEMO1-P036-V001"), 1, 0, false, dt("2026-10-09 20:15:00"), dt("2026-10-09 20:15:00"));
+        r01 = seedReturnRequest("FWR1-001", binh01, orders.get("FWD1-20261004-261"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-07 12:34:00\",\"requested_at\":\"2026-10-08 12:34:00\",\"merchandise_refund\":365000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":340000,\"approved_at\":\"2026-10-08 13:34:00\",\"fee_consent_at\":\"2026-10-08 13:49:00\",\"customer_bank_details_confirmed_at\":\"2026-10-08 14:04:00\",\"handover_at\":\"2026-10-08 15:34:00\",\"warehouse_received_at\":\"2026-10-09 15:34:00\",\"inspection_accepted_at\":\"2026-10-09 16:34:00\",\"refund_completed_at\":\"2026-10-12 09:00:00\",\"refund_reference\":\"DEMO-BANK-RETURN-001\",\"inspection_result\":\"ACCEPTED_NEW_ITEM\",\"workflow_state\":\"REFUNDED\"}", ReturnRequestStatus.REFUNDED, false, true, dt("2026-10-08 12:34:00"), dt("2026-10-12 09:00:00"));
+        seedRefundedReturnDetails(r01, new BigDecimal("365000"), new BigDecimal("25000"), new BigDecimal("340000"),
+                "Vietcombank", "0071001234561", "LE VAN BINH", "DEMO-BANK-RETURN-001",
+                dt("2026-10-08 13:34:00"), dt("2026-10-08 14:04:00"), dt("2026-10-15 17:00:00"),
+                dt("2026-10-08 15:34:00"), dt("2026-10-09 15:34:00"), dt("2026-10-09 16:34:00"), dt("2026-10-12 09:00:00"));
+
+        r02 = seedReturnRequest("FWR1-002", truong01, orders.get("FWD1-20261005-262"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-08 20:15:00\",\"requested_at\":\"2026-10-09 20:15:00\",\"merchandise_refund\":262000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":237000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":\"2026-10-12 11:00:00\",\"warehouse_received_at\":\"2026-10-13 11:00:00\",\"inspection_accepted_at\":\"2026-10-13 12:00:00\",\"refund_completed_at\":\"2026-10-13 13:00:00\",\"refund_reference\":\"DEMO-BANK-RETURN-002\",\"inspection_result\":\"ACCEPTED_NEW_ITEM\",\"workflow_state\":\"REFUNDED\"}", ReturnRequestStatus.REFUNDED, false, true, dt("2026-10-09 20:15:00"), dt("2026-10-13 13:00:00"));
+        seedRefundedReturnDetails(r02, new BigDecimal("262000"), new BigDecimal("25000"), new BigDecimal("237000"),
+                "Techcombank", "1903601234562", "NGUYEN VAN TRUONG", "DEMO-BANK-RETURN-002",
+                dt("2026-10-12 09:00:00"), dt("2026-10-12 09:30:00"), dt("2026-10-19 17:00:00"),
+                dt("2026-10-12 11:00:00"), dt("2026-10-13 11:00:00"), dt("2026-10-13 12:00:00"), dt("2026-10-13 13:00:00"));
+
+        r03 = seedReturnRequest("FWR1-003", mai01, orders.get("FWD1-20261006-263"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-09 13:37:00\",\"requested_at\":\"2026-10-10 13:37:00\",\"merchandise_refund\":478000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":453000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"AWAITING_RETURN_HANDOVER\",\"handover_due_at\":\"2026-10-19 09:00:00\",\"sla_overdue\":true,\"overdue_notice\":\"Tình huống bàn giao đang quá hạn giả lập; nhân viên liên hệ khách/đơn vị vận chuyển, không tự hoàn tiền hoặc tự gia hạn nhiều lần.\"}", ReturnRequestStatus.WAITING_FOR_RETURN_DELIVERY, true, true, dt("2026-10-10 13:37:00"), dt("2026-10-12 09:30:00"));
+        r04 = seedReturnRequest("FWR1-004", ha01, orders.get("FWD1-20261006-264"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-09 19:44:00\",\"requested_at\":\"2026-10-10 19:44:00\",\"merchandise_refund\":224000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":199000,\"approved_at\":null,\"fee_consent_at\":null,\"customer_bank_details_confirmed_at\":null,\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"AWAITING_APPROVAL\",\"sla_overdue\":true,\"overdue_notice\":\"Tình huống shop chậm duyệt giả lập; giữ quyền trả hàng, chưa nhận hàng và chưa hoàn tiền.\"}", ReturnRequestStatus.PENDING_APPROVAL, true, false, dt("2026-10-10 19:44:00"), dt("2026-10-10 19:44:00"));
+        r05 = seedReturnRequest("FWR1-005", cuong01, orders.get("FWD1-20261006-265"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-09 21:02:00\",\"requested_at\":\"2026-10-10 21:02:00\",\"merchandise_refund\":598000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":573000,\"approved_at\":null,\"fee_consent_at\":null,\"customer_bank_details_confirmed_at\":null,\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"REJECTED_BEFORE_PICKUP\",\"rejection_reason\":\"Khách xác nhận đã sử dụng sản phẩm; không đáp ứng điều kiện còn mới đối với trả hàng do đổi ý.\"}", ReturnRequestStatus.REJECTED, false, false, dt("2026-10-10 21:02:00"), dt("2026-10-12 09:00:00"));
+
+        r06 = seedReturnRequest("FWR1-006", ha01, orders.get("FWD1-20261007-266"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-10 10:43:00\",\"requested_at\":\"2026-10-11 10:43:00\",\"merchandise_refund\":718000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":693000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":\"2026-10-12 11:00:00\",\"warehouse_received_at\":\"2026-10-13 11:00:00\",\"inspection_accepted_at\":\"2026-10-13 12:00:00\",\"refund_completed_at\":\"2026-10-13 13:00:00\",\"refund_reference\":\"DEMO-BANK-RETURN-006\",\"inspection_result\":\"ACCEPTED_NEW_ITEM\",\"workflow_state\":\"REFUNDED\"}", ReturnRequestStatus.REFUNDED, false, true, dt("2026-10-11 10:43:00"), dt("2026-10-13 13:00:00"));
+        seedRefundedReturnDetails(r06, new BigDecimal("718000"), new BigDecimal("25000"), new BigDecimal("693000"),
+                "MB Bank", "0901000007888", "NGUYEN THI HA", "DEMO-BANK-RETURN-006",
+                dt("2026-10-12 09:00:00"), dt("2026-10-12 09:30:00"), dt("2026-10-19 17:00:00"),
+                dt("2026-10-12 11:00:00"), dt("2026-10-13 11:00:00"), dt("2026-10-13 12:00:00"), dt("2026-10-13 13:00:00"));
+
+        r07 = seedReturnRequest("FWR1-007", cuong01, orders.get("FWD1-20261007-267"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-10 11:33:00\",\"requested_at\":\"2026-10-11 11:33:00\",\"merchandise_refund\":598000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":573000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":\"2026-10-12 11:00:00\",\"warehouse_received_at\":\"2026-10-13 11:00:00\",\"inspection_accepted_at\":\"2026-10-13 12:00:00\",\"refund_completed_at\":\"2026-10-13 13:00:00\",\"refund_reference\":\"DEMO-BANK-RETURN-007\",\"inspection_result\":\"ACCEPTED_NEW_ITEM\",\"workflow_state\":\"REFUNDED\"}", ReturnRequestStatus.REFUNDED, false, true, dt("2026-10-11 11:33:00"), dt("2026-10-13 13:00:00"));
+        seedRefundedReturnDetails(r07, new BigDecimal("598000"), new BigDecimal("25000"), new BigDecimal("573000"),
+                "ACB", "2056789001", "PHAM VAN CUONG", "DEMO-BANK-RETURN-007",
+                dt("2026-10-12 09:00:00"), dt("2026-10-12 09:30:00"), dt("2026-10-19 17:00:00"),
+                dt("2026-10-12 11:00:00"), dt("2026-10-13 11:00:00"), dt("2026-10-13 12:00:00"), dt("2026-10-13 13:00:00"));
+
+        r08 = seedReturnRequest("FWR1-008", an01, orders.get("FWD1-20261007-268"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-10 16:58:00\",\"requested_at\":\"2026-10-11 16:58:00\",\"merchandise_refund\":524000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":499000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"AWAITING_RETURN_HANDOVER\",\"handover_due_at\":\"2026-10-19 09:00:00\",\"sla_overdue\":true,\"overdue_notice\":\"Tình huống bàn giao đang quá hạn giả lập; nhân viên liên hệ khách/đơn vị vận chuyển, không tự hoàn tiền hoặc tự gia hạn nhiều lần.\"}", ReturnRequestStatus.WAITING_FOR_RETURN_DELIVERY, true, true, dt("2026-10-11 16:58:00"), dt("2026-10-12 09:30:00"));
+        r09 = seedReturnRequest("FWR1-009", nam01, orders.get("FWD1-20261008-269"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-11 18:58:00\",\"requested_at\":\"2026-10-12 18:58:00\",\"merchandise_refund\":447000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":422000,\"approved_at\":null,\"fee_consent_at\":null,\"customer_bank_details_confirmed_at\":null,\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"AWAITING_APPROVAL\",\"sla_overdue\":true,\"overdue_notice\":\"Tình huống shop chậm duyệt giả lập; giữ quyền trả hàng, chưa nhận hàng và chưa hoàn tiền.\"}", ReturnRequestStatus.PENDING_APPROVAL, true, false, dt("2026-10-12 18:58:00"), dt("2026-10-12 18:58:00"));
+        r10 = seedReturnRequest("FWR1-010", lan01, orders.get("FWD1-20261010-270"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-13 10:16:00\",\"requested_at\":\"2026-10-14 10:16:00\",\"merchandise_refund\":478000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":453000,\"approved_at\":null,\"fee_consent_at\":null,\"customer_bank_details_confirmed_at\":null,\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"REJECTED_BEFORE_PICKUP\",\"rejection_reason\":\"Khách xác nhận đã sử dụng sản phẩm; không đáp ứng điều kiện còn mới đối với trả hàng do đổi ý.\"}", ReturnRequestStatus.REJECTED, false, false, dt("2026-10-14 10:16:00"), dt("2026-10-14 11:16:00"));
+
+        seedReturnRequestItem(r01, orderItems.get("oi261_1"), variants.get("FWDEMO1-P041-V002"), 1, 1, 1, true, new BigDecimal("365000"), "Sản phẩm nguyên tem mác, đủ điều kiện nhập kho.", dt("2026-10-08 12:34:00"), dt("2026-10-12 09:00:00"));
+        seedReturnRequestItem(r02, orderItems.get("oi262_1"), variants.get("FWDEMO1-P036-V001"), 1, 1, 1, true, new BigDecimal("262000"), "Sản phẩm nguyên tem mác, đủ điều kiện nhập kho.", dt("2026-10-09 20:15:00"), dt("2026-10-13 13:00:00"));
         seedReturnRequestItem(r03, orderItems.get("oi263_1"), variants.get("FWDEMO1-P004-V008"), 2, 0, false, dt("2026-10-10 13:37:00"), dt("2026-10-10 13:37:00"));
         seedReturnRequestItem(r04, orderItems.get("oi264_1"), variants.get("FWDEMO1-P009-V017"), 1, 0, false, dt("2026-10-10 19:44:00"), dt("2026-10-10 19:44:00"));
         seedReturnRequestItem(r05, orderItems.get("oi265_1"), variants.get("FWDEMO1-P040-V012"), 2, 0, false, dt("2026-10-10 21:02:00"), dt("2026-10-10 21:02:00"));
-        seedReturnRequestItem(r06, orderItems.get("oi266_1"), variants.get("FWDEMO1-P012-V014"), 2, 0, false, dt("2026-10-11 10:43:00"), dt("2026-10-11 10:43:00"));
-        seedReturnRequestItem(r07, orderItems.get("oi267_1"), variants.get("FWDEMO1-P014-V013"), 2, 0, false, dt("2026-10-11 11:33:00"), dt("2026-10-11 11:33:00"));
+        seedReturnRequestItem(r06, orderItems.get("oi266_1"), variants.get("FWDEMO1-P012-V014"), 2, 2, 2, true, new BigDecimal("718000"), "Sản phẩm nguyên tem mác, đủ điều kiện nhập kho.", dt("2026-10-11 10:43:00"), dt("2026-10-13 13:00:00"));
+        seedReturnRequestItem(r07, orderItems.get("oi267_1"), variants.get("FWDEMO1-P014-V013"), 2, 2, 2, true, new BigDecimal("598000"), "Sản phẩm nguyên tem mác, đủ điều kiện nhập kho.", dt("2026-10-11 11:33:00"), dt("2026-10-13 13:00:00"));
         seedReturnRequestItem(r08, orderItems.get("oi268_1"), variants.get("FWDEMO1-P036-V014"), 2, 0, false, dt("2026-10-11 16:58:00"), dt("2026-10-11 16:58:00"));
         seedReturnRequestItem(r09, orderItems.get("oi269_1"), variants.get("FWDEMO1-P046-V003"), 3, 0, false, dt("2026-10-12 18:58:00"), dt("2026-10-12 18:58:00"));
         seedReturnRequestItem(r10, orderItems.get("oi270_1"), variants.get("FWDEMO1-P004-V009"), 2, 0, false, dt("2026-10-14 10:16:00"), dt("2026-10-14 10:16:00"));
@@ -3223,5 +3611,29 @@ public class InitData implements CommandLineRunner {
         seedProductReviewImage(reviews.get("review028"), "https://res.cloudinary.com/n8agmdkc/image/upload/v1792905194/fashion_website/demo/fashion-v1/products/p012-02-22289e05a202143e.jpg", "IMAGE", 0, dt("2026-09-28 03:12:00"), dt("2026-09-28 03:12:00"));
         seedProductReviewImage(reviews.get("review029"), "https://res.cloudinary.com/n8agmdkc/image/upload/v1792905256/fashion_website/demo/fashion-v1/products/p032-02-8f1d5e1a8c1743d0.jpg", "IMAGE", 0, dt("2026-03-21 00:43:00"), dt("2026-03-21 00:43:00"));
         seedProductReviewImage(reviews.get("review030"), "https://res.cloudinary.com/n8agmdkc/image/upload/v1792905260/fashion_website/demo/fashion-v1/products/p033-02-40fd16097b207d25.jpg", "IMAGE", 0, dt("2026-02-08 11:39:00"), dt("2026-02-08 11:39:00"));
+    }
+
+    private void seedAllReturnRequestHolidays() {
+        LocalDateTime seedTime = dt("2026-01-01 00:00:00");
+
+        // Kỳ nghỉ Tết Âm lịch Bính Ngọ 2026 (chỉ chèn T2–T6; bỏ qua T7 21/02 và CN 22/02)
+        seedReturnRequestHoliday(LocalDate.of(2026, 2, 16), "Nghỉ Tết Âm lịch (29 Tết)",
+                "Ngày nghỉ Tết Nguyên đán Bính Ngọ 2026 (Thứ Hai, 29 tháng Chạp năm Ất Tỵ).", seedTime, seedTime);
+        seedReturnRequestHoliday(LocalDate.of(2026, 2, 17), "Nghỉ Tết Âm lịch (Mùng 1 Tết)",
+                "Ngày nghỉ Tết Nguyên đán Bính Ngọ 2026 (Thứ Ba, Mùng 1 Tết).", seedTime, seedTime);
+        seedReturnRequestHoliday(LocalDate.of(2026, 2, 18), "Nghỉ Tết Âm lịch (Mùng 2 Tết)",
+                "Ngày nghỉ Tết Nguyên đán Bính Ngọ 2026 (Thứ Tư, Mùng 2 Tết).", seedTime, seedTime);
+        seedReturnRequestHoliday(LocalDate.of(2026, 2, 19), "Nghỉ Tết Âm lịch (Mùng 3 Tết)",
+                "Ngày nghỉ Tết Nguyên đán Bính Ngọ 2026 (Thứ Năm, Mùng 3 Tết).", seedTime, seedTime);
+        seedReturnRequestHoliday(LocalDate.of(2026, 2, 20), "Nghỉ Tết Âm lịch (Mùng 4 Tết)",
+                "Ngày nghỉ Tết Nguyên đán Bính Ngọ 2026 (Thứ Sáu, Mùng 4 Tết).", seedTime, seedTime);
+
+        // Nghỉ bù Giỗ Tổ Hùng Vương 2026 (10/03 ÂL rơi vào Chủ Nhật 26/04/2026)
+        seedReturnRequestHoliday(LocalDate.of(2026, 4, 27), "Nghỉ bù Giỗ Tổ Hùng Vương",
+                "Nghỉ bù Thứ Hai do ngày Giỗ Tổ Hùng Vương (26/04/2026) trùng Chủ Nhật.", seedTime, seedTime);
+
+        // Ngày nghỉ liền kề Quốc khánh 2026 (02/09/2026 rơi vào Thứ Tư)
+        seedReturnRequestHoliday(LocalDate.of(2026, 9, 1), "Nghỉ lễ Quốc khánh (ngày liền kề)",
+                "Ngày nghỉ liền kề trước Quốc khánh 02/09 năm 2026 (Thứ Ba).", seedTime, seedTime);
     }
 }
