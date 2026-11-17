@@ -1,4 +1,4 @@
-package iuh.fit.fashionwebsite.service.order;
+package iuh.fit.fashionwebsite.service.checkout;
 
 import iuh.fit.fashionwebsite.dto.response.checkout.OrderItemResponse;
 import iuh.fit.fashionwebsite.exception.order.OrderItemNotFoundException;
