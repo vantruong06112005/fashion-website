@@ -33,6 +33,12 @@ public class ProductController {
                 .data(productService.search(filter)).build();
     }
 
+    @GetMapping("/options")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
+    public ApiResponse<java.util.Map<String, List<String>>> getOptions() {
+        return ApiResponse.<java.util.Map<String, List<String>>>builder().code(200).data(productService.getOptions()).build();
+    }
+
     @GetMapping("/paged")
     @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ApiResponse<org.springframework.data.domain.Page<ProductResponse>> getPage(

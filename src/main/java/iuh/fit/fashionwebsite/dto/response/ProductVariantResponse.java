@@ -15,4 +15,8 @@ public class ProductVariantResponse {
     private BigDecimal price;
     private Integer stockQuantity;
     private Boolean isActive;
+    private Integer packageWeight;
+    private Integer packageLength;
+    private Integer packageWidth;
+    private Integer packageHeight;
 }

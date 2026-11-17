@@ -95,3 +95,23 @@ node --test tests/catalog.test.mjs tests/variants.test.mjs
 Upload thật cần Cloudinary; kiểm tra hiển thị và luồng thao tác thực tế cần chạy hai ứng dụng. Các kiểm tra H2/mock không thay thế việc thao tác trên trình duyệt và kiểm tra tích hợp dịch vụ thật.
 
 Kết quả kiểm tra lần cuối: 32 kiểm tra backend đều qua; 13 kiểm tra frontend catalog/variants đều qua; `npm run build` thành công. Build frontend có cảnh báo bundle lớn. Chưa kiểm tra thao tác bằng trình duyệt và upload Cloudinary thật.
+
+## 4. Bổ sung theo phản hồi sử dụng
+
+- `GET /api/v1/products/options` (ADMIN/STAFF) trả `{ colors: string[], sizes: string[] }` lấy từ biến thể đang lưu, dùng cho danh sách chọn màu/size. Frontend kết hợp với các lựa chọn phổ biến và có mục nhập giá trị khác.
+- `PUT /api/v1/products/{id}` nhận thêm `variants[]`, `images[]`. Không gửi hai trường này thì giữ nguyên dữ liệu cũ.
+- Biến thể đã có phải gửi `id` để giữ nguyên SKU. Mỗi dòng có màu, size, giá, tồn kho, isActive và thông số kiện hàng. Biến thể cũ bị bỏ khỏi danh sách sẽ ngừng bán, không xóa lịch sử; form cho bật/tắt từng biến thể hiện có.
+- Ảnh đã có gửi `id`; ảnh mới bỏ `id`. Danh sách ảnh có thứ tự; ảnh đầu là ảnh chính. `variantIndex` tham chiếu danh sách biến thể trong cùng request. Ảnh bị bỏ khỏi danh sách sẽ được xóa liên kết/bản ghi database; không tự xóa file Cloudinary dùng chung.
+- Chặn ID ảnh/biến thể thuộc sản phẩm khác, ID lặp, màu/size trùng và index ảnh không tồn tại. Việc cập nhật cùng transaction; khóa các biến thể khi sửa tồn kho để phối hợp với checkout.
+- Form có nhập nhanh theo màu × size, áp dụng giá/tồn kho chung và dán bốn cột từ Excel (Màu, Size, Giá, Tồn kho). Không ghi đè SKU hiện có khi sinh dòng trùng, không cắt âm thầm quá giới hạn 100 dòng.
+- Trang `/products?tag=sale` đã nối dữ liệu ưu đãi thật; giá trên thẻ theo đúng màu/size đang lọc. Ô tìm kiếm sidebar chuyển thành “Tìm trong kết quả”, nhẹ hơn ô tìm kiếm chính ở header.
+- Giỏ nhanh dùng dialog ở lớp hiển thị trên cùng, khóa focus và cuộn nền khi mở. Mobile chiếm đủ chiều ngang; nút hành động tự xuống dòng ở màn hình hẹp. AI/chat không đè lên dialog và được ẩn ở `/cart`, `/checkout`.
+- Trang `/cart` có khung giới hạn chiều rộng, căn giữa và khoảng đệm hai bên theo màn hình.
+
+### Kết quả kiểm tra đợt bổ sung
+
+- 36 kiểm tra backend liên quan đều qua; 27 kiểm tra frontend đều qua, gồm sale theo màu/size, ưu đãi hết hạn, nhập nhanh, dữ liệu dán và token.
+- Kiểm tra trình duyệt thực tế: trang sale có 8 sản phẩm; API options/paged trả 200 cho ADMIN/STAFF và 403 cho CUSTOMER; form Sửa tải 8 biến thể và 3 ảnh của sản phẩm thử xem; nhập nhanh sinh đủ 4 dòng từ 2 màu × 2 size.
+- Kiểm tra viewport 1440px và 390px: form không tràn ngang, giỏ nhanh ở top layer, cuộn nền được khôi phục sau khi đóng.
+- Giỏ hàng có sản phẩm được kiểm tra bằng response giả lập riêng trong trình duyệt (không ghi dữ liệu giỏ thật). Lưu/sửa ảnh và biến thể được kiểm tra trên H2.
+- Upload file Cloudinary thật chưa được thực hiện trong lượt kiểm tra này; sử dụng service upload hiện có và cần thông tin Cloudinary hợp lệ.

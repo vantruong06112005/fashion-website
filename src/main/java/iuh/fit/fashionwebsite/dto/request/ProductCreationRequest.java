@@ -45,6 +45,7 @@ public class ProductCreationRequest {
 
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor
     public static class VariantInput {
+        private Boolean isActive;
         @NotBlank @Size(max = 50) private String color;
         @NotBlank @Size(max = 20) private String size;
         @NotNull @DecimalMin(value = "0", inclusive = false) private BigDecimal price;

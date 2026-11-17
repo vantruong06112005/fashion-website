@@ -14,5 +14,6 @@ public interface ProductService {
     List<ProductResponse> getNew(ProductFilterRequest filter, int days);
     ProductResponse getById(Long id);
     ProductResponse update(Long id, ProductUpdateRequest request);
+    java.util.Map<String, List<String>> getOptions();
     void delete(Long id);
 }
