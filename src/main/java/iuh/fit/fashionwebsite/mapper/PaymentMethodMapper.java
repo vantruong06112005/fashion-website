@@ -2,7 +2,7 @@ package iuh.fit.fashionwebsite.mapper;
 
 import iuh.fit.fashionwebsite.dto.request.checkout.PaymentMethodCreationRequest;
 import iuh.fit.fashionwebsite.dto.request.checkout.PaymentMethodUpdateRequest;
-import iuh.fit.fashionwebsite.dto.response.PaymentMethodResponse;
+import iuh.fit.fashionwebsite.dto.response.checkout.PaymentMethodResponse;
 import iuh.fit.fashionwebsite.entity.PaymentMethod;
 import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;

@@ -1,16 +1,14 @@
 package iuh.fit.fashionwebsite.service.order;
 
 import iuh.fit.fashionwebsite.dto.request.checkout.OrderCreationRequest;
-import iuh.fit.fashionwebsite.dto.response.OrderResponse;
+import iuh.fit.fashionwebsite.dto.response.checkout.OrderResponse;
 import iuh.fit.fashionwebsite.dto.response.shipping.GhnOrderResponse;
 import iuh.fit.fashionwebsite.entity.*;
 import iuh.fit.fashionwebsite.enums.OrderStatus;
 import iuh.fit.fashionwebsite.enums.PaymentStatus;
 import iuh.fit.fashionwebsite.enums.ShippingProvider;
 import iuh.fit.fashionwebsite.enums.TransactionStatus;
-import iuh.fit.fashionwebsite.enums.BehaviorType;
 import iuh.fit.fashionwebsite.event.OrderStatusChangedEvent;
-import iuh.fit.fashionwebsite.event.StockChangedEvent;
 import iuh.fit.fashionwebsite.exception.AppException;
 import iuh.fit.fashionwebsite.exception.ErrorCode;
 import iuh.fit.fashionwebsite.exception.order.OrderNotFoundException;
@@ -35,12 +33,11 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import java.util.ArrayList;
-import java.util.UUID;
 
 
 @Service
@@ -166,6 +163,7 @@ public class OrderService {
         Order savedOrder = orderRepository.save(order);
 
         // Create order items for each cart item and save them to the database
+        List<OrderItem> orderItems = new ArrayList<>();
         for(CartItem item : cartItems) {
             ProductVariant variant = item.getProductVariant();
             BigDecimal itemTotal = variant.getPrice()
@@ -182,8 +180,9 @@ public class OrderService {
                     .totalPrice(itemTotal)
                     .build();
 
-            orderItemRepository.save(orderItem);
+            orderItems.add(orderItemRepository.save(orderItem));
         }
+        savedOrder.setOrderItems(orderItems);
 
         // Create payment_transaction
         if(paymentMethod.getId() == 1) {

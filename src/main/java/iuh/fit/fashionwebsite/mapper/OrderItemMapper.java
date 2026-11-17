@@ -1,6 +1,6 @@
 package iuh.fit.fashionwebsite.mapper;
 
-import iuh.fit.fashionwebsite.dto.response.OrderItemResponse;
+import iuh.fit.fashionwebsite.dto.response.checkout.OrderItemResponse;
 import iuh.fit.fashionwebsite.entity.OrderItem;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;

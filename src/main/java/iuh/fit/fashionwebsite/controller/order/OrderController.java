@@ -3,7 +3,7 @@ package iuh.fit.fashionwebsite.controller.order;
 import iuh.fit.fashionwebsite.dto.request.OrderStatusUpdateRequest;
 import iuh.fit.fashionwebsite.dto.request.checkout.OrderCreationRequest;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
-import iuh.fit.fashionwebsite.dto.response.OrderResponse;
+import iuh.fit.fashionwebsite.dto.response.checkout.OrderResponse;
 import iuh.fit.fashionwebsite.service.order.OrderService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;

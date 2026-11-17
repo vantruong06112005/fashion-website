@@ -1,4 +1,4 @@
-package iuh.fit.fashionwebsite.dto.response;
+package iuh.fit.fashionwebsite.dto.response.checkout;
 
 import lombok.*;
 
