@@ -4,6 +4,7 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @Setter
@@ -21,6 +22,9 @@ public class SpecialOfferResponse {
     private LocalDateTime startDate;
     private LocalDateTime endDate;
     private Boolean isActive;
+    private List<Long> productIds;
+    private Integer productCount;
+    private Integer variantCount;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
