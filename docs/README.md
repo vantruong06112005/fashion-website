@@ -17,6 +17,7 @@ Hệ thống backend cho website bán quần áo, xây dựng theo mô hình **l
 - **Maven** — quản lý dependency
 
 ### Tài liệu chuyên đề (Chi tiết xem tại thư mục `docs/`):
+- [KHANG_PRODUCT_MANAGEMENT.md](KHANG_PRODUCT_MANAGEMENT.md) — Phân trang, bộ lọc, tạo sản phẩm kèm ảnh/biến thể và hiển thị ưu đãi.
 - [CATALOG_FILTERS.md](CATALOG_FILTERS.md) — API lọc danh mục, giá, size/màu và quy tắc tồn kho.
 - [PRODUCT_CART_FLOW.md](PRODUCT_CART_FLOW.md) — Luồng chi tiết sản phẩm, contract và kiểm thử giỏ hàng.
 - [CATALOG_PERMISSIONS.md](CATALOG_PERMISSIONS.md) — Quyền STAFF/ADMIN, xóa mềm và endpoint hàng mới về.

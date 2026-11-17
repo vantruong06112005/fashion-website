@@ -7,6 +7,8 @@ import java.util.List;
 
 @Getter @Setter
 public class ProductFilterRequest {
+    private Boolean isActive;
+    private Boolean inStock;
     private Long categoryId;
     private List<Long> categoryIds;
     private String keyword;

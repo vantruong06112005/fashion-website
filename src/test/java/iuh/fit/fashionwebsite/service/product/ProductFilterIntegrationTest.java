@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.jpa.show-sql=false"
 }, showSql = false)
-@Import({ProductServiceImpl.class, ProductMapperImpl.class, CategoryServiceImpl.class, CategoryMapperImpl.class})
+@Import({ProductPricingService.class, ProductServiceImpl.class, ProductMapperImpl.class, CategoryServiceImpl.class, CategoryMapperImpl.class})
 class ProductFilterIntegrationTest {
     @Autowired EntityManager em;
     @Autowired ProductService service;
@@ -154,6 +154,66 @@ class ProductFilterIntegrationTest {
         child.setIsActive(true); categories.save(child);
         service.delete(shirt.getId()); em.flush(); em.clear();
         assertTrue(service.search(new ProductFilterRequest()).isEmpty());
+    }
+
+    @Test
+    void pagesCombinedFiltersAndReturnsTotalsWithoutDuplicateRows() {
+        product("Other cotton", "other-cotton", 180000, child, true);
+        var filter = new ProductFilterRequest();
+        filter.setCategoryId(parent.getId()); filter.setKeyword("cotton"); filter.setSort("price-asc");
+        var first = service.searchPage(filter, 0, 1);
+        var second = service.searchPage(filter, 1, 1);
+        assertEquals(2, first.getTotalElements());
+        assertEquals(2, first.getTotalPages());
+        assertEquals(1, first.getContent().size());
+        assertNotEquals(first.getContent().getFirst().getId(), second.getContent().getFirst().getId());
+        assertThrows(iuh.fit.fashionwebsite.exception.AppException.class, () -> service.searchPage(filter, -1, 10));
+        assertThrows(iuh.fit.fashionwebsite.exception.AppException.class, () -> service.searchPage(filter, 0, 101));
+    }
+
+    @Test
+    void createsVariantsAndImagesInDatabaseAndReturnsThemInDetail() {
+        var request = new iuh.fit.fashionwebsite.dto.request.ProductCreationRequest();
+        request.setName("New shirt"); request.setSlug("new-shirt"); request.setCategoryId(child.getId());
+        request.setBasePrice(new BigDecimal("250000"));
+        var variant = new iuh.fit.fashionwebsite.dto.request.ProductCreationRequest.VariantInput();
+        variant.setColor("Black"); variant.setSize("m"); variant.setPrice(new BigDecimal("260000")); variant.setStockQuantity(7);
+        request.setVariants(java.util.List.of(variant));
+        var image = new iuh.fit.fashionwebsite.dto.request.ProductCreationRequest.ImageInput();
+        image.setImageUrl("https://example.test/new.jpg"); image.setVariantIndex(0);
+        request.setImages(java.util.List.of(image));
+        var created = service.create(request);
+        em.flush(); em.clear();
+        var detail = service.getById(created.getId());
+        assertEquals("M", detail.getVariants().getFirst().getSize());
+        assertEquals(7, detail.getVariants().getFirst().getStockQuantity());
+        assertEquals(detail.getVariants().getFirst().getId(), detail.getProductImages().getFirst().getVariantId());
+        assertTrue(detail.getProductImages().getFirst().getIsMain());
+    }
+
+    @Test
+    void onlyActiveInDateProductOffersReachProductResponse() {
+        var now = java.time.LocalDateTime.now();
+        var active = offer(10, null, true, now.minusDays(1), now.plusDays(1));
+        offer(90, null, true, now.minusDays(2), now.minusDays(1));
+        offer(95, null, false, now.minusDays(1), now.plusDays(1));
+        offer(99, null, true, now.plusDays(1), now.plusDays(2));
+        em.flush(); em.clear();
+        var result = service.getById(shirt.getId());
+        assertEquals(active.getId(), result.getBestOffer().getId());
+        assertEquals(0, new BigDecimal("180000").compareTo(result.getDiscountedPrice()));
+        active = em.find(SpecialOffer.class, active.getId()); active.setIsActive(false);
+        em.flush(); em.clear();
+        assertNull(service.getById(shirt.getId()).getBestOffer());
+    }
+
+    private SpecialOffer offer(Integer percent, BigDecimal amount, boolean active,
+                               java.time.LocalDateTime start, java.time.LocalDateTime end) {
+        var offer = SpecialOffer.builder().title("Test offer").offerType("PRODUCT").discountPercent(percent)
+                .discountAmount(amount).isActive(active).startDate(start).endDate(end).build();
+        em.persist(offer);
+        em.persist(SpecialOfferProduct.builder().specialOffer(offer).product(shirt).build());
+        return offer;
     }
 
     private Product product(String name, String slug, int price, Category category, boolean active) {
