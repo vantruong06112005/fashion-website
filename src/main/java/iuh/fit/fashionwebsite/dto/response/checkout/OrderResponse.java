@@ -32,4 +32,5 @@ public class OrderResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<OrderItemResponse> orderItems;
+    private String paymentUrl;
 }

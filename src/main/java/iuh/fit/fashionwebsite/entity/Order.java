@@ -43,6 +43,12 @@ public class Order extends BaseEntity {
     @Column(name = "shipping_address", length = 500, nullable = false)
     private String shippingAddress;
 
+    @Column(name = "shipping_province_name", length = 100)
+    private String shippingProvinceName;
+
+    @Column(name = "shipping_ward_name", length = 100)
+    private String shippingWardName;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "shipping_provider", length = 50)
     private ShippingProvider shippingProvider;

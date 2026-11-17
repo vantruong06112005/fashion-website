@@ -22,4 +22,5 @@ public class OrderItemResponse {
     private BigDecimal totalPrice;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private String imageUrl;
 }

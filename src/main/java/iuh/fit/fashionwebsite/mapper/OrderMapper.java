@@ -9,6 +9,7 @@ import org.mapstruct.Mapping;
 public interface OrderMapper {
 
     @Mapping(target = "userId", source = "user.id")
+    @Mapping(target = "paymentUrl", ignore = true)
     OrderResponse toOrderResponse(Order order);
 
     @Mapping(target = "id", ignore = true)

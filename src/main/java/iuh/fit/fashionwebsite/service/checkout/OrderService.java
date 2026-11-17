@@ -1,4 +1,4 @@
-package iuh.fit.fashionwebsite.service.order;
+package iuh.fit.fashionwebsite.service.checkout;
 
 import iuh.fit.fashionwebsite.dto.request.checkout.OrderCreationRequest;
 import iuh.fit.fashionwebsite.dto.response.checkout.OrderResponse;
@@ -13,24 +13,29 @@ import iuh.fit.fashionwebsite.exception.AppException;
 import iuh.fit.fashionwebsite.exception.ErrorCode;
 import iuh.fit.fashionwebsite.exception.order.OrderNotFoundException;
 import iuh.fit.fashionwebsite.exception.order.PaymentMethodNotFoundException;
+import iuh.fit.fashionwebsite.exception.review.SpecialOfferNotFoundException;
 import iuh.fit.fashionwebsite.exception.user.UserAddressNotFoundException;
 import iuh.fit.fashionwebsite.mapper.OrderMapper;
 import iuh.fit.fashionwebsite.repository.*;
 import iuh.fit.fashionwebsite.service.cart.CartService;
 import iuh.fit.fashionwebsite.service.shipping.GhnOrderCodeGenerator;
 import iuh.fit.fashionwebsite.service.shipping.GhnService;
-import iuh.fit.fashionwebsite.service.user.UserBehaviorService;
 import iuh.fit.fashionwebsite.service.user.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 
 import java.math.RoundingMode;
-import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -59,13 +64,49 @@ public class OrderService {
     private final SpecialOfferRepository specialOfferRepository;
     private final CartService cartService;
     private final ApplicationEventPublisher events;
-    private final UserBehaviorService userBehaviorService;
+    private final PaymentTransactionRepository paymentTransactionRepository;
+    private final VNPayService vnPayService;
+
+    private static final int ORDER_PAGE_SIZE = 10;
 
     @Transactional(readOnly = true)
-    public List<OrderResponse> getAllOrders() {
-        return orderRepository.findAll().stream()
-                .map(orderMapper::toOrderResponse)
-                .toList();
+    public Page<OrderResponse> getAllOrders(
+            Long userId,
+            String orderCode,
+            LocalDate createdAt,
+            OrderStatus orderStatus,
+            PaymentStatus paymentStatus,
+            int page
+    ) {
+        Specification<Order> specification = (root, query, criteriaBuilder) -> {
+            List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
+
+            if (userId != null) {
+                predicates.add(criteriaBuilder.equal(root.get("user").get("id"), userId));
+            }
+            if (orderCode != null && !orderCode.isBlank()) {
+                predicates.add(criteriaBuilder.equal(root.get("orderCode"), orderCode.trim()));
+            }
+            if (createdAt != null) {
+                LocalDateTime startOfDay = createdAt.atStartOfDay();
+                LocalDateTime startOfNextDay = createdAt.plusDays(1).atStartOfDay();
+                predicates.add(criteriaBuilder.greaterThanOrEqualTo(root.get("createdAt"), startOfDay));
+                predicates.add(criteriaBuilder.lessThan(root.get("createdAt"), startOfNextDay));
+            }
+            if (orderStatus != null) {
+                predicates.add(criteriaBuilder.equal(root.get("orderStatus"), orderStatus));
+            }
+            if (paymentStatus != null) {
+                predicates.add(criteriaBuilder.equal(root.get("paymentStatus"), paymentStatus));
+            }
+
+            return criteriaBuilder.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
+        };
+
+        return orderRepository.findAll(
+                        specification,
+                        PageRequest.of(page, ORDER_PAGE_SIZE, Sort.by(Sort.Direction.DESC, "createdAt")))
+                .map(orderMapper::toOrderResponse);
     }
 
     @Transactional(readOnly = true)
@@ -93,12 +134,20 @@ public class OrderService {
      * - StockChangedEvent cho từng biến thể sản phẩm
      * - OrderStatusChangedEvent cho chủ đơn hàng
      */
-    public OrderResponse createOrder(OrderCreationRequest request) {
+    public OrderResponse createOrder(OrderCreationRequest request, HttpServletRequest httpRequest) {
         User user = userService.getCurrentUserEntity();
         Long addressId = request.getUserAddressId();
         UserAddress userAddress = userAddressRepository.findByIdAndUserId(addressId, user.getId()).orElseThrow((UserAddressNotFoundException::new));
-        // Get payment method by code "COD"
         PaymentMethod paymentMethod = paymentMethodRepository.findById(request.getPaymentMethodId()).orElseThrow(PaymentMethodNotFoundException::new);
+        if (!Boolean.TRUE.equals(paymentMethod.getIsActive())) {
+            throw new AppException("The selected payment method is inactive.");
+        }
+        boolean isCod = "FWDEMO1_COD".equals(paymentMethod.getCode());
+        boolean isVnPay = "FWDEMO1_VNPAY".equals(paymentMethod.getCode());
+        if (!isCod && !isVnPay) {
+            throw new AppException("The selected payment method is not supported for checkout.");
+        }
+
         // Get cart items from the user's cart
         if (user.getCart() == null || user.getCart().getItems().isEmpty()) {
             throw new AppException(ErrorCode.CART_ITEM_NOT_FOUND);
@@ -110,32 +159,18 @@ public class OrderService {
                 .map(item -> item.getProductVariant().getPrice()
                         .multiply(BigDecimal.valueOf(item.getQuantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        // Set order status base on paymentMethod
-        PaymentStatus paymentStatus = null;
-        OrderStatus orderStatus = null;
-        if(paymentMethod.getId() == 1) {
-            paymentStatus = PaymentStatus.PENDING_COD;
-            orderStatus = OrderStatus.PROCESSING;
-        } else if (paymentMethod.getId() == 2) {
-            // xử lý sau
-        }
+        BigDecimal discountAmount = calculateOrderOfferDiscount(request.getSpecialOfferId(), subtotal);
 
         String orderCode = ghnOrderCodeGenerator.generate();
-        GhnOrderResponse ghnResponse = ghnService.createGhnOrder(request, orderCode);
-
-        Instant instant = ghnResponse.expectedDeliveryTime();
-
-        LocalDateTime expectedDeliveryTime = instant == null
-                ? null
-                : LocalDateTime.ofInstant(instant, ZoneId.of("Asia/Ho_Chi_Minh"));
-
-        long fee = ghnResponse.totalFee();
-        BigDecimal shippingFee = BigDecimal.valueOf(fee);
-
-
-        // Special_offers
-        SpecialOffer offer = specialOfferRepository.getReferenceById(request.getSpecialOfferId());
-        BigDecimal discountAmount = getBigDecimal(offer, subtotal, shippingFee);
+        BigDecimal shippingFee;
+        String trackingCode = null;
+        if (isCod) {
+            GhnOrderResponse ghnResponse = ghnService.createGhnOrder(request, orderCode, discountAmount);
+            shippingFee = BigDecimal.valueOf(ghnResponse.totalFee());
+            trackingCode = ghnResponse.orderCode();
+        } else {
+            shippingFee = BigDecimal.valueOf(ghnService.getGhnOrderPreview(request).totalFee());
+        }
 
         BigDecimal totalAmount = subtotal
                 .add(shippingFee)
@@ -143,21 +178,22 @@ public class OrderService {
 
         // Create a new order entity and set its properties
         Order order = Order.builder()
-                .deliveredAt(expectedDeliveryTime)
                 .discountAmount(discountAmount)
                 .orderCode(orderCode)
                 .notes(request.getNotes())
-                .orderStatus(orderStatus)
-                .paymentStatus(paymentStatus)
+                .orderStatus(isCod ? OrderStatus.PROCESSING : OrderStatus.PENDING_PAYMENT)
+                .paymentStatus(isCod ? PaymentStatus.PENDING_COD : PaymentStatus.PENDING)
                 .shippingFee(shippingFee)
                 .shippingPhone(user.getPhone())
                 .shippingProvider(ShippingProvider.GHN)
                 .shippingRecipientName(user.getFullname())
                 .subtotal(subtotal)
                 .totalAmount(totalAmount)
-                .trackingCode(ghnResponse.orderCode())
+                .trackingCode(trackingCode)
                 .user(user)
                 .shippingAddress(userAddress.getFullAddress())
+                .shippingProvinceName(userAddress.getProvinceName())
+                .shippingWardName(userAddress.getWardName())
                 .build();
         // Save the order to the database
         Order savedOrder = orderRepository.save(order);
@@ -184,53 +220,77 @@ public class OrderService {
         }
         savedOrder.setOrderItems(orderItems);
 
-        // Create payment_transaction
-        if(paymentMethod.getId() == 1) {
-            PaymentTransaction paymentTransaction = PaymentTransaction.builder()
-                    .amount(totalAmount)
-                    .order(savedOrder)
-                    .paymentMethod(paymentMethod)
-                    .transactionCode("FWPT1-" + savedOrder.getId().toString())
-                    .status(TransactionStatus.PENDING)
-                    .gatewayResponse(null)
-                    .paidAt(null)
-                    .requestId(null)
-                    .payUrl(null)
-                    .build();
-        } else if (paymentMethod.getId() == 2) {
-            // xử lý sau
+        String transactionCode = (isVnPay ? "VNPAY-" : "FWPT1-") + savedOrder.getId();
+        String requestId = isVnPay
+                ? savedOrder.getId() + "_" + System.currentTimeMillis()
+                : null;
+        PaymentTransaction paymentTransaction = PaymentTransaction.builder()
+                .amount(totalAmount)
+                .order(savedOrder)
+                .paymentMethod(paymentMethod)
+                .transactionCode(transactionCode)
+                .status(TransactionStatus.PENDING)
+                .gatewayResponse(null)
+                .paidAt(null)
+                .requestId(requestId)
+                .payUrl(null)
+                .build();
+
+        if (isVnPay) {
+            paymentTransaction.setPayUrl(
+                    vnPayService.createVnPayPayment(savedOrder, paymentTransaction, httpRequest));
+            paymentTransactionRepository.save(paymentTransaction);
+        } else {
+            paymentTransactionRepository.save(paymentTransaction);
+            cartService.clear();
         }
 
-        // Clear user's cart
-        cartService.clear();
-
-        return orderMapper.toOrderResponse(savedOrder);
+        OrderResponse response = orderMapper.toOrderResponse(savedOrder);
+        response.setPaymentUrl(paymentTransaction.getPayUrl());
+        return response;
     }
 
-    private static BigDecimal getBigDecimal(SpecialOffer offer, BigDecimal subtotal, BigDecimal shippingFee) {
-        BigDecimal discountAmount = BigDecimal.ZERO;
-
-        if (Boolean.TRUE.equals(offer.getIsActive())) {
-            BigDecimal fixedDiscount = offer.getDiscountAmount();
-
-            if (fixedDiscount != null && fixedDiscount.compareTo(BigDecimal.ZERO) > 0) {
-                discountAmount = fixedDiscount;
-            } else if (offer.getDiscountPercent() != null) {
-                discountAmount = subtotal
-                        .multiply(BigDecimal.valueOf(offer.getDiscountPercent()))
-                        .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-            }
-
-            // Áp dụng mức giảm tối đa nếu chương trình có cấu hình
-            if (offer.getMaxDiscountAmount() != null) {
-                discountAmount = discountAmount.min(offer.getMaxDiscountAmount());
-            }
-
-            // Không giảm quá giá trị hàng hóa
-            discountAmount = discountAmount.min(subtotal).max(BigDecimal.ZERO);
+    private BigDecimal calculateOrderOfferDiscount(Long offerId, BigDecimal subtotal) {
+        if (offerId == null) {
+            return BigDecimal.ZERO;
         }
 
-        return discountAmount;
+        SpecialOffer offer = specialOfferRepository.findById(offerId)
+                .orElseThrow(SpecialOfferNotFoundException::new);
+        if (!"ORDER".equalsIgnoreCase(offer.getOfferType())) {
+            throw new AppException("Only ORDER type offers can be applied during checkout.");
+        }
+
+        LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+        if (!Boolean.TRUE.equals(offer.getIsActive())
+                || offer.getStartDate() == null
+                || offer.getEndDate() == null
+                || now.isBefore(offer.getStartDate())
+                || now.isAfter(offer.getEndDate())) {
+            throw new AppException("The selected offer is inactive or outside its validity period.");
+        }
+
+        if (offer.getMinOrderAmount() != null
+                && subtotal.compareTo(offer.getMinOrderAmount()) < 0) {
+            throw new AppException("The order subtotal does not meet the minimum amount for this offer.");
+        }
+
+        BigDecimal discountAmount = offer.getDiscountAmount();
+        if (discountAmount == null || discountAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            Integer discountPercent = offer.getDiscountPercent();
+            if (discountPercent == null || discountPercent <= 0) {
+                throw new AppException("The selected offer has no valid discount configured.");
+            }
+            discountAmount = subtotal
+                    .multiply(BigDecimal.valueOf(discountPercent))
+                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+        }
+
+        if (offer.getMaxDiscountAmount() != null) {
+            discountAmount = discountAmount.min(offer.getMaxDiscountAmount());
+        }
+
+        return discountAmount.max(BigDecimal.ZERO).min(subtotal);
     }
 
     private void decreaseStock(List<CartItem> cartItems) {
@@ -276,6 +336,21 @@ public class OrderService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(OrderNotFoundException::new);
         order.setOrderStatus(status);
+        if (status == OrderStatus.DELIVERED
+                && order.getPaymentStatus() == PaymentStatus.PENDING_COD) {
+            PaymentTransaction transaction = paymentTransactionRepository
+                    .findFirstByOrderIdAndPaymentMethodCode(orderId, "FWDEMO1_COD")
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Không tìm thấy giao dịch COD của đơn hàng " + order.getOrderCode()));
+
+            order.setPaymentStatus(PaymentStatus.PAID);
+
+            if (transaction.getStatus() == TransactionStatus.PENDING) {
+                transaction.setStatus(TransactionStatus.SUCCESS);
+                transaction.setPaidAt(LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+                paymentTransactionRepository.save(transaction);
+            }
+        }
         Order saved = orderRepository.save(order);
 
         if (saved.getUser() != null && saved.getUser().getUsername() != null) {

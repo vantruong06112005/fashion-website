@@ -96,7 +96,7 @@ public class InitData implements CommandLineRunner {
     private Product p041, p042, p043, p044, p045, p046, p047, p048, p049, p050;
     private Product owen_p001, owen_p002, owen_p003, owen_p004, owen_p005, owen_p006, owen_p007, owen_p008, owen_p009, owen_p010;
     private Product owen_p011, owen_p012, owen_p013, owen_p014, owen_p015, owen_p016, owen_p017, owen_p018, owen_p019, owen_p020;
-    private PaymentMethod pm_cod, pm_bank;
+    private PaymentMethod pm_cod, pm_bank, pm_vnpay;
     private SpecialOffer offer1, offer2, offer3, offer4, offer5;
     private ReturnRequest r01, r02, r03, r04, r05, r06, r07, r08, r09, r10;
 
@@ -2028,11 +2028,20 @@ public class InitData implements CommandLineRunner {
     private void seedAllPaymentMethodsAndOffers() {
         pm_cod = seedPaymentMethod("FWDEMO1_COD", "Thanh toán khi nhận hàng (COD)", "Thu tiền khi giao hàng — giao dịch giả lập.", null, true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         pm_bank = seedPaymentMethod("FWDEMO1_BANK", "Thanh toán online (VietQR)", "Không có tài khoản ngân hàng hoặc giao dịch thật.", null, true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
+        pm_vnpay = seedPaymentMethod("FWDEMO1_VNPAY", "Thanh toán online (VNPay)", "Thanh toán trực tuyến qua VNPay.", null, true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         offer1 = seedSpecialOffer("FW-DEMO-V1 | Đầu năm", 10, null, "PRODUCT", new BigDecimal("0"), null, dt("2026-01-01 00:00:00"), dt("2026-03-01 00:00:00"), false, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         offer2 = seedSpecialOffer("FW-DEMO-V1 | Hè", 15, null, "PRODUCT", new BigDecimal("0"), null, dt("2026-05-01 00:00:00"), dt("2026-08-01 00:00:00"), false, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         offer3 = seedSpecialOffer("FW-DEMO-V1 | Thu", 10, null, "PRODUCT", new BigDecimal("0"), null, dt("2026-09-01 00:00:00"), dt("2026-10-01 00:00:00"), false, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         offer4 = seedSpecialOffer("FW-DEMO-V1 | Tháng 10", 12, null, "PRODUCT", new BigDecimal("0"), null, dt("2026-10-01 00:00:00"), dt("2026-11-01 00:00:00"), true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         offer5 = seedSpecialOffer("FW-DEMO-V1 | Sắp diễn ra", 20, null, "PRODUCT", new BigDecimal("0"), null, dt("2026-11-01 00:00:00"), dt("2026-12-01 00:00:00"), true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
+
+        seedSpecialOffer("FW-DEMO-V1 | Đơn từ 500K giảm 50K", null, new BigDecimal("50000"), "ORDER",
+                new BigDecimal("500000"), null, dt("2026-01-01 00:00:00"), dt("2027-01-01 00:00:00"),
+                true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
+        seedSpecialOffer("FW-DEMO-V1 | Đơn từ 1 triệu giảm 100K", null, new BigDecimal("100000"), "ORDER",
+                new BigDecimal("1000000"), null, dt("2026-01-01 00:00:00"), dt("2027-01-01 00:00:00"),
+                true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
+
         seedSpecialOfferProduct(offer1, p001, null, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         seedSpecialOfferProduct(offer1, p002, null, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         seedSpecialOfferProduct(offer1, p003, null, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
