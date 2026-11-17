@@ -1,5 +1,6 @@
 package iuh.fit.fashionwebsite.entity;
 
+import iuh.fit.fashionwebsite.enums.PaymentStatus;
 import iuh.fit.fashionwebsite.enums.TransactionStatus;
 import jakarta.persistence.*;
 import lombok.*;

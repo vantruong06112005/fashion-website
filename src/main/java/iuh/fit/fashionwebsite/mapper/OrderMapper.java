@@ -1,11 +1,11 @@
 package iuh.fit.fashionwebsite.mapper;
 
-import iuh.fit.fashionwebsite.dto.response.OrderResponse;
+import iuh.fit.fashionwebsite.dto.response.checkout.OrderResponse;
 import iuh.fit.fashionwebsite.entity.Order;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-@Mapper(componentModel = "spring")
+@Mapper(componentModel = "spring", uses = OrderItemMapper.class)
 public interface OrderMapper {
 
     @Mapping(target = "userId", source = "user.id")

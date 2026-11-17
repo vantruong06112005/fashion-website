@@ -1,10 +1,7 @@
 package iuh.fit.fashionwebsite.client.ghn;
 
 import iuh.fit.fashionwebsite.dto.request.shipping.GhnOrderCreationRequest;
-import iuh.fit.fashionwebsite.dto.response.shipping.GhnProvinceDto;
-import iuh.fit.fashionwebsite.dto.response.shipping.GhnResponse;
-import iuh.fit.fashionwebsite.dto.response.shipping.GhnWardDto;
-import iuh.fit.fashionwebsite.dto.response.shipping.GhnOrderPreviewResponse;
+import iuh.fit.fashionwebsite.dto.response.shipping.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
@@ -94,6 +91,31 @@ public class GhnClient {
         }
         if (response.data() == null) {
             throw new IllegalStateException("GHN không trả về dữ liệu preview");
+        }
+
+        return response.data();
+    }
+
+    public GhnOrderResponse getGhnOrderResponse(GhnOrderCreationRequest request) {
+        GhnResponse<GhnOrderResponse> response = restClient.post()
+                .uri("/v2/shipping-order/create")
+                .header("Token", token)
+                .header("ShopId", shopId)
+                .body(request)
+                .retrieve()
+                .body(new ParameterizedTypeReference<>() {});
+
+        if (response == null) {
+            throw new IllegalStateException("GHN không trả về order response");
+        }
+
+        if (!Integer.valueOf(200).equals(response.code())) {
+            throw new IllegalStateException(
+                    "GHN trả lỗi: " + response.code() + " - " + response.message()
+            );
+        }
+        if (response.data() == null) {
+            throw new IllegalStateException("GHN không trả về dữ liệu tạo đơn");
         }
 
         return response.data();

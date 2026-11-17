@@ -17,4 +17,9 @@ public class OrderCreationRequest {
     @NotNull
     @Positive
     private Long paymentMethodId;
+
+    @Positive
+    private Long specialOfferId;
+
+    private String notes;
 }

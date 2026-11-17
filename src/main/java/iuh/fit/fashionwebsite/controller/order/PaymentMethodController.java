@@ -3,7 +3,7 @@ package iuh.fit.fashionwebsite.controller.order;
 import iuh.fit.fashionwebsite.dto.request.checkout.PaymentMethodCreationRequest;
 import iuh.fit.fashionwebsite.dto.request.checkout.PaymentMethodUpdateRequest;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
-import iuh.fit.fashionwebsite.dto.response.PaymentMethodResponse;
+import iuh.fit.fashionwebsite.dto.response.checkout.PaymentMethodResponse;
 import iuh.fit.fashionwebsite.service.order.PaymentMethodService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -24,7 +24,7 @@ public class PaymentMethodController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN', 'STAFF')")
     public ApiResponse<List<PaymentMethodResponse>> getAllPaymentMethods() {
         return ApiResponse.<List<PaymentMethodResponse>>builder()
                 .code(200)

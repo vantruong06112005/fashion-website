@@ -1,14 +1,14 @@
 package iuh.fit.fashionwebsite.service.order;
 
 import iuh.fit.fashionwebsite.dto.request.checkout.OrderCreationRequest;
-import iuh.fit.fashionwebsite.dto.response.OrderResponse;
+import iuh.fit.fashionwebsite.dto.response.checkout.OrderResponse;
+import iuh.fit.fashionwebsite.dto.response.shipping.GhnOrderResponse;
 import iuh.fit.fashionwebsite.entity.*;
-import iuh.fit.fashionwebsite.enums.BehaviorType;
 import iuh.fit.fashionwebsite.enums.OrderStatus;
 import iuh.fit.fashionwebsite.enums.PaymentStatus;
 import iuh.fit.fashionwebsite.enums.ShippingProvider;
+import iuh.fit.fashionwebsite.enums.TransactionStatus;
 import iuh.fit.fashionwebsite.event.OrderStatusChangedEvent;
-import iuh.fit.fashionwebsite.event.StockChangedEvent;
 import iuh.fit.fashionwebsite.exception.AppException;
 import iuh.fit.fashionwebsite.exception.ErrorCode;
 import iuh.fit.fashionwebsite.exception.order.OrderNotFoundException;
@@ -16,6 +16,9 @@ import iuh.fit.fashionwebsite.exception.order.PaymentMethodNotFoundException;
 import iuh.fit.fashionwebsite.exception.user.UserAddressNotFoundException;
 import iuh.fit.fashionwebsite.mapper.OrderMapper;
 import iuh.fit.fashionwebsite.repository.*;
+import iuh.fit.fashionwebsite.service.cart.CartService;
+import iuh.fit.fashionwebsite.service.shipping.GhnOrderCodeGenerator;
+import iuh.fit.fashionwebsite.service.shipping.GhnService;
 import iuh.fit.fashionwebsite.service.user.UserBehaviorService;
 import iuh.fit.fashionwebsite.service.user.UserService;
 import lombok.RequiredArgsConstructor;
@@ -25,9 +28,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+
+import java.math.RoundingMode;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.UUID;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 
 @Service
 @RequiredArgsConstructor
@@ -43,6 +54,10 @@ public class OrderService {
     private final OrderMapper orderMapper;
     private final UserService userService;
     private final PaymentMethodRepository paymentMethodRepository;
+    private final GhnOrderCodeGenerator ghnOrderCodeGenerator;
+    private final GhnService ghnService;
+    private final SpecialOfferRepository specialOfferRepository;
+    private final CartService cartService;
     private final ApplicationEventPublisher events;
     private final UserBehaviorService userBehaviorService;
 
@@ -81,124 +96,177 @@ public class OrderService {
     public OrderResponse createOrder(OrderCreationRequest request) {
         User user = userService.getCurrentUserEntity();
         Long addressId = request.getUserAddressId();
-        UserAddress userAddress = userAddressRepository.findByIdAndUserId(addressId, user.getId())
-                .orElseThrow(UserAddressNotFoundException::new);
-
-        PaymentMethod paymentMethod = paymentMethodRepository.findById(request.getPaymentMethodId())
-                .orElseThrow(PaymentMethodNotFoundException::new);
-
-        Cart cart = cartRepository.findByUserId(user.getId())
-                .orElseThrow(() -> new AppException(ErrorCode.CART_ITEM_NOT_FOUND));
-        List<CartItem> cartItems = cartItemRepository.findAllByCartId(cart.getId());
-        if (cartItems.isEmpty()) {
+        UserAddress userAddress = userAddressRepository.findByIdAndUserId(addressId, user.getId()).orElseThrow((UserAddressNotFoundException::new));
+        // Get payment method by code "COD"
+        PaymentMethod paymentMethod = paymentMethodRepository.findById(request.getPaymentMethodId()).orElseThrow(PaymentMethodNotFoundException::new);
+        // Get cart items from the user's cart
+        if (user.getCart() == null || user.getCart().getItems().isEmpty()) {
             throw new AppException(ErrorCode.CART_ITEM_NOT_FOUND);
         }
+        // Get subtotal
+        List<CartItem> cartItems = user.getCart().getItems();
+        decreaseStock(cartItems);
+        BigDecimal subtotal = cartItems.stream()
+                .map(item -> item.getProductVariant().getPrice()
+                        .multiply(BigDecimal.valueOf(item.getQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Set order status base on paymentMethod
+        PaymentStatus paymentStatus = null;
+        OrderStatus orderStatus = null;
+        if(paymentMethod.getId() == 1) {
+            paymentStatus = PaymentStatus.PENDING_COD;
+            orderStatus = OrderStatus.PROCESSING;
+        } else if (paymentMethod.getId() == 2) {
+            // xử lý sau
+        }
 
-        BigDecimal subtotal = BigDecimal.ZERO;
+        String orderCode = ghnOrderCodeGenerator.generate();
+        GhnOrderResponse ghnResponse = ghnService.createGhnOrder(request, orderCode);
+
+        Instant instant = ghnResponse.expectedDeliveryTime();
+
+        LocalDateTime expectedDeliveryTime = instant == null
+                ? null
+                : LocalDateTime.ofInstant(instant, ZoneId.of("Asia/Ho_Chi_Minh"));
+
+        long fee = ghnResponse.totalFee();
+        BigDecimal shippingFee = BigDecimal.valueOf(fee);
+
+
+        // Special_offers
+        SpecialOffer offer = specialOfferRepository.getReferenceById(request.getSpecialOfferId());
+        BigDecimal discountAmount = getBigDecimal(offer, subtotal, shippingFee);
+
+        BigDecimal totalAmount = subtotal
+                .add(shippingFee)
+                .subtract(discountAmount);
+
+        // Create a new order entity and set its properties
+        Order order = Order.builder()
+                .deliveredAt(expectedDeliveryTime)
+                .discountAmount(discountAmount)
+                .orderCode(orderCode)
+                .notes(request.getNotes())
+                .orderStatus(orderStatus)
+                .paymentStatus(paymentStatus)
+                .shippingFee(shippingFee)
+                .shippingPhone(user.getPhone())
+                .shippingProvider(ShippingProvider.GHN)
+                .shippingRecipientName(user.getFullname())
+                .subtotal(subtotal)
+                .totalAmount(totalAmount)
+                .trackingCode(ghnResponse.orderCode())
+                .user(user)
+                .shippingAddress(userAddress.getFullAddress())
+                .build();
+        // Save the order to the database
+        Order savedOrder = orderRepository.save(order);
+
+        // Create order items for each cart item and save them to the database
         List<OrderItem> orderItems = new ArrayList<>();
+        for(CartItem item : cartItems) {
+            ProductVariant variant = item.getProductVariant();
+            BigDecimal itemTotal = variant.getPrice()
+                    .multiply(BigDecimal.valueOf(item.getQuantity()));
 
-        for (CartItem cartItem : cartItems) {
-            ProductVariant variant = productVariantRepository.findById(cartItem.getProductVariant().getId())
-                    .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_VARIANT_NOT_FOUND));
+            OrderItem orderItem = OrderItem.builder()
+                    .order(savedOrder)
+                    .quantity(item.getQuantity())
+                    .productName(item.getProductVariant().getProduct().getName())
+                    .productVariant(item.getProductVariant())
+                    .variantInfo(item.getProductVariant().getColor() + " / " + item.getProductVariant().getSize())
+                    .originalPrice(item.getProductVariant().getPrice())
+                    .unitPrice(item.getProductVariant().getPrice())
+                    .totalPrice(itemTotal)
+                    .build();
 
-            int currentStock = variant.getStockQuantity() == null ? 0 : variant.getStockQuantity();
-            int qty = cartItem.getQuantity();
-            if (qty < 1 || qty > currentStock) {
+            orderItems.add(orderItemRepository.save(orderItem));
+        }
+        savedOrder.setOrderItems(orderItems);
+
+        // Create payment_transaction
+        if(paymentMethod.getId() == 1) {
+            PaymentTransaction paymentTransaction = PaymentTransaction.builder()
+                    .amount(totalAmount)
+                    .order(savedOrder)
+                    .paymentMethod(paymentMethod)
+                    .transactionCode("FWPT1-" + savedOrder.getId().toString())
+                    .status(TransactionStatus.PENDING)
+                    .gatewayResponse(null)
+                    .paidAt(null)
+                    .requestId(null)
+                    .payUrl(null)
+                    .build();
+        } else if (paymentMethod.getId() == 2) {
+            // xử lý sau
+        }
+
+        // Clear user's cart
+        cartService.clear();
+
+        return orderMapper.toOrderResponse(savedOrder);
+    }
+
+    private static BigDecimal getBigDecimal(SpecialOffer offer, BigDecimal subtotal, BigDecimal shippingFee) {
+        BigDecimal discountAmount = BigDecimal.ZERO;
+
+        if (Boolean.TRUE.equals(offer.getIsActive())) {
+            BigDecimal fixedDiscount = offer.getDiscountAmount();
+
+            if (fixedDiscount != null && fixedDiscount.compareTo(BigDecimal.ZERO) > 0) {
+                discountAmount = fixedDiscount;
+            } else if (offer.getDiscountPercent() != null) {
+                discountAmount = subtotal
+                        .multiply(BigDecimal.valueOf(offer.getDiscountPercent()))
+                        .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            }
+
+            // Áp dụng mức giảm tối đa nếu chương trình có cấu hình
+            if (offer.getMaxDiscountAmount() != null) {
+                discountAmount = discountAmount.min(offer.getMaxDiscountAmount());
+            }
+
+            // Không giảm quá giá trị hàng hóa
+            discountAmount = discountAmount.min(subtotal).max(BigDecimal.ZERO);
+        }
+
+        return discountAmount;
+    }
+
+    private void decreaseStock(List<CartItem> cartItems) {
+        Map<Long, Integer> quantitiesByVariant = new HashMap<>();
+
+        for (CartItem item : cartItems) {
+            if (item.getQuantity() == null || item.getQuantity() <= 0) {
                 throw new AppException(ErrorCode.INSUFFICIENT_STOCK);
             }
 
-            // Trừ tồn kho
-            int newStock = currentStock - qty;
-            variant.setStockQuantity(newStock);
-            productVariantRepository.save(variant);
+            Long variantId = item.getProductVariant().getId();
+            quantitiesByVariant.merge(variantId, item.getQuantity(), Integer::sum);
+        }
 
-            // Phát sự kiện tồn kho realtime (sẽ gửi qua WebSocket ở pha AFTER_COMMIT)
-            if (variant.getProduct() != null && variant.getProduct().getId() != null) {
-                events.publishEvent(new StockChangedEvent(
-                        variant.getProduct().getId(),
-                        variant.getId(),
-                        newStock
-                ));
+        List<ProductVariant> lockedVariants =
+                productVariantRepository.findAllByIdInForUpdate(quantitiesByVariant.keySet());
+
+        Map<Long, ProductVariant> variantsById = lockedVariants.stream()
+                .collect(Collectors.toMap(ProductVariant::getId, variant -> variant));
+
+        for (Map.Entry<Long, Integer> entry : quantitiesByVariant.entrySet()) {
+            ProductVariant variant = variantsById.get(entry.getKey());
+            if (variant == null) {
+                throw new AppException(ErrorCode.PRODUCT_VARIANT_NOT_FOUND);
             }
 
-            BigDecimal unitPrice = variant.getPrice();
-            BigDecimal lineTotal = unitPrice.multiply(BigDecimal.valueOf(qty));
-            subtotal = subtotal.add(lineTotal);
-
-            OrderItem orderItem = OrderItem.builder()
-                    .productVariant(variant)
-                    .productName(variant.getProduct() != null ? variant.getProduct().getName() : "Sản phẩm")
-                    .variantInfo(variant.getColor() + " / " + variant.getSize())
-                    .originalPrice(unitPrice)
-                    .unitPrice(unitPrice)
-                    .quantity(qty)
-                    .totalPrice(lineTotal)
-                    .build();
-            orderItems.add(orderItem);
-        }
-
-        BigDecimal shippingFee = BigDecimal.valueOf(30000);
-        BigDecimal discountAmount = BigDecimal.ZERO;
-        BigDecimal totalAmount = subtotal.add(shippingFee).subtract(discountAmount);
-
-        String fullShippingAddress = String.join(", ",
-                java.util.stream.Stream.of(userAddress.getFullAddress(), userAddress.getWardName(), userAddress.getProvinceName())
-                        .filter(s -> s != null && !s.isBlank())
-                        .toList());
-
-        boolean isCod = paymentMethod.getCode() != null && paymentMethod.getCode().toUpperCase().contains("COD");
-        OrderStatus initialStatus = isCod ? OrderStatus.PROCESSING : OrderStatus.PENDING_PAYMENT;
-
-        Order order = Order.builder()
-                .orderCode("ORD-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase())
-                .user(user)
-                .shippingRecipientName(user.getFullname() != null && !user.getFullname().isBlank() ? user.getFullname() : user.getUsername())
-                .shippingPhone(user.getPhone() != null && !user.getPhone().isBlank() ? user.getPhone() : "0900000000")
-                .shippingAddress(fullShippingAddress)
-                .shippingProvider(ShippingProvider.GHN)
-                .subtotal(subtotal)
-                .shippingFee(shippingFee)
-                .discountAmount(discountAmount)
-                .totalAmount(totalAmount)
-                .orderStatus(initialStatus)
-                .paymentStatus(isCod ? PaymentStatus.PENDING_COD : PaymentStatus.PENDING)
-                .build();
-
-        Order savedOrder = orderRepository.save(order);
-        for (OrderItem item : orderItems) {
-            item.setOrder(savedOrder);
-            orderItemRepository.save(item);
-        }
-
-        // Xóa giỏ hàng sau khi đặt hàng thành công
-        cartItemRepository.deleteAllByCartId(cart.getId());
-
-        // Ghi nhận hành vi PURCHASE (+10 điểm vào Feature Store)
-        if (userBehaviorService != null) {
-            for (OrderItem item : orderItems) {
-                try {
-                    if (item.getProductVariant() != null && item.getProductVariant().getProduct() != null) {
-                        userBehaviorService.track(
-                                user.getId(),
-                                item.getProductVariant().getProduct().getId(),
-                                item.getProductVariant().getId(),
-                                BehaviorType.PURCHASE
-                        );
-                    }
-                } catch (Exception ex) {
-                    log.warn("Không thể ghi nhận hành vi PURCHASE cho user {}: {}", user.getId(), ex.getMessage());
-                }
+            Integer stock = variant.getStockQuantity();
+            if (stock == null || stock < entry.getValue()) {
+                throw new AppException(ErrorCode.INSUFFICIENT_STOCK);
             }
         }
 
-        // Phát sự kiện thông báo đơn hàng mới cho khách
-        events.publishEvent(new OrderStatusChangedEvent(
-                savedOrder.getId(),
-                user.getUsername(),
-                savedOrder.getOrderStatus().name()
-        ));
-
-        return orderMapper.toOrderResponse(savedOrder);
+        for (Map.Entry<Long, Integer> entry : quantitiesByVariant.entrySet()) {
+            ProductVariant variant = variantsById.get(entry.getKey());
+            variant.setStockQuantity(variant.getStockQuantity() - entry.getValue());
+        }
     }
 
     /**
