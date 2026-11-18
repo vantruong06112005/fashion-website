@@ -21,13 +21,35 @@ public enum ErrorCode implements BaseErrorCode {
     INSUFFICIENT_STOCK(400, "error.insufficient_stock", HttpStatus.BAD_REQUEST),
     Product_Review_NOT_FOUND(
             404,
-            "error.order_not_found",
+            "Không tìm thấy đánh giá sản phẩm",
             HttpStatus.NOT_FOUND
-    ),Product_Review_Image_NOT_FOUND(
+    ),
+    Product_Review_Image_NOT_FOUND(
             404,
-            "error.order_not_found",
+            "Không tìm thấy hình ảnh đánh giá",
             HttpStatus.NOT_FOUND
-    ),SpecialOffer_Product_NOT_FOUND(
+    ),
+    REVIEW_ALREADY_EXISTS(
+            409,
+            "Bạn đã đánh giá sản phẩm này trong đơn hàng rồi",
+            HttpStatus.CONFLICT
+    ),
+    REVIEW_ORDER_ITEM_NOT_ELIGIBLE(
+            400,
+            "Chỉ được đánh giá sản phẩm thuộc đơn hàng đã giao thành công của bạn",
+            HttpStatus.BAD_REQUEST
+    ),
+    REVIEW_ORDER_NOT_PAID(
+            400,
+            "Chỉ được đánh giá sản phẩm thuộc đơn hàng đã thanh toán",
+            HttpStatus.BAD_REQUEST
+    ),
+    REVIEW_WINDOW_EXPIRED(
+            400,
+            "Đơn hàng đã quá thời hạn 14 ngày kể từ khi nhận hàng để đánh giá",
+            HttpStatus.BAD_REQUEST
+    ),
+    SpecialOffer_Product_NOT_FOUND(
             404,
             "error.order_not_found",
             HttpStatus.NOT_FOUND

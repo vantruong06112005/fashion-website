@@ -1,5 +1,6 @@
 package iuh.fit.fashionwebsite.repository;
 
+import iuh.fit.fashionwebsite.entity.OrderItem;
 import iuh.fit.fashionwebsite.entity.ProductReview;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -17,16 +18,36 @@ import java.util.Optional;
 @Repository
 public interface ProductReviewRepository extends JpaRepository<ProductReview, Long> {
     Optional<ProductReview> findFirstByOrderItemIdAndProductId(Long orderItemId, Long productId);
-    // Lấy đánh giá của một sản phẩm, có phân trang (kèm thông tin người đánh giá để tránh N+1)
-    @EntityGraph(attributePaths = {"user"})
+
+    // Kiểm tra dòng sản phẩm trong đơn hàng đã được đánh giá chưa (chặn đánh giá trùng theo orderItemId)
+    boolean existsByOrderItemId(Long orderItemId);
+
+    // Lấy đánh giá của một sản phẩm, có phân trang (kèm user và orderItem để tránh N+1)
+    @EntityGraph(attributePaths = {"user", "orderItem"})
     Page<ProductReview> findByProductId(Long productId, Pageable pageable);
 
-    // Lấy đánh giá của một sản phẩm theo đúng số sao, có phân trang (kèm thông tin người đánh giá)
-    @EntityGraph(attributePaths = {"user"})
+    // Lấy đánh giá của một sản phẩm theo đúng số sao, có phân trang (kèm user và orderItem)
+    @EntityGraph(attributePaths = {"user", "orderItem"})
     Page<ProductReview> findByProductIdAndRating(Long productId, int rating, Pageable pageable);
 
-    // Lấy tất cả đánh giá của một người dùng
+    // Lấy tất cả đánh giá của một người dùng (kèm user, product, orderItem để tránh N+1)
+    @EntityGraph(attributePaths = {"user", "product", "orderItem"})
     List<ProductReview> findByUserId(Long userId);
+
+    // Lấy danh sách dòng sản phẩm thuộc các đơn hàng đã giao thành công (DELIVERED) và đã thanh toán (PAID)
+    // của khách hàng để phục vụ màn hình đánh giá sản phẩm trong mục "Đơn hàng của tôi"
+    @Query("SELECT oi FROM OrderItem oi " +
+            "JOIN FETCH oi.order o " +
+            "JOIN FETCH oi.productVariant pv " +
+            "JOIN FETCH pv.product p " +
+            "WHERE o.user.id = :userId " +
+            "AND o.orderStatus = iuh.fit.fashionwebsite.enums.OrderStatus.DELIVERED " +
+            "AND o.paymentStatus = iuh.fit.fashionwebsite.enums.PaymentStatus.PAID " +
+            "AND o.deliveredAt IS NOT NULL " +
+            "AND (:orderId IS NULL OR o.id = :orderId) " +
+            "ORDER BY o.deliveredAt DESC, oi.id ASC")
+    List<OrderItem> findDeliveredOrderItemsForReview(@Param("userId") Long userId,
+                                                     @Param("orderId") Long orderId);
 
     // Kiểm tra người dùng đã đánh giá sản phẩm này chưa, dùng để chặn đánh giá trùng
     boolean existsByUserIdAndProductId(Long userId, Long productId);

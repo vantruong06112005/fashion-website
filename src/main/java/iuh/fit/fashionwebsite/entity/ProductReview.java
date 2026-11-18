@@ -52,7 +52,7 @@ public class ProductReview extends BaseEntity {
     // Ảnh luôn trả về theo thứ tự hiển thị; BatchSize gom truy vấn ảnh của nhiều đánh giá trong 1 trang
     // thành vài câu IN (...) thay vì mỗi đánh giá một câu (tránh N+1 khi danh sách đánh giá nhúng ảnh)
     @JsonIgnore
-    @OneToMany(mappedBy = "productReview", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "productReview", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("displayOrder ASC, id ASC")
     @BatchSize(size = 50)
     @Builder.Default

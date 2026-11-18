@@ -17,12 +17,11 @@ public class ProductReviewResponse {
     private String userName;
     private String fullName;
     private Long orderItemId;
+    private String variantInfo;
     private Boolean verifiedPurchase;
     private Integer rating;
     private String comment;
     private String fitRating;
-    private Number userHeight;
-    private Number userWeight;
     private List<ProductReviewImageResponse> images;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

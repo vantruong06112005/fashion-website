@@ -13,6 +13,8 @@ public interface ProductReviewMapper {
     @Mapping(target = "user", ignore = true)
     @Mapping(target = "product", ignore = true)
     @Mapping(target = "orderItem", ignore = true)
+    @Mapping(target = "userHeight", ignore = true)
+    @Mapping(target = "userWeight", ignore = true)
     @Mapping(target = "images", ignore = true)
     ProductReview toProductReview(ProductReviewCreationRequest request);
 
@@ -21,6 +23,7 @@ public interface ProductReviewMapper {
     @Mapping(target = "fullName", source = "user.fullname")
     @Mapping(target = "productId", source = "product.id")
     @Mapping(target = "orderItemId", source = "orderItem.id")
+    @Mapping(target = "variantInfo", source = "orderItem.variantInfo")
     @Mapping(target = "verifiedPurchase", expression = "java(productReview.getOrderItem() != null && productReview.getOrderItem().getId() != null)")
     ProductReviewResponse toProductReviewResponse(ProductReview productReview);
 
@@ -29,6 +32,8 @@ public interface ProductReviewMapper {
     @Mapping(target = "user", ignore = true)
     @Mapping(target = "product", ignore = true)
     @Mapping(target = "orderItem", ignore = true)
+    @Mapping(target = "userHeight", ignore = true)
+    @Mapping(target = "userWeight", ignore = true)
     @Mapping(target = "images", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
