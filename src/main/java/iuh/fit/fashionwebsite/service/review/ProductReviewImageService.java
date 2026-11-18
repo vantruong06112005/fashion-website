@@ -1,5 +1,7 @@
 package iuh.fit.fashionwebsite.service.review;
 
+import iuh.fit.fashionwebsite.dto.request.ProductReviewImageCreationRequest;
+import iuh.fit.fashionwebsite.dto.request.ProductReviewImageUpdateRequest;
 import iuh.fit.fashionwebsite.dto.response.review.ProductReviewImageResponse;
 import iuh.fit.fashionwebsite.entity.ProductReview;
 import iuh.fit.fashionwebsite.entity.ProductReviewImage;
@@ -55,7 +57,7 @@ public class ProductReviewImageService {
     public List<ProductReviewImageResponse> getAll() {
         return productReviewImageRepository.findAll()
                 .stream()
-                .map(productReviewImageMapper:: toProductReviewImageResponse)
+                .map(productReviewImageMapper::toProductReviewImageResponse)
                 .toList();
     }
 
@@ -67,22 +69,28 @@ public class ProductReviewImageService {
                 .orElseThrow(ProductRevImageNotFound::new);
     }
 
-    // Thêm ảnh vào đánh giá, giới hạn tối đa 5 ảnh mỗi đánh giá
+    // Thêm ảnh vào đánh giá từ DTO ProductReviewImageCreationRequest, giới hạn tối đa 5 ảnh mỗi đánh giá
     @Transactional
-    public ProductReviewImageResponse create(ProductReviewImage productReviewImage) {
-        Long reviewId = productReviewImage.getProductReview() != null
-                ? productReviewImage.getProductReview().getId()
-                : null;
-        if (reviewId != null && productReviewRepository != null) {
-            ProductReview review = productReviewRepository.findById(reviewId)
-                    .orElseThrow(ProductRevNotFoundException::new);
-            ensureCanModifyReviewImage(review);
+    public ProductReviewImageResponse create(ProductReviewImageCreationRequest request) {
+        Long reviewId = request.getProductReviewId();
+        ProductReview review = resolveReviewOrThrow(reviewId);
+        ensureCanModifyReviewImage(review);
+
+        long currentCount = reviewId != null ? productReviewImageRepository.countByProductReviewId(reviewId) : 0;
+        if (currentCount >= 5) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
         }
-        if (reviewId != null && productReviewImageRepository.countByProductReviewId(reviewId) >= 5) {
-            throw new IllegalStateException("A review can have at most 5 images");
+
+        ProductReviewImage entity = productReviewImageMapper.toProductReviewImage(request);
+        entity.setProductReview(review);
+        if (entity.getMediaType() == null || entity.getMediaType().isBlank()) {
+            entity.setMediaType("IMAGE");
         }
-        return productReviewImageMapper.toProductReviewImageResponse(productReviewImageRepository
-                .save(productReviewImage));
+        if (entity.getDisplayOrder() == null) {
+            entity.setDisplayOrder((int) currentCount + 1);
+        }
+
+        return productReviewImageMapper.toProductReviewImageResponse(productReviewImageRepository.save(entity));
     }
 
     // Tải file ảnh thực tế lên cho một đánh giá (tối đa 5 ảnh, mỗi ảnh không quá 5MB)
@@ -91,9 +99,7 @@ public class ProductReviewImageService {
         if (file == null || file.isEmpty() || file.getSize() > MAX_IMAGE_BYTES) {
             throw new AppException(ErrorCode.INVALID_FILE);
         }
-        ProductReview review = productReviewRepository != null
-                ? productReviewRepository.findById(reviewId).orElseThrow(ProductRevNotFoundException::new)
-                : ProductReview.builder().id(reviewId).build();
+        ProductReview review = resolveReviewOrThrow(reviewId);
         ensureCanModifyReviewImage(review);
 
         long currentCount = productReviewImageRepository.countByProductReviewId(reviewId);
@@ -125,20 +131,21 @@ public class ProductReviewImageService {
         return productReviewImageMapper.toProductReviewImageResponse(productReviewImageRepository.save(entity));
     }
 
-    // Cập nhật thông tin ảnh (đường dẫn, loại media, thứ tự hiển thị, đánh giá chứa ảnh)
+    // Cập nhật thông tin ảnh từ DTO ProductReviewImageUpdateRequest
     @Transactional
-    public ProductReviewImageResponse update(Long id, ProductReviewImage productReviewImage) {
+    public ProductReviewImageResponse update(Long id, ProductReviewImageUpdateRequest request) {
         ProductReviewImage productReviewImg = productReviewImageRepository.findById(id).orElseThrow(ProductRevImageNotFound::new);
         ensureCanModifyReviewImage(productReviewImg.getProductReview());
-        productReviewImg.setImageUrl(productReviewImage.getImageUrl());
-        productReviewImg.setMediaType(productReviewImage.getMediaType());
-        if (productReviewImage.getProductReview() != null) {
-            productReviewImg.setProductReview(productReviewImage.getProductReview());
+
+        productReviewImageMapper.updateProductReviewImage(productReviewImg, request);
+        if (request.getProductReviewId() != null) {
+            ProductReview newReview = resolveReviewOrThrow(request.getProductReviewId());
+            ensureCanModifyReviewImage(newReview);
+            productReviewImg.setProductReview(newReview);
         }
-        productReviewImg.setDisplayOrder(productReviewImage.getDisplayOrder());
+
         return productReviewImageMapper
-                .toProductReviewImageResponse(productReviewImageRepository
-                        .save(productReviewImg));
+                .toProductReviewImageResponse(productReviewImageRepository.save(productReviewImg));
     }
 
     // Xóa ảnh theo ID (chỉ chủ sở hữu đánh giá hoặc ADMIN)
@@ -156,6 +163,15 @@ public class ProductReviewImageService {
                 .stream()
                 .map(productReviewImageMapper::toProductReviewImageResponse)
                 .toList();
+    }
+
+    private ProductReview resolveReviewOrThrow(Long reviewId) {
+        if (reviewId == null) {
+            throw new ProductRevNotFoundException();
+        }
+        return productReviewRepository != null
+                ? productReviewRepository.findById(reviewId).orElseThrow(ProductRevNotFoundException::new)
+                : ProductReview.builder().id(reviewId).build();
     }
 
     private void ensureCanModifyReviewImage(ProductReview review) {

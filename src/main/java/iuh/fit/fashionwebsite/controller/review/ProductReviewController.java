@@ -1,9 +1,11 @@
 package iuh.fit.fashionwebsite.controller.review;
 
+import iuh.fit.fashionwebsite.dto.request.ProductReviewCreationRequest;
+import iuh.fit.fashionwebsite.dto.request.ProductReviewUpdateRequest;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
 import iuh.fit.fashionwebsite.dto.response.review.ProductReviewResponse;
 import iuh.fit.fashionwebsite.dto.response.review.ReviewSummaryResponse;
-import iuh.fit.fashionwebsite.entity.ProductReview;
+import iuh.fit.fashionwebsite.dto.response.review.ReviewableOrderItemResponse;
 import iuh.fit.fashionwebsite.service.review.ProductReviewService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -14,12 +16,14 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/product-reviews")
+@Validated
 @RequiredArgsConstructor
 @Slf4j
 public class ProductReviewController {
@@ -39,34 +43,37 @@ public class ProductReviewController {
     @GetMapping("/{id}")
     public ApiResponse<ProductReviewResponse> getById(@PathVariable Long id) {
         return ApiResponse.<ProductReviewResponse>builder()
+                .code(200)
                 .message("Fetched product review detail successfully")
                 .data(productReviewService.findById(id))
                 .build();
     }
 
-    // Tạo đánh giá mới
+    // Tạo đánh giá mới (nhận DTO ProductReviewCreationRequest chuẩn kiến trúc)
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
     public ApiResponse<ProductReviewResponse> create(
-            @RequestBody @Valid ProductReview productReview
+            @RequestBody @Valid ProductReviewCreationRequest request
     ) {
         return ApiResponse.<ProductReviewResponse>builder()
+                .code(201)
                 .message("Product review has been created successfully")
-                .data(productReviewService.create(productReview))
+                .data(productReviewService.create(request))
                 .build();
     }
 
-    // Cập nhật đánh giá theo ID
+    // Cập nhật đánh giá theo ID (nhận DTO ProductReviewUpdateRequest chuẩn kiến trúc)
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
     public ApiResponse<ProductReviewResponse> update(
             @PathVariable Long id,
-            @RequestBody @Valid ProductReview productReview
+            @RequestBody @Valid ProductReviewUpdateRequest request
     ) {
         return ApiResponse.<ProductReviewResponse>builder()
+                .code(200)
                 .message("Product review has been updated successfully")
-                .data(productReviewService.update(id, productReview))
+                .data(productReviewService.update(id, request))
                 .build();
     }
 
@@ -76,6 +83,7 @@ public class ProductReviewController {
     public ApiResponse<Void> delete(@PathVariable Long id) {
         productReviewService.delete(id);
         return ApiResponse.<Void>builder()
+                .code(200)
                 .message("Product review has been deleted successfully")
                 .build();
     }
@@ -89,6 +97,7 @@ public class ProductReviewController {
             @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         return ApiResponse.<Page<ProductReviewResponse>>builder()
+                .code(200)
                 .message("Fetched product reviews successfully")
                 .data(productReviewService.getByProduct(productId, rating, pageable))
                 .build();
@@ -98,6 +107,7 @@ public class ProductReviewController {
     @GetMapping("/product/{productId}/summary")
     public ApiResponse<ReviewSummaryResponse> getSummary(@PathVariable Long productId) {
         return ApiResponse.<ReviewSummaryResponse>builder()
+                .code(200)
                 .message("Fetched review summary successfully")
                 .data(productReviewService.getSummary(productId))
                 .build();
@@ -108,8 +118,23 @@ public class ProductReviewController {
     @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
     public ApiResponse<List<ProductReviewResponse>> getMyReviews() {
         return ApiResponse.<List<ProductReviewResponse>>builder()
+                .code(200)
                 .message("Fetched my reviews successfully")
                 .data(productReviewService.getMyReviews())
+                .build();
+    }
+
+    // Lấy danh sách các dòng sản phẩm thuộc đơn hàng đã giao thành công (DELIVERED) của người dùng hiện tại
+    // kèm trạng thái đã/chưa đánh giá (có thể lọc theo ?orderId=...)
+    @GetMapping("/my-order-items")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
+    public ApiResponse<List<ReviewableOrderItemResponse>> getMyReviewableOrderItems(
+            @RequestParam(required = false) Long orderId
+    ) {
+        return ApiResponse.<List<ReviewableOrderItemResponse>>builder()
+                .code(200)
+                .message("Fetched reviewable order items successfully")
+                .data(productReviewService.getMyReviewableOrderItems(orderId))
                 .build();
     }
 }

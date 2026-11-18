@@ -528,18 +528,17 @@ Dưới đây là catalog chi tiết tất cả các Request DTO hiện có tron
 
 #### 1. `ProductReviewCreationRequest`
 - **Mục đích:** Khách hàng đánh giá sản phẩm sau khi mua.
-- **Endpoint:** `POST /products/{productId}/reviews`
+- **Endpoint:** `POST /product-reviews`
 - **Fields:**
   | Tên trường | Kiểu dữ liệu | Bắt buộc | Ràng buộc Validation | Mô tả |
   | :--- | :--- | :---: | :--- | :--- |
-  | `productId` | `Long` | Có | `@NotNull` | ID sản phẩm được đánh giá |
-  | `orderItemId` | `Long` | Không | `Long` | ID chi tiết đơn hàng (xác thực đã mua) |
+  | `productId` | `Long` | Có | `@NotNull`, `@Positive` | ID sản phẩm được đánh giá |
+  | `orderItemId` | `Long` | Không | `@Positive` | ID chi tiết đơn hàng (xác thực đã mua) |
+  | `userId` | `Long` | Không | `@Positive` | ID người đánh giá (chỉ áp dụng khi ADMIN tạo; CUSTOMER tự động lấy theo user đăng nhập) |
   | `rating` | `Integer` | Có | `@NotNull`, `@Min(1)`, `@Max(5)` | Điểm đánh giá (1 đến 5 sao) |
   | `comment` | `String` | Không | `@Size(max=1000)` | Nội dung nhận xét |
-  | `userHeight` | `Integer` | Không | `@Min(50)`, `@Max(250)` | Chiều cao người mặc (cm) |
-  | `userWeight` | `Integer` | Không | `@Min(20)`, `@Max(250)` | Cân nặng người mặc (kg) |
   | `fitRating` | `Integer` | Không | `@Min(1)`, `@Max(5)` | Mức độ vừa vặn |
-  | `imageUrls` | `List<String>`| Không | Danh sách URL ảnh | Ảnh chụp thực tế của khách hàng |
+  | `imageUrls` | `List<String>`| Không | `@Size(max=5)` | Danh sách URL ảnh chụp thực tế (tối đa 5 ảnh) |
 
 - **Sample Request Payload:**
   ```json
@@ -548,14 +547,37 @@ Dưới đây là catalog chi tiết tất cả các Request DTO hiện có tron
     "orderItemId": 45,
     "rating": 5,
     "comment": "Chất vải rất mịn, đường may kỹ, mặc lên form chuẩn.",
-    "userHeight": 172,
-    "userWeight": 68,
-    "fitRating": 5,
+    "fitRating": 2,
     "imageUrls": [
       "https://res.cloudinary.com/.../review1.jpg"
     ]
   }
   ```
+
+#### 2. `ProductReviewUpdateRequest`
+- **Mục đích:** Cập nhật nội dung đánh giá sản phẩm (chủ sở hữu hoặc Admin).
+- **Endpoint:** `PUT /product-reviews/{id}`
+- **Fields:**
+  | Tên trường | Kiểu dữ liệu | Bắt buộc | Ràng buộc Validation | Mô tả |
+  | :--- | :--- | :---: | :--- | :--- |
+  | `rating` | `Integer` | Không | `@Min(1)`, `@Max(5)` | Điểm đánh giá mới (1 đến 5 sao) |
+  | `comment` | `String` | Không | `@Size(max=1000)` | Nội dung nhận xét cập nhật |
+  | `fitRating` | `Integer` | Không | `@Min(1)`, `@Max(5)` | Mức độ vừa vặn (1 đến 5) |
+  | `imageUrls` | `List<String>`| Không | `@Size(max=5)` | Danh sách URL ảnh cập nhật (tối đa 5 ảnh) |
+  | `productId` | `Long` | Không | `@Positive` | ID sản phẩm (chỉ ADMIN được phép cập nhật) |
+  | `orderItemId` | `Long` | Không | `@Positive` | ID chi tiết đơn hàng (chỉ ADMIN được phép cập nhật) |
+  | `userId` | `Long` | Không | `@Positive` | ID người dùng (chỉ ADMIN được phép cập nhật) |
+
+#### 3. `ProductReviewImageCreationRequest` & `ProductReviewImageUpdateRequest`
+- **Mục đích:** Thêm mới hoặc cập nhật thông tin ảnh minh họa của đánh giá sản phẩm.
+- **Endpoint:** `POST /product-review-images`, `PUT /product-review-images/{id}`
+- **Fields trong `ProductReviewImageCreationRequest`:**
+  | Tên trường | Kiểu dữ liệu | Bắt buộc | Ràng buộc Validation | Mô tả |
+  | :--- | :--- | :---: | :--- | :--- |
+  | `productReviewId` | `Long` | Có | `@NotNull`, `@Positive` | ID của đánh giá sản phẩm |
+  | `imageUrl` | `String` | Có | `@NotBlank` | Đường dẫn URL của ảnh đánh giá |
+  | `mediaType` | `String` | Không | `@Size(max=20)` | Loại media (mặc định `"IMAGE"`) |
+  | `displayOrder` | `Integer` | Không | `@Min(0)` | Thứ tự hiển thị ảnh |
 
 ---
 
