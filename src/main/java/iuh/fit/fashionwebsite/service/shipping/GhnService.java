@@ -8,6 +8,7 @@ import iuh.fit.fashionwebsite.client.ghn.GhnClient;
 import iuh.fit.fashionwebsite.dto.request.checkout.OrderCreationRequest;
 import iuh.fit.fashionwebsite.dto.request.shipping.GhnOrderCreationRequest;
 import iuh.fit.fashionwebsite.dto.response.shipping.GhnOrderPreviewResponse;
+import iuh.fit.fashionwebsite.dto.response.shipping.GhnOrderResponse;
 import iuh.fit.fashionwebsite.dto.response.shipping.GhnProvinceDto;
 import iuh.fit.fashionwebsite.dto.response.shipping.GhnWardDto;
 import iuh.fit.fashionwebsite.entity.*;
@@ -79,6 +80,89 @@ public class GhnService {
 
     // Tính phí vận chuyển (Preview Order)
     public GhnOrderPreviewResponse getGhnOrderPreview(OrderCreationRequest request) {
+        GhnOrderCreationRequest ghnOrderCreationRequest =
+                createGhnOrderCreationRequest(request, "PreviewOrder", BigDecimal.ZERO);
+
+        try {
+            return ghnClient.getGhnOrderPreviewResponse(ghnOrderCreationRequest);
+        } catch (Exception e) {
+            log.warn("GHN API không khả dụng khi tính phí vận chuyển ({}), áp dụng mức phí tiêu chuẩn 30.000 VNĐ.", e.getMessage());
+            return new GhnOrderPreviewResponse(30000L, Instant.now().plus(3, ChronoUnit.DAYS));
+        }
+    }
+
+    // Tạo đơn hàng GHN(Create order)
+    public GhnOrderResponse createGhnOrder(
+            OrderCreationRequest request,
+            String clientOrderCode,
+            BigDecimal discountAmount
+    ) {
+        GhnOrderCreationRequest ghnOrderCreationRequest =
+                createGhnOrderCreationRequest(request, clientOrderCode, discountAmount);
+
+        return ghnClient.getGhnOrderResponse(ghnOrderCreationRequest);
+    }
+
+    public GhnOrderResponse createGhnOrder(Order order, List<OrderItem> orderItems) {
+        List<GhnOrderCreationRequest.Item> items = new ArrayList<>();
+        int totalWeight = 0;
+        int totalHeight = 0;
+        int totalWidth = 0;
+        int totalLength = 0;
+
+        for (OrderItem orderItem : orderItems) {
+            ProductVariant variant = orderItem.getProductVariant();
+            GhnOrderCreationRequest.Item item = new GhnOrderCreationRequest.Item();
+            item.setName(orderItem.getProductName());
+            item.setQuantity(orderItem.getQuantity());
+            item.setPrice(toGhnAmount(orderItem.getUnitPrice()));
+            item.setLength(variant.getPackageLength());
+            item.setWidth(variant.getPackageWidth());
+            item.setHeight(variant.getPackageHeight());
+            item.setWeight(variant.getPackageWeight());
+            items.add(item);
+
+            totalWeight += variant.getPackageWeight() * orderItem.getQuantity();
+            totalHeight += variant.getPackageHeight();
+            totalWidth = Math.max(variant.getPackageWidth(), totalWidth);
+            totalLength = Math.max(variant.getPackageLength(), totalLength);
+        }
+
+        GhnOrderCreationRequest request = GhnOrderCreationRequest.builder()
+                .clientOrderCode(order.getOrderCode())
+                .newFromAddress(true)
+                .fromAddress("Số 12 Nguyễn Văn Bảo, Phường Hạnh Thông, Thành phố Hồ Chí Minh")
+                .fromProvinceName("Hồ Chí Minh")
+                .fromWardName("Phường Hạnh Thông")
+                .newToAddress(true)
+                .toName(order.getShippingRecipientName())
+                .toPhone(order.getShippingPhone())
+                .toAddress(order.getShippingAddress())
+                .toProvinceName(order.getShippingProvinceName())
+                .toWardName(order.getShippingWardName())
+                .weight(totalWeight)
+                .height(totalHeight)
+                .width(totalWidth)
+                .length(totalLength)
+                .serviceTypeId(2)
+                .paymentTypeId(1)
+                .requiredNote("CHOXEMHANGKHONGTHU")
+                .codAmount(0)
+                .items(items)
+                .build();
+
+        return ghnClient.getGhnOrderResponse(request);
+    }
+
+    public GhnOrderCreationRequest createGhnOrderCreationRequest(OrderCreationRequest request) {
+        return createGhnOrderCreationRequest(request, "PreviewOrder", BigDecimal.ZERO);
+    }
+
+    private GhnOrderCreationRequest createGhnOrderCreationRequest(
+            OrderCreationRequest request,
+            String clientOrderCode,
+            BigDecimal discountAmount
+    ) {
         // user detail
         User user = userService.getCurrentUserEntity();
 
@@ -116,8 +200,8 @@ public class GhnService {
             totalAmount = totalAmount.add(lineTotal);
         }
 
-        GhnOrderCreationRequest ghnOrderCreationRequest = GhnOrderCreationRequest.builder()
-                .clientOrderCode("PreviewOrder")
+        return GhnOrderCreationRequest.builder()
+                .clientOrderCode(clientOrderCode)
                 .newFromAddress(true)
                 .fromAddress("Số 12 Nguyễn Văn Bảo, Phường Hạnh Thông, Thành phố Hồ Chí Minh")
                 .fromProvinceName("Hồ Chí Minh")
@@ -135,16 +219,11 @@ public class GhnService {
                 .serviceTypeId(2)
                 .paymentTypeId(1)
                 .requiredNote("CHOXEMHANGKHONGTHU")
-                .codAmount(paymentMethod.getCode().equals("FWDEMO1_COD") ? toGhnAmount(totalAmount) : 0)
+                .codAmount(paymentMethod.getCode().equals("FWDEMO1_COD")
+                        ? toGhnAmount(totalAmount.subtract(discountAmount).max(BigDecimal.ZERO))
+                        : 0)
                 .items(items)
                 .build();
-
-        try {
-            return ghnClient.getGhnOrderPreviewResponse(ghnOrderCreationRequest);
-        } catch (Exception e) {
-            log.warn("GHN API không khả dụng khi tính phí vận chuyển ({}), áp dụng mức phí tiêu chuẩn 30.000 VNĐ.", e.getMessage());
-            return new GhnOrderPreviewResponse(30000L, Instant.now().plus(3, ChronoUnit.DAYS));
-        }
     }
 
     private synchronized List<GhnProvinceDto> getOfflineProvinces() {

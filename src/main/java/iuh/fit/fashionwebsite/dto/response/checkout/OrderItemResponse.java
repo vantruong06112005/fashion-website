@@ -1,4 +1,4 @@
-package iuh.fit.fashionwebsite.dto.response;
+package iuh.fit.fashionwebsite.dto.response.checkout;
 
 import lombok.*;
 
@@ -22,4 +22,5 @@ public class OrderItemResponse {
     private BigDecimal totalPrice;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private String imageUrl;
 }

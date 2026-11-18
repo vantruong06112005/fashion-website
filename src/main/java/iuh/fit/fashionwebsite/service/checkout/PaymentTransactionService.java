@@ -1,6 +1,6 @@
-package iuh.fit.fashionwebsite.service.order;
+package iuh.fit.fashionwebsite.service.checkout;
 
-import iuh.fit.fashionwebsite.dto.response.PaymentTransactionResponse;
+import iuh.fit.fashionwebsite.dto.response.checkout.PaymentTransactionResponse;
 import iuh.fit.fashionwebsite.exception.order.PaymentTransactionNotFoundException;
 import iuh.fit.fashionwebsite.mapper.PaymentTransactionMapper;
 import iuh.fit.fashionwebsite.repository.PaymentTransactionRepository;

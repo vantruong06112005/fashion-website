@@ -21,7 +21,7 @@ Khoảng giá sai, ID không dương hoặc sort không hỗ trợ trả HTTP 40
 ProductResponse bổ sung `productImages` và `variants` bằng DTO, không trả Entity hoặc quan hệ ngược.
 Riêng bộ lọc không thay đổi schema. Xóa mềm danh mục bổ sung `categories.deleted_at` theo tài liệu CATALOG_PERMISSIONS.
 Các thuộc tính tay áo, cổ áo, form và chất liệu chưa có trong schema,
-nên chưa cung cấp bộ lọc này. Ưu đãi cần luồng khuyến mãi riêng; không giả lập danh sách giảm giá.
+nên chưa cung cấp bộ lọc này. Thông tin ưu đãi PRODUCT hợp lệ được bổ sung qua ProductPricingService; frontend dùng dữ liệu này cho trang `?tag=sale`, không giả lập danh sách giảm giá.
 
 Frontend lấy danh mục và các lựa chọn size/màu từ dữ liệu API, gửi điều kiện lên backend,
 lưu chúng trong query URL và hủy request cũ khi lựa chọn thay đổi.

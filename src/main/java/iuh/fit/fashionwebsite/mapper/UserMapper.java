@@ -36,6 +36,7 @@ public interface UserMapper {
     @Mapping(target = "returnRequests", ignore = true)
     @Mapping(target = "avt", ignore = true)
     @Mapping(target = "passwordChangedAt", ignore = true)
+    @Mapping(target = "deletedAt", ignore = true)
     User toUser(UserCreationRequest request);
 
     UserResponse toUserResponse(User user);
@@ -56,6 +57,7 @@ public interface UserMapper {
     @Mapping(target = "returnRequests", ignore = true)
     @Mapping(target = "avt", ignore = true)
     @Mapping(target = "passwordChangedAt", ignore = true)
+    @Mapping(target = "deletedAt", ignore = true)
     void updateUser(
             @MappingTarget User user,
             UserUpdateRequest request

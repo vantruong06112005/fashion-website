@@ -6,6 +6,8 @@ import iuh.fit.fashionwebsite.dto.request.ProductFilterRequest;
 import iuh.fit.fashionwebsite.dto.response.ProductResponse;
 import iuh.fit.fashionwebsite.entity.Category;
 import iuh.fit.fashionwebsite.entity.Product;
+import iuh.fit.fashionwebsite.entity.ProductVariant;
+import iuh.fit.fashionwebsite.entity.ProductImage;
 import iuh.fit.fashionwebsite.exception.AppException;
 import iuh.fit.fashionwebsite.exception.ErrorCode;
 import iuh.fit.fashionwebsite.mapper.ProductMapper;
@@ -22,6 +24,12 @@ import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageImpl;
+import java.util.Locale;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +40,9 @@ public class ProductServiceImpl implements ProductService {
     private final ProductMapper mapper;
     private final UserUnderstandingService userUnderstandingService;
     private final ProductCatalogCache productCatalogCache;
+    private final ProductPricingService pricing;
+    private final ProductAssetUpdateService assetUpdates;
+
 
     @Override
     public ProductResponse create(ProductCreationRequest request) {
@@ -42,6 +53,32 @@ public class ProductServiceImpl implements ProductService {
         product.setIsActive(request.getIsActive() == null || request.getIsActive());
         product.setAverageRating(java.math.BigDecimal.ZERO);
         product.setReviewCount(0);
+        if (request.getVariants() != null) {
+            var combinations = new HashSet<String>();
+            for (var input : request.getVariants()) {
+                String color = input.getColor().trim();
+                String size = input.getSize().trim().toUpperCase(Locale.ROOT);
+                if (size.equals("2XL")) size = "XXL";
+                if (!combinations.add(color.toLowerCase(Locale.ROOT) + ":" + size))
+                    throw new AppException("Biến thể màu/size bị trùng");
+                product.getVariants().add(ProductVariant.builder()
+                        .product(product).sku("SKU-" + UUID.randomUUID())
+                        .color(color).size(size).price(input.getPrice()).stockQuantity(input.getStockQuantity())
+                        .isActive(input.getIsActive() == null || input.getIsActive()).packageWeight(input.getPackageWeight()).packageLength(input.getPackageLength())
+                        .packageWidth(input.getPackageWidth()).packageHeight(input.getPackageHeight()).build());
+            }
+        }
+        if (request.getImages() != null) {
+            for (int i = 0; i < request.getImages().size(); i++) {
+                var input = request.getImages().get(i);
+                Integer index = input.getVariantIndex();
+                if (index != null && (index < 0 || index >= product.getVariants().size()))
+                    throw new AppException("Ảnh tham chiếu biến thể không tồn tại");
+                product.getImages().add(ProductImage.builder()
+                        .product(product).imageUrl(input.getImageUrl()).displayOrder(i).isMain(i == 0)
+                        .productVariant(index == null ? null : product.getVariants().get(index)).build());
+            }
+        }
         Product savedProduct = productRepository.save(product);
         // build vector cho sản phẩm vừa thêm vào
         userUnderstandingService.syncProductEmbedding(savedProduct.getId());
@@ -56,12 +93,25 @@ public class ProductServiceImpl implements ProductService {
                 ? (categoryId == null ? productRepository.findAll() : productRepository.findAllByCategoryId(categoryId))
                 : (categoryId == null ? productRepository.findAllByIsActiveTrueAndCategoryIsActiveTrue()
                 : productRepository.findAllByCategoryIdAndIsActiveTrueAndCategoryIsActiveTrue(categoryId));
-        return products.stream().map(mapper::toResponse).toList();
+        var responses = products.stream().map(mapper::toResponse).toList();
+        pricing.enrich(responses);
+        return responses;
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<ProductResponse> search(ProductFilterRequest filter) {
+        return queryProducts(filter, Pageable.unpaged()).getContent();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ProductResponse> searchPage(ProductFilterRequest filter, int page, int size) {
+        if (page < 0 || size < 1 || size > 100) throw new AppException(ErrorCode.INVALID_PRODUCT_FILTER);
+        return queryProducts(filter, PageRequest.of(page, size));
+    }
+
+    private Page<ProductResponse> queryProducts(ProductFilterRequest filter, Pageable pageable) {
         String order = ProductSpecifications.hasText(filter.getSort()) ? filter.getSort() : "newest";
         if ((filter.getCategoryId() != null && filter.getCategoryId() < 1)
                 || (filter.getNewWithinDays() != null && (filter.getNewWithinDays() < 1 || filter.getNewWithinDays() > 365))
@@ -96,8 +146,17 @@ public class ProductServiceImpl implements ProductService {
             case "name" -> Sort.by("name").ascending();
             default -> Sort.by("createdAt").descending();
         };
-        return productRepository.findAll(ProductSpecifications.matching(filter, categoryIds, manager),
-                sort.and(Sort.by("id").descending())).stream().map(mapper::toResponse).toList();
+        sort = sort.and(Sort.by("id").descending());
+        var spec = ProductSpecifications.matching(filter, categoryIds, manager);
+        if (pageable.isUnpaged()) {
+            var responses = productRepository.findAll(spec, sort).stream().map(mapper::toResponse).toList();
+            pricing.enrich(responses);
+            return new PageImpl<>(responses);
+        }
+        var result = productRepository.findAll(spec, PageRequest.of(
+                pageable.getPageNumber(), pageable.getPageSize(), sort)).map(mapper::toResponse);
+        pricing.enrich(result.getContent());
+        return result;
     }
 
     @Override
@@ -115,7 +174,9 @@ public class ProductServiceImpl implements ProductService {
                 || product.getCategory() == null || !Boolean.TRUE.equals(product.getCategory().getIsActive()))) {
             throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
         }
-        return mapper.toResponse(product);
+        var response = mapper.toResponse(product);
+        pricing.enrich(List.of(response));
+        return response;
     }
 
     @Override
@@ -125,6 +186,7 @@ public class ProductServiceImpl implements ProductService {
         if (request.getCategoryId() != null) {
             product.setCategory(getActiveCategory(request.getCategoryId()));
         }
+        assetUpdates.apply(product, request);
         mapper.update(product, request);
         Product savedProduct = productRepository.save(product);
         // build lại vector cho sản phẩm vừa cập nhật
@@ -132,6 +194,10 @@ public class ProductServiceImpl implements ProductService {
         productCatalogCache.refreshAfterCommit();
         return mapper.toResponse(savedProduct);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Map<String, List<String>> getOptions() { return assetUpdates.options(); }
 
     @Override
     public void delete(Long id) {

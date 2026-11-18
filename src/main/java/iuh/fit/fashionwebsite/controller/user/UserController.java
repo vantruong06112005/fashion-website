@@ -19,12 +19,16 @@ import iuh.fit.fashionwebsite.dto.request.user.UserCreationRequest;
 import iuh.fit.fashionwebsite.dto.request.user.UserUpdateRequest;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
 import iuh.fit.fashionwebsite.dto.response.user.UserResponse;
+import iuh.fit.fashionwebsite.enums.Gender;
+import iuh.fit.fashionwebsite.enums.RoleUser;
+import iuh.fit.fashionwebsite.enums.StatusUser;
 import iuh.fit.fashionwebsite.service.user.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import iuh.fit.fashionwebsite.validator.anotation.ValidImageFile;
+import org.springframework.data.domain.Page;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -79,7 +83,24 @@ public class UserController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
-    public ApiResponse<List<UserResponse>> getAllUsers() {
+    public ApiResponse<Page<UserResponse>> getAllUsers(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) RoleUser role,
+            @RequestParam(required = false) Gender gender,
+            @RequestParam(required = false) StatusUser status,
+            @RequestParam(defaultValue = "id_desc") String sortBy
+    ) {
+        return ApiResponse.<Page<UserResponse>>builder()
+                .message("Fetched users successfully")
+                .data(userService.getUsersPaged(page, size, search, role, gender, status, sortBy))
+                .build();
+    }
+
+    @GetMapping("/all")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
+    public ApiResponse<List<UserResponse>> getAllUsersUnpaged() {
         return ApiResponse.<List<UserResponse>>builder()
                 .message("Fetched all users successfully")
                 .data(userService.getAllUsers())
@@ -128,6 +149,15 @@ public class UserController {
         userService.deleteUser(id);
         return ApiResponse.<Void>builder()
                 .message("User has been deleted successfully")
+                .build();
+    }
+
+    @DeleteMapping("/info")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'CUSTOMER')")
+    public ApiResponse<Void> deleteCurrentUser() {
+        userService.deleteCurrentUser();
+        return ApiResponse.<Void>builder()
+                .message("Tài khoản đã được xóa thành công")
                 .build();
     }
 

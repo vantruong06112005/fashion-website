@@ -1,10 +1,10 @@
-package iuh.fit.fashionwebsite.controller.order;
+package iuh.fit.fashionwebsite.controller.checkout;
 
 import iuh.fit.fashionwebsite.dto.request.checkout.PaymentMethodCreationRequest;
 import iuh.fit.fashionwebsite.dto.request.checkout.PaymentMethodUpdateRequest;
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
-import iuh.fit.fashionwebsite.dto.response.PaymentMethodResponse;
-import iuh.fit.fashionwebsite.service.order.PaymentMethodService;
+import iuh.fit.fashionwebsite.dto.response.checkout.PaymentMethodResponse;
+import iuh.fit.fashionwebsite.service.checkout.PaymentMethodService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -24,7 +24,7 @@ public class PaymentMethodController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN', 'STAFF')")
     public ApiResponse<List<PaymentMethodResponse>> getAllPaymentMethods() {
         return ApiResponse.<List<PaymentMethodResponse>>builder()
                 .code(200)

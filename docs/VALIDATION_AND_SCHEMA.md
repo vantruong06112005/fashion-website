@@ -653,7 +653,7 @@ Khi bạn được giao phát triển một module API mới hoặc thêm thuộ
   ```bash
   ./mvnw clean test-compile
   ```
-- Commit theo chuẩn quy ước (xem tại [README.md](README.md)):
+- Commit theo chuẩn quy ước (xem tại [README.md](TongQuanTaiLieuNhom3.md)):
   ```bash
   git commit -m "feat(order): add OrderCreationRequest with full validation and schema docs"
   ```

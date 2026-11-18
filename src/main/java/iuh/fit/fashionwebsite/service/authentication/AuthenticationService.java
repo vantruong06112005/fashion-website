@@ -356,6 +356,9 @@ public class AuthenticationService {
         );
 
         user.setGender(request.getGender() != null ? request.getGender() : Gender.OTHER);
+        if (request.getDateOfBirth() != null) {
+            user.setDateOfBirth(request.getDateOfBirth());
+        }
         user.setRole(RoleUser.CUSTOMER);
         user.setStatus(StatusUser.ACTIVE);
 

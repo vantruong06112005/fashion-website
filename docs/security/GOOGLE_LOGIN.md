@@ -109,7 +109,7 @@ Một nguyên tắc sống còn trong bảo mật: **Backend tuyệt đối khô
 
 ## 4. Nguyên Tắc Xử Lý Nghiệp Vụ & Đồng Bộ Tài Khoản (Business Logic)
 
-Trong bảng `users` ([`User.java`](../src/main/java/iuh/fit/fashionwebsite/entity/User.java)), cột `email` được thiết lập `unique = true`. Hệ thống xử lý 3 kịch bản thực tế một cách chặt chẽ:
+Trong bảng `users` ([`User.java`](../../src/main/java/iuh/fit/fashionwebsite/entity/User.java)), cột `email` được thiết lập `unique = true`. Hệ thống xử lý 3 kịch bản thực tế một cách chặt chẽ:
 
 ### Kịch bản 1: Người dùng ĐÃ CÓ tài khoản cùng Email trong hệ thống (Account Linking)
 - **Tình huống:** Người dùng từng đăng ký tài khoản bằng form thường (`POST /auth/register`) với email `nguyenvantruongdz91@gmail.com`. Hôm sau họ bấm "Đăng nhập bằng Google" bằng đúng Gmail đó.
@@ -142,9 +142,9 @@ Trong bảng `users` ([`User.java`](../src/main/java/iuh/fit/fashionwebsite/enti
 | :--- | :--- | :--- |
 | **DTO Request** | [`GoogleLoginRequest.java`](../src/main/java/iuh/fit/fashionwebsite/dto/request/GoogleLoginRequest.java) | Chứa trường `idToken` có gắn `@NotBlank` |
 | **Controller** | [`AuthenticationController.java`](../src/main/java/iuh/fit/fashionwebsite/controller/user/AuthenticationController.java) | Endpoint `POST /auth/google` nhận request và trả về `ApiResponse<AuthenticationResponse>` |
-| **Service** | [`AuthenticationService.java`](../src/main/java/iuh/fit/fashionwebsite/service/authentication/AuthenticationService.java) | Chứa `authenticateWithGoogle()`, `verifyGoogleIdToken()`, `createGoogleUser()`, `getGoogleJwtDecoder()` |
-| **Configuration** | [`application.properties`](../src/main/resources/application.properties) | Khai báo `google.client-id=${GOOGLE_CLIENT_ID:}` |
-| **Unit Test** | [`AuthenticationServiceTest.java`](../src/test/java/iuh/fit/fashionwebsite/service/authentication/AuthenticationServiceTest.java) | Kiểm thử đầy đủ các kịch bản: User mới, User cũ, User bị khóa, Token giả/hết hạn |
+| **Service** | [`AuthenticationService.java`](../../src/main/java/iuh/fit/fashionwebsite/service/authentication/AuthenticationService.java) | Chứa `authenticateWithGoogle()`, `verifyGoogleIdToken()`, `createGoogleUser()`, `getGoogleJwtDecoder()` |
+| **Configuration** | [`application.properties`](../../src/main/resources/application.properties) | Khai báo `google.client-id=${GOOGLE_CLIENT_ID:}` |
+| **Unit Test** | [`AuthenticationServiceTest.java`](../../src/test/java/iuh/fit/fashionwebsite/service/authentication/AuthenticationServiceTest.java) | Kiểm thử đầy đủ các kịch bản: User mới, User cũ, User bị khóa, Token giả/hết hạn |
 
 ---
 
@@ -168,7 +168,7 @@ Trong bảng `users` ([`User.java`](../src/main/java/iuh/fit/fashionwebsite/enti
    - Bấm **Tạo (Create)** và sao chép mã **ID máy khách (Client ID)** (có đuôi `.apps.googleusercontent.com`).
 
 ### Bước 2: Khai báo trong file `.env`
-Mở file `.env` ở thư mục gốc dự án (tham khảo mẫu [`.env.example`](../.env.example)) và thêm:
+Mở file `.env` ở thư mục gốc dự án (tham khảo mẫu [`.env.example`](../../.env.example)) và thêm:
 
 ```env
 # Google OAuth2 Client ID

@@ -21,6 +21,10 @@ import iuh.fit.fashionwebsite.repository.UserRepository;
 import iuh.fit.fashionwebsite.service.cloudinary.CloudinaryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -73,6 +77,9 @@ public class UserService {
         );
 
         user.setGender(request.getGender() != null ? request.getGender() : Gender.OTHER);
+        if (request.getDateOfBirth() != null) {
+            user.setDateOfBirth(request.getDateOfBirth());
+        }
         user.setRole(request.getRole() != null ? request.getRole() : RoleUser.CUSTOMER);
         user.setStatus(StatusUser.ACTIVE);
 
@@ -106,6 +113,10 @@ public class UserService {
 
         if (request.getGender() != null) {
             user.setGender(request.getGender());
+        }
+
+        if (request.getDateOfBirth() != null) {
+            user.setDateOfBirth(request.getDateOfBirth());
         }
 
         if (request.getRole() != null) {
@@ -176,16 +187,60 @@ public class UserService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public Page<UserResponse> getUsersPaged(
+            int page,
+            int size,
+            String search,
+            RoleUser role,
+            Gender gender,
+            StatusUser status,
+            String sortBy
+    ) {
+        log.info("Fetching paged users: page={}, size={}, search={}, role={}, gender={}, status={}, sortBy={}",
+                page, size, search, role, gender, status, sortBy);
+
+        int safePage = Math.max(0, page);
+        int safeSize = Math.min(Math.max(1, size), 100);
+
+        Sort sort = Sort.by(Sort.Direction.DESC, "id");
+        if ("id_asc".equalsIgnoreCase(sortBy)) {
+            sort = Sort.by(Sort.Direction.ASC, "id");
+        } else if ("name_asc".equalsIgnoreCase(sortBy)) {
+            sort = Sort.by(Sort.Direction.ASC, "fullname");
+        } else if ("name_desc".equalsIgnoreCase(sortBy)) {
+            sort = Sort.by(Sort.Direction.DESC, "fullname");
+        }
+
+        Pageable pageable = PageRequest.of(safePage, safeSize, sort);
+        String trimmedKeyword = (search != null && !search.trim().isEmpty()) ? search.trim() : null;
+
+        return userRepository.searchUsers(trimmedKeyword, role, gender, status, pageable)
+                .map(userMapper::toUserResponse);
+    }
+
     public void deleteUser(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(UserNotFoundException::new);
 
-        // Xóa mềm: Chuyển trạng thái sang INACTIVE và vô hiệu hoá toàn bộ token cũ
-        user.setStatus(StatusUser.INACTIVE);
+        // Xóa mềm: Gán deletedAt, vô hiệu hoá toàn bộ token cũ
+        user.setDeletedAt(java.time.LocalDateTime.now());
         user.setPasswordChangedAt(Instant.now());
         userRepository.save(user);
 
-        log.info("Soft-deleted (deactivated) user with id: {}", id);
+        log.info("Soft-deleted user with id: {}", id);
+    }
+
+    public void deleteCurrentUser() {
+        String username = SecurityContextHolder
+                .getContext()
+                .getAuthentication()
+                .getName();
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(UserNotFoundException::new);
+
+        deleteUser(user.getId());
     }
 
     @Transactional(readOnly = true)

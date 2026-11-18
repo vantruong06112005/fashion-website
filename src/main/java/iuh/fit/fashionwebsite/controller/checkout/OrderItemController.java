@@ -1,8 +1,8 @@
-package iuh.fit.fashionwebsite.controller.order;
+package iuh.fit.fashionwebsite.controller.checkout;
 
 import iuh.fit.fashionwebsite.dto.response.ApiResponse;
-import iuh.fit.fashionwebsite.dto.response.OrderItemResponse;
-import iuh.fit.fashionwebsite.service.order.OrderItemService;
+import iuh.fit.fashionwebsite.dto.response.checkout.OrderItemResponse;
+import iuh.fit.fashionwebsite.service.checkout.OrderItemService;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;

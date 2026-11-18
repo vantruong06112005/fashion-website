@@ -61,7 +61,7 @@ public class Product extends BaseEntity {
     private List<ProductVariant> variants = new ArrayList<>();
 
     @JsonIgnore
-    @OneToMany(mappedBy = "product", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "product", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("isMain DESC, displayOrder ASC")
     @Builder.Default
     private List<ProductImage> images = new ArrayList<>();

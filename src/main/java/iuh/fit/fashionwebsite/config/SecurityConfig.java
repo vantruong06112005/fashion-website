@@ -57,6 +57,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/auth/**", "/ws/**").permitAll()
+                        .requestMatchers("/payment/vn-pay-callback", "/payment/vn-pay-ipn").permitAll()
                         .requestMatchers("/admin/chat/**", "/api/admin/chat/**").hasAnyRole("ADMIN", "STAFF")
                         .requestMatchers(HttpMethod.GET, "/products", "/products/**", "/categories", "/categories/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/shipping/provinces", "/shipping/wards").permitAll()

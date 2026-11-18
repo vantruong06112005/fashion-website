@@ -33,6 +33,21 @@ public class ProductController {
                 .data(productService.search(filter)).build();
     }
 
+    @GetMapping("/options")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
+    public ApiResponse<java.util.Map<String, List<String>>> getOptions() {
+        return ApiResponse.<java.util.Map<String, List<String>>>builder().code(200).data(productService.getOptions()).build();
+    }
+
+    @GetMapping("/paged")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
+    public ApiResponse<org.springframework.data.domain.Page<ProductResponse>> getPage(
+            @ModelAttribute ProductFilterRequest filter,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "10") int pageSize) {
+        return ApiResponse.<org.springframework.data.domain.Page<ProductResponse>>builder().code(200)
+                .data(productService.searchPage(filter, page, pageSize)).build();
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<ProductResponse> getById(@PathVariable Long id) {
         return ApiResponse.<ProductResponse>builder().code(200)

@@ -1,6 +1,6 @@
-package iuh.fit.fashionwebsite.service.order;
+package iuh.fit.fashionwebsite.service.checkout;
 
-import iuh.fit.fashionwebsite.dto.response.OrderItemResponse;
+import iuh.fit.fashionwebsite.dto.response.checkout.OrderItemResponse;
 import iuh.fit.fashionwebsite.exception.order.OrderItemNotFoundException;
 import iuh.fit.fashionwebsite.mapper.OrderItemMapper;
 import iuh.fit.fashionwebsite.repository.OrderItemRepository;

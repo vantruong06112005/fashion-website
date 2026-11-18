@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -57,6 +58,7 @@ public class InitData implements CommandLineRunner {
     private final ReturnRequestRepository returnRequestRepository;
     private final ReturnRequestItemRepository returnRequestItemRepository;
     private final ReturnRequestImageRepository returnRequestImageRepository;
+    private final ReturnRequestHolidayRepository returnRequestHolidayRepository;
     private final ProductReviewRepository productReviewRepository;
     private final ProductReviewImageRepository productReviewImageRepository;
     private final NotificationRepository notificationRepository;
@@ -94,7 +96,7 @@ public class InitData implements CommandLineRunner {
     private Product p041, p042, p043, p044, p045, p046, p047, p048, p049, p050;
     private Product owen_p001, owen_p002, owen_p003, owen_p004, owen_p005, owen_p006, owen_p007, owen_p008, owen_p009, owen_p010;
     private Product owen_p011, owen_p012, owen_p013, owen_p014, owen_p015, owen_p016, owen_p017, owen_p018, owen_p019, owen_p020;
-    private PaymentMethod pm_cod, pm_bank;
+    private PaymentMethod pm_cod, pm_bank, pm_vnpay;
     private SpecialOffer offer1, offer2, offer3, offer4, offer5;
     private ReturnRequest r01, r02, r03, r04, r05, r06, r07, r08, r09, r10;
 
@@ -155,6 +157,9 @@ public class InitData implements CommandLineRunner {
         entityManager.flush();
 
         seedAllReturnsAndReviews();
+        entityManager.flush();
+
+        seedAllReturnRequestHolidays();
         entityManager.flush();
 
         seedRealtimeNotificationsAndChat();
@@ -691,9 +696,61 @@ public class InitData implements CommandLineRunner {
         return saved;
     }
 
+    private void seedRefundedReturnDetails(ReturnRequest rr,
+                                           BigDecimal itemsRefundAmount,
+                                           BigDecimal returnShippingFee,
+                                           BigDecimal refundAmount,
+                                           String bankName,
+                                           String accountNumber,
+                                           String accountHolderName,
+                                           String refundTransactionCode,
+                                           LocalDateTime approvedAt,
+                                           LocalDateTime customerRespondedAt,
+                                           LocalDateTime handoverDeadline,
+                                           LocalDateTime handedOverAt,
+                                           LocalDateTime receivedAt,
+                                           LocalDateTime inspectedAt,
+                                           LocalDateTime refundedAt) {
+        rr.setCustomerConfirmedPlan(true);
+        rr.setItemsRefundAmount(itemsRefundAmount);
+        rr.setReturnShippingFee(returnShippingFee);
+        rr.setRefundAmount(refundAmount);
+        rr.setBankName(bankName);
+        rr.setAccountNumber(accountNumber);
+        rr.setAccountHolderName(accountHolderName);
+        rr.setRefundTransactionCode(refundTransactionCode);
+        rr.setApprovedAt(approvedAt);
+        rr.setCustomerRespondedAt(customerRespondedAt);
+        rr.setHandoverDeadline(handoverDeadline);
+        rr.setHandedOverAt(handedOverAt);
+        rr.setReceivedAt(receivedAt);
+        rr.setInspectedAt(inspectedAt);
+        rr.setInspectionResultSentAt(inspectedAt);
+        rr.setRefundEligibleAt(inspectedAt);
+        rr.setRefundedAt(refundedAt);
+        rr.setResolvedAt(refundedAt);
+        rr.setCompletedAt(refundedAt);
+        rr.setRestockedAt(refundedAt);
+        rr.setApprovedBy(staff01.getId());
+        rr.setInspectedBy(staff01.getId());
+        rr.setRefundedBy(admin01.getId());
+        rr.setRestockedBy(staff01.getId());
+        returnRequestRepository.save(rr);
+    }
+
     private ReturnRequestItem seedReturnRequestItem(ReturnRequest returnRequest, OrderItem orderItem,
                                                     ProductVariant oldVariant, Integer quantity,
                                                     Integer restockedQuantity, boolean isRestocked,
+                                                    LocalDateTime createdAt, LocalDateTime updatedAt) {
+        return seedReturnRequestItem(returnRequest, orderItem, oldVariant, quantity,
+                null, restockedQuantity, isRestocked, null, null, createdAt, updatedAt);
+    }
+
+    private ReturnRequestItem seedReturnRequestItem(ReturnRequest returnRequest, OrderItem orderItem,
+                                                    ProductVariant oldVariant, Integer quantity,
+                                                    Integer acceptedQuantity, Integer restockedQuantity,
+                                                    boolean isRestocked, BigDecimal itemRefundAmount,
+                                                    String inspectionNote,
                                                     LocalDateTime createdAt, LocalDateTime updatedAt) {
         ReturnRequestItem rri = returnRequestItemRepository
                 .findFirstByReturnRequestIdAndOrderItemId(returnRequest.getId(), orderItem.getId())
@@ -703,8 +760,11 @@ public class InitData implements CommandLineRunner {
         rri.setOrderItem(orderItem);
         rri.setOldVariant(oldVariant);
         rri.setQuantity(quantity);
+        rri.setAcceptedQuantity(acceptedQuantity);
         rri.setRestockedQuantity(restockedQuantity);
         rri.setIsRestocked(isRestocked);
+        rri.setItemRefundAmount(itemRefundAmount);
+        rri.setInspectionNote(inspectionNote);
         rri.setCreatedAt(createdAt);
         rri.setUpdatedAt(updatedAt);
 
@@ -725,6 +785,27 @@ public class InitData implements CommandLineRunner {
         img.setUpdatedAt(updatedAt);
 
         ReturnRequestImage saved = returnRequestImageRepository.save(img);
+        trackSeeded(saved, saved.getId());
+        return saved;
+    }
+
+    private ReturnRequestHoliday seedReturnRequestHoliday(LocalDate holidayDate, String name, String description,
+                                                          LocalDateTime createdAt, LocalDateTime updatedAt) {
+        List<ReturnRequestHoliday> existing = entityManager.createQuery(
+                        "SELECT h FROM ReturnRequestHoliday h WHERE h.holidayDate = :d",
+                        ReturnRequestHoliday.class)
+                .setParameter("d", holidayDate)
+                .setMaxResults(1)
+                .getResultList();
+
+        ReturnRequestHoliday holiday = existing.isEmpty() ? new ReturnRequestHoliday() : existing.get(0);
+        holiday.setHolidayDate(holidayDate);
+        holiday.setName(name);
+        holiday.setDescription(description);
+        holiday.setCreatedAt(createdAt);
+        holiday.setUpdatedAt(updatedAt);
+
+        ReturnRequestHoliday saved = returnRequestHolidayRepository.save(holiday);
         trackSeeded(saved, saved.getId());
         return saved;
     }
@@ -1945,13 +2026,21 @@ public class InitData implements CommandLineRunner {
     }
 
     private void seedAllPaymentMethodsAndOffers() {
-        pm_cod = seedPaymentMethod("FWDEMO1_COD", "COD (demo)", "Thu tiền khi giao hàng — giao dịch giả lập.", null, true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
-        pm_bank = seedPaymentMethod("FWDEMO1_BANK", "Chuyển khoản (giả lập)", "Không có tài khoản ngân hàng hoặc giao dịch thật.", null, true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
+        pm_cod = seedPaymentMethod("FWDEMO1_COD", "Thanh toán khi nhận hàng (COD)", "Thu tiền khi giao hàng — giao dịch giả lập.", null, true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
+        pm_vnpay = seedPaymentMethod("FWDEMO1_VNPAY", "Thanh toán online (VNPay)", "Thanh toán trực tuyến qua VNPay.", null, true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         offer1 = seedSpecialOffer("FW-DEMO-V1 | Đầu năm", 10, null, "PRODUCT", new BigDecimal("0"), null, dt("2026-01-01 00:00:00"), dt("2026-03-01 00:00:00"), false, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         offer2 = seedSpecialOffer("FW-DEMO-V1 | Hè", 15, null, "PRODUCT", new BigDecimal("0"), null, dt("2026-05-01 00:00:00"), dt("2026-08-01 00:00:00"), false, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         offer3 = seedSpecialOffer("FW-DEMO-V1 | Thu", 10, null, "PRODUCT", new BigDecimal("0"), null, dt("2026-09-01 00:00:00"), dt("2026-10-01 00:00:00"), false, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         offer4 = seedSpecialOffer("FW-DEMO-V1 | Tháng 10", 12, null, "PRODUCT", new BigDecimal("0"), null, dt("2026-10-01 00:00:00"), dt("2026-11-01 00:00:00"), true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         offer5 = seedSpecialOffer("FW-DEMO-V1 | Sắp diễn ra", 20, null, "PRODUCT", new BigDecimal("0"), null, dt("2026-11-01 00:00:00"), dt("2026-12-01 00:00:00"), true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
+
+        seedSpecialOffer("FW-DEMO-V1 | Đơn từ 500K giảm 50K", null, new BigDecimal("50000"), "ORDER",
+                new BigDecimal("500000"), null, dt("2026-01-01 00:00:00"), dt("2027-01-01 00:00:00"),
+                true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
+        seedSpecialOffer("FW-DEMO-V1 | Đơn từ 1 triệu giảm 100K", null, new BigDecimal("100000"), "ORDER",
+                new BigDecimal("1000000"), null, dt("2026-01-01 00:00:00"), dt("2027-01-01 00:00:00"),
+                true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
+
         seedSpecialOfferProduct(offer1, p001, null, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         seedSpecialOfferProduct(offer1, p002, null, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         seedSpecialOfferProduct(offer1, p003, null, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
@@ -3348,23 +3437,45 @@ public class InitData implements CommandLineRunner {
     }
 
     private void seedAllReturnsAndReviews() {
-        r01 = seedReturnRequest("FWR1-001", binh01, orders.get("FWD1-20261004-261"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-07 12:34:00\",\"requested_at\":\"2026-10-08 12:34:00\",\"merchandise_refund\":365000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":340000,\"approved_at\":\"2026-10-08 13:34:00\",\"fee_consent_at\":\"2026-10-08 13:49:00\",\"customer_bank_details_confirmed_at\":\"2026-10-08 14:04:00\",\"handover_at\":\"2026-10-08 15:34:00\",\"warehouse_received_at\":\"2026-10-09 15:34:00\",\"inspection_accepted_at\":\"2026-10-09 16:34:00\",\"refund_completed_at\":\"2026-10-12 09:00:00\",\"refund_reference\":\"DEMO-BANK-RETURN-001\",\"inspection_result\":\"ACCEPTED_NEW_ITEM\",\"workflow_state\":\"REFUNDED\"}", ReturnRequestStatus.REFUNDED, false, false, dt("2026-10-08 12:34:00"), dt("2026-10-12 09:00:00"));
-        r02 = seedReturnRequest("FWR1-002", truong01, orders.get("FWD1-20261005-262"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-08 20:15:00\",\"requested_at\":\"2026-10-09 20:15:00\",\"merchandise_refund\":262000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":237000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":\"2026-10-12 11:00:00\",\"warehouse_received_at\":\"2026-10-13 11:00:00\",\"inspection_accepted_at\":\"2026-10-13 12:00:00\",\"refund_completed_at\":\"2026-10-13 13:00:00\",\"refund_reference\":\"DEMO-BANK-RETURN-002\",\"inspection_result\":\"ACCEPTED_NEW_ITEM\",\"workflow_state\":\"REFUNDED\"}", ReturnRequestStatus.REFUNDED, false, false, dt("2026-10-09 20:15:00"), dt("2026-10-13 13:00:00"));
-        r03 = seedReturnRequest("FWR1-003", mai01, orders.get("FWD1-20261006-263"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-09 13:37:00\",\"requested_at\":\"2026-10-10 13:37:00\",\"merchandise_refund\":478000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":453000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"AWAITING_RETURN_HANDOVER\",\"handover_due_at\":\"2026-10-19 09:00:00\",\"sla_overdue\":true,\"overdue_notice\":\"Tình huống bàn giao đang quá hạn giả lập; nhân viên liên hệ khách/đơn vị vận chuyển, không tự hoàn tiền hoặc tự gia hạn nhiều lần.\"}", ReturnRequestStatus.WAITING_FOR_RETURN_DELIVERY, false, false, dt("2026-10-10 13:37:00"), dt("2026-10-12 09:30:00"));
-        r04 = seedReturnRequest("FWR1-004", ha01, orders.get("FWD1-20261006-264"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-09 19:44:00\",\"requested_at\":\"2026-10-10 19:44:00\",\"merchandise_refund\":224000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":199000,\"approved_at\":null,\"fee_consent_at\":null,\"customer_bank_details_confirmed_at\":null,\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"AWAITING_APPROVAL\",\"sla_overdue\":true,\"overdue_notice\":\"Tình huống shop chậm duyệt giả lập; giữ quyền trả hàng, chưa nhận hàng và chưa hoàn tiền.\"}", ReturnRequestStatus.PENDING_APPROVAL, false, false, dt("2026-10-10 19:44:00"), dt("2026-10-10 19:44:00"));
-        r05 = seedReturnRequest("FWR1-005", cuong01, orders.get("FWD1-20261006-265"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-09 21:02:00\",\"requested_at\":\"2026-10-10 21:02:00\",\"merchandise_refund\":598000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":573000,\"approved_at\":null,\"fee_consent_at\":null,\"customer_bank_details_confirmed_at\":null,\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"REJECTED_BEFORE_PICKUP\",\"rejection_reason\":\"Khách xác nhận đã sử dụng sản phẩm; không đáp ứng điều kiện còn mới đối với trả hàng do đổi ý.\"}", ReturnRequestStatus.REJECTED, false, false, dt("2026-10-10 21:02:00"), dt("2026-10-12 09:00:00"));
-        r06 = seedReturnRequest("FWR1-006", ha01, orders.get("FWD1-20261007-266"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-10 10:43:00\",\"requested_at\":\"2026-10-11 10:43:00\",\"merchandise_refund\":718000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":693000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":\"2026-10-12 11:00:00\",\"warehouse_received_at\":\"2026-10-13 11:00:00\",\"inspection_accepted_at\":\"2026-10-13 12:00:00\",\"refund_completed_at\":\"2026-10-13 13:00:00\",\"refund_reference\":\"DEMO-BANK-RETURN-006\",\"inspection_result\":\"ACCEPTED_NEW_ITEM\",\"workflow_state\":\"REFUNDED\"}", ReturnRequestStatus.REFUNDED, false, false, dt("2026-10-11 10:43:00"), dt("2026-10-13 13:00:00"));
-        r07 = seedReturnRequest("FWR1-007", cuong01, orders.get("FWD1-20261007-267"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-10 11:33:00\",\"requested_at\":\"2026-10-11 11:33:00\",\"merchandise_refund\":598000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":573000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":\"2026-10-12 11:00:00\",\"warehouse_received_at\":\"2026-10-13 11:00:00\",\"inspection_accepted_at\":\"2026-10-13 12:00:00\",\"refund_completed_at\":\"2026-10-13 13:00:00\",\"refund_reference\":\"DEMO-BANK-RETURN-007\",\"inspection_result\":\"ACCEPTED_NEW_ITEM\",\"workflow_state\":\"REFUNDED\"}", ReturnRequestStatus.REFUNDED, false, false, dt("2026-10-11 11:33:00"), dt("2026-10-13 13:00:00"));
-        r08 = seedReturnRequest("FWR1-008", an01, orders.get("FWD1-20261007-268"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-10 16:58:00\",\"requested_at\":\"2026-10-11 16:58:00\",\"merchandise_refund\":524000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":499000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"AWAITING_RETURN_HANDOVER\",\"handover_due_at\":\"2026-10-19 09:00:00\",\"sla_overdue\":true,\"overdue_notice\":\"Tình huống bàn giao đang quá hạn giả lập; nhân viên liên hệ khách/đơn vị vận chuyển, không tự hoàn tiền hoặc tự gia hạn nhiều lần.\"}", ReturnRequestStatus.WAITING_FOR_RETURN_DELIVERY, false, false, dt("2026-10-11 16:58:00"), dt("2026-10-12 09:30:00"));
-        r09 = seedReturnRequest("FWR1-009", nam01, orders.get("FWD1-20261008-269"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-11 18:58:00\",\"requested_at\":\"2026-10-12 18:58:00\",\"merchandise_refund\":447000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":422000,\"approved_at\":null,\"fee_consent_at\":null,\"customer_bank_details_confirmed_at\":null,\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"AWAITING_APPROVAL\",\"sla_overdue\":true,\"overdue_notice\":\"Tình huống shop chậm duyệt giả lập; giữ quyền trả hàng, chưa nhận hàng và chưa hoàn tiền.\"}", ReturnRequestStatus.PENDING_APPROVAL, false, false, dt("2026-10-12 18:58:00"), dt("2026-10-12 18:58:00"));
-        r10 = seedReturnRequest("FWR1-010", lan01, orders.get("FWD1-20261010-270"), ReturnRequestType.RETURN, "Đổi ý (giả lập)", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-13 10:16:00\",\"requested_at\":\"2026-10-14 10:16:00\",\"merchandise_refund\":478000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":453000,\"approved_at\":null,\"fee_consent_at\":null,\"customer_bank_details_confirmed_at\":null,\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"REJECTED_BEFORE_PICKUP\",\"rejection_reason\":\"Khách xác nhận đã sử dụng sản phẩm; không đáp ứng điều kiện còn mới đối với trả hàng do đổi ý.\"}", ReturnRequestStatus.REJECTED, false, false, dt("2026-10-14 10:16:00"), dt("2026-10-14 11:16:00"));
-        seedReturnRequestItem(r01, orderItems.get("oi261_1"), variants.get("FWDEMO1-P041-V002"), 1, 0, false, dt("2026-10-08 12:34:00"), dt("2026-10-08 12:34:00"));
-        seedReturnRequestItem(r02, orderItems.get("oi262_1"), variants.get("FWDEMO1-P036-V001"), 1, 0, false, dt("2026-10-09 20:15:00"), dt("2026-10-09 20:15:00"));
+        r01 = seedReturnRequest("FWR1-001", binh01, orders.get("FWD1-20261004-261"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-07 12:34:00\",\"requested_at\":\"2026-10-08 12:34:00\",\"merchandise_refund\":365000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":340000,\"approved_at\":\"2026-10-08 13:34:00\",\"fee_consent_at\":\"2026-10-08 13:49:00\",\"customer_bank_details_confirmed_at\":\"2026-10-08 14:04:00\",\"handover_at\":\"2026-10-08 15:34:00\",\"warehouse_received_at\":\"2026-10-09 15:34:00\",\"inspection_accepted_at\":\"2026-10-09 16:34:00\",\"refund_completed_at\":\"2026-10-12 09:00:00\",\"refund_reference\":\"DEMO-BANK-RETURN-001\",\"inspection_result\":\"ACCEPTED_NEW_ITEM\",\"workflow_state\":\"REFUNDED\"}", ReturnRequestStatus.REFUNDED, false, true, dt("2026-10-08 12:34:00"), dt("2026-10-12 09:00:00"));
+        seedRefundedReturnDetails(r01, new BigDecimal("365000"), new BigDecimal("25000"), new BigDecimal("340000"),
+                "Vietcombank", "0071001234561", "LE VAN BINH", "DEMO-BANK-RETURN-001",
+                dt("2026-10-08 13:34:00"), dt("2026-10-08 14:04:00"), dt("2026-10-15 17:00:00"),
+                dt("2026-10-08 15:34:00"), dt("2026-10-09 15:34:00"), dt("2026-10-09 16:34:00"), dt("2026-10-12 09:00:00"));
+
+        r02 = seedReturnRequest("FWR1-002", truong01, orders.get("FWD1-20261005-262"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-08 20:15:00\",\"requested_at\":\"2026-10-09 20:15:00\",\"merchandise_refund\":262000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":237000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":\"2026-10-12 11:00:00\",\"warehouse_received_at\":\"2026-10-13 11:00:00\",\"inspection_accepted_at\":\"2026-10-13 12:00:00\",\"refund_completed_at\":\"2026-10-13 13:00:00\",\"refund_reference\":\"DEMO-BANK-RETURN-002\",\"inspection_result\":\"ACCEPTED_NEW_ITEM\",\"workflow_state\":\"REFUNDED\"}", ReturnRequestStatus.REFUNDED, false, true, dt("2026-10-09 20:15:00"), dt("2026-10-13 13:00:00"));
+        seedRefundedReturnDetails(r02, new BigDecimal("262000"), new BigDecimal("25000"), new BigDecimal("237000"),
+                "Techcombank", "1903601234562", "NGUYEN VAN TRUONG", "DEMO-BANK-RETURN-002",
+                dt("2026-10-12 09:00:00"), dt("2026-10-12 09:30:00"), dt("2026-10-19 17:00:00"),
+                dt("2026-10-12 11:00:00"), dt("2026-10-13 11:00:00"), dt("2026-10-13 12:00:00"), dt("2026-10-13 13:00:00"));
+
+        r03 = seedReturnRequest("FWR1-003", mai01, orders.get("FWD1-20261006-263"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-09 13:37:00\",\"requested_at\":\"2026-10-10 13:37:00\",\"merchandise_refund\":478000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":453000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"AWAITING_RETURN_HANDOVER\",\"handover_due_at\":\"2026-10-19 09:00:00\",\"sla_overdue\":true,\"overdue_notice\":\"Tình huống bàn giao đang quá hạn giả lập; nhân viên liên hệ khách/đơn vị vận chuyển, không tự hoàn tiền hoặc tự gia hạn nhiều lần.\"}", ReturnRequestStatus.WAITING_FOR_RETURN_DELIVERY, true, true, dt("2026-10-10 13:37:00"), dt("2026-10-12 09:30:00"));
+        r04 = seedReturnRequest("FWR1-004", ha01, orders.get("FWD1-20261006-264"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-09 19:44:00\",\"requested_at\":\"2026-10-10 19:44:00\",\"merchandise_refund\":224000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":199000,\"approved_at\":null,\"fee_consent_at\":null,\"customer_bank_details_confirmed_at\":null,\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"AWAITING_APPROVAL\",\"sla_overdue\":true,\"overdue_notice\":\"Tình huống shop chậm duyệt giả lập; giữ quyền trả hàng, chưa nhận hàng và chưa hoàn tiền.\"}", ReturnRequestStatus.PENDING_APPROVAL, true, false, dt("2026-10-10 19:44:00"), dt("2026-10-10 19:44:00"));
+        r05 = seedReturnRequest("FWR1-005", cuong01, orders.get("FWD1-20261006-265"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-09 21:02:00\",\"requested_at\":\"2026-10-10 21:02:00\",\"merchandise_refund\":598000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":573000,\"approved_at\":null,\"fee_consent_at\":null,\"customer_bank_details_confirmed_at\":null,\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"REJECTED_BEFORE_PICKUP\",\"rejection_reason\":\"Khách xác nhận đã sử dụng sản phẩm; không đáp ứng điều kiện còn mới đối với trả hàng do đổi ý.\"}", ReturnRequestStatus.REJECTED, false, false, dt("2026-10-10 21:02:00"), dt("2026-10-12 09:00:00"));
+
+        r06 = seedReturnRequest("FWR1-006", ha01, orders.get("FWD1-20261007-266"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-10 10:43:00\",\"requested_at\":\"2026-10-11 10:43:00\",\"merchandise_refund\":718000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":693000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":\"2026-10-12 11:00:00\",\"warehouse_received_at\":\"2026-10-13 11:00:00\",\"inspection_accepted_at\":\"2026-10-13 12:00:00\",\"refund_completed_at\":\"2026-10-13 13:00:00\",\"refund_reference\":\"DEMO-BANK-RETURN-006\",\"inspection_result\":\"ACCEPTED_NEW_ITEM\",\"workflow_state\":\"REFUNDED\"}", ReturnRequestStatus.REFUNDED, false, true, dt("2026-10-11 10:43:00"), dt("2026-10-13 13:00:00"));
+        seedRefundedReturnDetails(r06, new BigDecimal("718000"), new BigDecimal("25000"), new BigDecimal("693000"),
+                "MB Bank", "0901000007888", "NGUYEN THI HA", "DEMO-BANK-RETURN-006",
+                dt("2026-10-12 09:00:00"), dt("2026-10-12 09:30:00"), dt("2026-10-19 17:00:00"),
+                dt("2026-10-12 11:00:00"), dt("2026-10-13 11:00:00"), dt("2026-10-13 12:00:00"), dt("2026-10-13 13:00:00"));
+
+        r07 = seedReturnRequest("FWR1-007", cuong01, orders.get("FWD1-20261007-267"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-10 11:33:00\",\"requested_at\":\"2026-10-11 11:33:00\",\"merchandise_refund\":598000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":573000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":\"2026-10-12 11:00:00\",\"warehouse_received_at\":\"2026-10-13 11:00:00\",\"inspection_accepted_at\":\"2026-10-13 12:00:00\",\"refund_completed_at\":\"2026-10-13 13:00:00\",\"refund_reference\":\"DEMO-BANK-RETURN-007\",\"inspection_result\":\"ACCEPTED_NEW_ITEM\",\"workflow_state\":\"REFUNDED\"}", ReturnRequestStatus.REFUNDED, false, true, dt("2026-10-11 11:33:00"), dt("2026-10-13 13:00:00"));
+        seedRefundedReturnDetails(r07, new BigDecimal("598000"), new BigDecimal("25000"), new BigDecimal("573000"),
+                "ACB", "2056789001", "PHAM VAN CUONG", "DEMO-BANK-RETURN-007",
+                dt("2026-10-12 09:00:00"), dt("2026-10-12 09:30:00"), dt("2026-10-19 17:00:00"),
+                dt("2026-10-12 11:00:00"), dt("2026-10-13 11:00:00"), dt("2026-10-13 12:00:00"), dt("2026-10-13 13:00:00"));
+
+        r08 = seedReturnRequest("FWR1-008", an01, orders.get("FWD1-20261007-268"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-10 16:58:00\",\"requested_at\":\"2026-10-11 16:58:00\",\"merchandise_refund\":524000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":499000,\"approved_at\":\"2026-10-12 09:00:00\",\"fee_consent_at\":\"2026-10-12 09:15:00\",\"customer_bank_details_confirmed_at\":\"2026-10-12 09:30:00\",\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"AWAITING_RETURN_HANDOVER\",\"handover_due_at\":\"2026-10-19 09:00:00\",\"sla_overdue\":true,\"overdue_notice\":\"Tình huống bàn giao đang quá hạn giả lập; nhân viên liên hệ khách/đơn vị vận chuyển, không tự hoàn tiền hoặc tự gia hạn nhiều lần.\"}", ReturnRequestStatus.WAITING_FOR_RETURN_DELIVERY, true, true, dt("2026-10-11 16:58:00"), dt("2026-10-12 09:30:00"));
+        r09 = seedReturnRequest("FWR1-009", nam01, orders.get("FWD1-20261008-269"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-11 18:58:00\",\"requested_at\":\"2026-10-12 18:58:00\",\"merchandise_refund\":447000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":422000,\"approved_at\":null,\"fee_consent_at\":null,\"customer_bank_details_confirmed_at\":null,\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"AWAITING_APPROVAL\",\"sla_overdue\":true,\"overdue_notice\":\"Tình huống shop chậm duyệt giả lập; giữ quyền trả hàng, chưa nhận hàng và chưa hoàn tiền.\"}", ReturnRequestStatus.PENDING_APPROVAL, true, false, dt("2026-10-12 18:58:00"), dt("2026-10-12 18:58:00"));
+        r10 = seedReturnRequest("FWR1-010", lan01, orders.get("FWD1-20261010-270"), ReturnRequestType.RETURN, "CHANGE_OF_MIND", "{\"demo\":true,\"batch\":\"FW-DEMO-V2\",\"no_real_payment\":true,\"reason_group\":\"CHANGE_OF_MIND\",\"image_notice\":\"Ảnh sản phẩm chỉ minh họa demo, không phải ảnh khách hàng hoặc bằng chứng lỗi thực tế.\",\"delivery_at\":\"2026-10-13 10:16:00\",\"requested_at\":\"2026-10-14 10:16:00\",\"merchandise_refund\":478000,\"original_shipping_refund\":0,\"return_shipping_fee\":25000,\"fee_source\":\"SIMULATED_CARRIER_QUOTE\",\"net_refund\":453000,\"approved_at\":null,\"fee_consent_at\":null,\"customer_bank_details_confirmed_at\":null,\"handover_at\":null,\"warehouse_received_at\":null,\"inspection_accepted_at\":null,\"refund_completed_at\":null,\"refund_reference\":null,\"workflow_state\":\"REJECTED_BEFORE_PICKUP\",\"rejection_reason\":\"Khách xác nhận đã sử dụng sản phẩm; không đáp ứng điều kiện còn mới đối với trả hàng do đổi ý.\"}", ReturnRequestStatus.REJECTED, false, false, dt("2026-10-14 10:16:00"), dt("2026-10-14 11:16:00"));
+
+        seedReturnRequestItem(r01, orderItems.get("oi261_1"), variants.get("FWDEMO1-P041-V002"), 1, 1, 1, true, new BigDecimal("365000"), "Sản phẩm nguyên tem mác, đủ điều kiện nhập kho.", dt("2026-10-08 12:34:00"), dt("2026-10-12 09:00:00"));
+        seedReturnRequestItem(r02, orderItems.get("oi262_1"), variants.get("FWDEMO1-P036-V001"), 1, 1, 1, true, new BigDecimal("262000"), "Sản phẩm nguyên tem mác, đủ điều kiện nhập kho.", dt("2026-10-09 20:15:00"), dt("2026-10-13 13:00:00"));
         seedReturnRequestItem(r03, orderItems.get("oi263_1"), variants.get("FWDEMO1-P004-V008"), 2, 0, false, dt("2026-10-10 13:37:00"), dt("2026-10-10 13:37:00"));
         seedReturnRequestItem(r04, orderItems.get("oi264_1"), variants.get("FWDEMO1-P009-V017"), 1, 0, false, dt("2026-10-10 19:44:00"), dt("2026-10-10 19:44:00"));
         seedReturnRequestItem(r05, orderItems.get("oi265_1"), variants.get("FWDEMO1-P040-V012"), 2, 0, false, dt("2026-10-10 21:02:00"), dt("2026-10-10 21:02:00"));
-        seedReturnRequestItem(r06, orderItems.get("oi266_1"), variants.get("FWDEMO1-P012-V014"), 2, 0, false, dt("2026-10-11 10:43:00"), dt("2026-10-11 10:43:00"));
-        seedReturnRequestItem(r07, orderItems.get("oi267_1"), variants.get("FWDEMO1-P014-V013"), 2, 0, false, dt("2026-10-11 11:33:00"), dt("2026-10-11 11:33:00"));
+        seedReturnRequestItem(r06, orderItems.get("oi266_1"), variants.get("FWDEMO1-P012-V014"), 2, 2, 2, true, new BigDecimal("718000"), "Sản phẩm nguyên tem mác, đủ điều kiện nhập kho.", dt("2026-10-11 10:43:00"), dt("2026-10-13 13:00:00"));
+        seedReturnRequestItem(r07, orderItems.get("oi267_1"), variants.get("FWDEMO1-P014-V013"), 2, 2, 2, true, new BigDecimal("598000"), "Sản phẩm nguyên tem mác, đủ điều kiện nhập kho.", dt("2026-10-11 11:33:00"), dt("2026-10-13 13:00:00"));
         seedReturnRequestItem(r08, orderItems.get("oi268_1"), variants.get("FWDEMO1-P036-V014"), 2, 0, false, dt("2026-10-11 16:58:00"), dt("2026-10-11 16:58:00"));
         seedReturnRequestItem(r09, orderItems.get("oi269_1"), variants.get("FWDEMO1-P046-V003"), 3, 0, false, dt("2026-10-12 18:58:00"), dt("2026-10-12 18:58:00"));
         seedReturnRequestItem(r10, orderItems.get("oi270_1"), variants.get("FWDEMO1-P004-V009"), 2, 0, false, dt("2026-10-14 10:16:00"), dt("2026-10-14 10:16:00"));
@@ -3508,5 +3619,29 @@ public class InitData implements CommandLineRunner {
         seedProductReviewImage(reviews.get("review028"), "https://res.cloudinary.com/n8agmdkc/image/upload/v1792905194/fashion_website/demo/fashion-v1/products/p012-02-22289e05a202143e.jpg", "IMAGE", 0, dt("2026-09-28 03:12:00"), dt("2026-09-28 03:12:00"));
         seedProductReviewImage(reviews.get("review029"), "https://res.cloudinary.com/n8agmdkc/image/upload/v1792905256/fashion_website/demo/fashion-v1/products/p032-02-8f1d5e1a8c1743d0.jpg", "IMAGE", 0, dt("2026-03-21 00:43:00"), dt("2026-03-21 00:43:00"));
         seedProductReviewImage(reviews.get("review030"), "https://res.cloudinary.com/n8agmdkc/image/upload/v1792905260/fashion_website/demo/fashion-v1/products/p033-02-40fd16097b207d25.jpg", "IMAGE", 0, dt("2026-02-08 11:39:00"), dt("2026-02-08 11:39:00"));
+    }
+
+    private void seedAllReturnRequestHolidays() {
+        LocalDateTime seedTime = dt("2026-01-01 00:00:00");
+
+        // Kỳ nghỉ Tết Âm lịch Bính Ngọ 2026 (chỉ chèn T2–T6; bỏ qua T7 21/02 và CN 22/02)
+        seedReturnRequestHoliday(LocalDate.of(2026, 2, 16), "Nghỉ Tết Âm lịch (29 Tết)",
+                "Ngày nghỉ Tết Nguyên đán Bính Ngọ 2026 (Thứ Hai, 29 tháng Chạp năm Ất Tỵ).", seedTime, seedTime);
+        seedReturnRequestHoliday(LocalDate.of(2026, 2, 17), "Nghỉ Tết Âm lịch (Mùng 1 Tết)",
+                "Ngày nghỉ Tết Nguyên đán Bính Ngọ 2026 (Thứ Ba, Mùng 1 Tết).", seedTime, seedTime);
+        seedReturnRequestHoliday(LocalDate.of(2026, 2, 18), "Nghỉ Tết Âm lịch (Mùng 2 Tết)",
+                "Ngày nghỉ Tết Nguyên đán Bính Ngọ 2026 (Thứ Tư, Mùng 2 Tết).", seedTime, seedTime);
+        seedReturnRequestHoliday(LocalDate.of(2026, 2, 19), "Nghỉ Tết Âm lịch (Mùng 3 Tết)",
+                "Ngày nghỉ Tết Nguyên đán Bính Ngọ 2026 (Thứ Năm, Mùng 3 Tết).", seedTime, seedTime);
+        seedReturnRequestHoliday(LocalDate.of(2026, 2, 20), "Nghỉ Tết Âm lịch (Mùng 4 Tết)",
+                "Ngày nghỉ Tết Nguyên đán Bính Ngọ 2026 (Thứ Sáu, Mùng 4 Tết).", seedTime, seedTime);
+
+        // Nghỉ bù Giỗ Tổ Hùng Vương 2026 (10/03 ÂL rơi vào Chủ Nhật 26/04/2026)
+        seedReturnRequestHoliday(LocalDate.of(2026, 4, 27), "Nghỉ bù Giỗ Tổ Hùng Vương",
+                "Nghỉ bù Thứ Hai do ngày Giỗ Tổ Hùng Vương (26/04/2026) trùng Chủ Nhật.", seedTime, seedTime);
+
+        // Ngày nghỉ liền kề Quốc khánh 2026 (02/09/2026 rơi vào Thứ Tư)
+        seedReturnRequestHoliday(LocalDate.of(2026, 9, 1), "Nghỉ lễ Quốc khánh (ngày liền kề)",
+                "Ngày nghỉ liền kề trước Quốc khánh 02/09 năm 2026 (Thứ Ba).", seedTime, seedTime);
     }
 }

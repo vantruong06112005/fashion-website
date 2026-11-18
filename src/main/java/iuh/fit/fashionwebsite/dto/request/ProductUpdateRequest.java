@@ -27,4 +27,21 @@ public class ProductUpdateRequest {
     private Long categoryId;
 
     private Boolean isActive;
+
+    @jakarta.validation.Valid
+    @Size(min = 1, max = 100)
+    private java.util.List<@jakarta.validation.constraints.NotNull VariantInput> variants;
+    @jakarta.validation.Valid
+    @Size(min = 1, max = 20)
+    private java.util.List<@jakarta.validation.constraints.NotNull ImageInput> images;
+
+    @Getter @Setter
+    public static class VariantInput extends ProductCreationRequest.VariantInput {
+        @jakarta.validation.constraints.Positive private Long id;
+    }
+    @Getter @Setter
+    public static class ImageInput extends ProductCreationRequest.ImageInput {
+        @jakarta.validation.constraints.Positive private Long id;
+    }
+
 }
