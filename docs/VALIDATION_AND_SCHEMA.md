@@ -625,6 +625,26 @@ Dưới đây là catalog chi tiết tất cả các Request DTO hiện có tron
 
 ---
 
+## Tham số thống kê sản phẩm (GET, không có request body)
+
+Hai endpoint dưới đây dùng Bearer token và chỉ cho ADMIN/STAFF. Response luôn theo `ApiResponse<T>`; dữ liệu trả về là `ProductStatisticsResponse` hoặc `StockAlertPageResponse`.
+
+| Endpoint | Tham số | Mặc định | Validation |
+| --- | --- | --- | --- |
+| `GET /api/v1/admin/dashboard/products` | `days` (int) | 30 | `@Min(1)`, `@Max(365)` |
+| Như trên | `topLimit` (int) | 5 | `@Min(1)`, `@Max(100)`; không nhận thập phân |
+| Như trên | `from`, `to` (LocalDate) | Không có | ISO `yyyy-MM-dd`; phải chọn đủ hai đầu, from ≤ to, không chọn tương lai, tối đa 365 ngày kể cả hai đầu |
+| `GET /api/v1/admin/dashboard/products/stock-alerts` | `page` (int) | 0 | `@Min(0)` |
+| Như trên | `pageSize` (int) | 10 | `@Min(1)`, `@Max(50)` |
+
+Controller dùng `@Validated` cho query parameters. Định dạng/giới hạn sai trả 400; Service kiểm tra quan hệ giữa hai đầu ngày và miền DATETIME (from từ năm 1001). Khoảng tự chọn thay thế kỳ rolling `days`, tính cả ngày kết thúc; chọn hôm nay chỉ lấy đến lúc cập nhật. Kỳ trước có cùng thời lượng. Tham số SQL đều dùng bind parameters.
+
+Ví dụ: `GET /api/v1/admin/dashboard/products?from=2026-10-01&to=2026-10-31&topLimit=20`.
+
+Quy tắc tính số liệu và schema response: [PRODUCT_DASHBOARD.md](PRODUCT_DASHBOARD.md). Không thêm/sửa bảng hoặc entity trong thay đổi này.
+
+---
+
 ## 6. Hướng Dẫn Quy Trình Cho Các Thành Viên Cùng Cập Nhật (Workflow)
 
 Khi bạn được giao phát triển một module API mới hoặc thêm thuộc tính cho API hiện có, hãy làm theo quy trình 5 bước sau:
