@@ -204,7 +204,11 @@ class ProductStatisticsIntegrationTest {
         assertThrows(IllegalArgumentException.class, () -> service.getStatistics(30, 5, null, today));
         assertThrows(IllegalArgumentException.class, () -> service.getStatistics(30, 5, today, today.minusDays(1)));
         assertThrows(IllegalArgumentException.class, () -> service.getStatistics(30, 5, today, today.plusDays(1)));
-        assertThrows(IllegalArgumentException.class, () -> service.getStatistics(30, 5, today.minusDays(365), today));
+        var multiYear = service.getStatistics(30, 5, today.minusYears(5), today).insights();
+        assertEquals(java.time.temporal.ChronoUnit.DAYS.between(today.minusYears(5), today) + 1, multiYear.periodDays());
+        assertEquals(101, multiYear.deliveredUnits());
+        assertEquals(3650, service.getStatistics(3650).insights().periodDays());
+        assertThrows(IllegalArgumentException.class, () -> service.getStatistics(Integer.MAX_VALUE));
         var partial = service.getStatistics(30, 5, today, today).insights();
         assertEquals(1, partial.periodDays());
         assertTrue(partial.periodEnd().isBefore(today.plusDays(1).atStartOfDay()));

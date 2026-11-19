@@ -47,7 +47,8 @@ class ProductStatisticsControllerTest {
         mvc.perform(get("/admin/dashboard/products").with(admin).param("days", "7")).andExpect(status().isOk());
         verify(service).getStatistics(7, 5, null, null);
         mvc.perform(get("/admin/dashboard/products").with(admin).param("days", "0")).andExpect(status().isBadRequest());
-        mvc.perform(get("/admin/dashboard/products").with(admin).param("days", "366")).andExpect(status().isBadRequest());
+        mvc.perform(get("/admin/dashboard/products").with(admin).param("days", "366")).andExpect(status().isOk());
+        verify(service).getStatistics(366, 5, null, null);
         verifyNoMoreInteractions(service);
     }
 

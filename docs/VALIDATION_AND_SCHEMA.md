@@ -631,13 +631,13 @@ Hai endpoint dưới đây dùng Bearer token và chỉ cho ADMIN/STAFF. Respons
 
 | Endpoint | Tham số | Mặc định | Validation |
 | --- | --- | --- | --- |
-| `GET /api/v1/admin/dashboard/products` | `days` (int) | 30 | `@Min(1)`, `@Max(365)` |
+| `GET /api/v1/admin/dashboard/products` | `days` (int) | 30 | `@Min(1)`; hỗ trợ nhiều năm |
 | Như trên | `topLimit` (int) | 5 | `@Min(1)`, `@Max(100)`; không nhận thập phân |
-| Như trên | `from`, `to` (LocalDate) | Không có | ISO `yyyy-MM-dd`; phải chọn đủ hai đầu, from ≤ to, không chọn tương lai, tối đa 365 ngày kể cả hai đầu |
+| Như trên | `from`, `to` (LocalDate) | Không có | ISO `yyyy-MM-dd`; phải chọn đủ hai đầu, from ≤ to, không chọn tương lai; hỗ trợ khoảng nhiều năm |
 | `GET /api/v1/admin/dashboard/products/stock-alerts` | `page` (int) | 0 | `@Min(0)` |
 | Như trên | `pageSize` (int) | 10 | `@Min(1)`, `@Max(50)` |
 
-Controller dùng `@Validated` cho query parameters. Định dạng/giới hạn sai trả 400; Service kiểm tra quan hệ giữa hai đầu ngày và miền DATETIME (from từ năm 1001). Khoảng tự chọn thay thế kỳ rolling `days`, tính cả ngày kết thúc; chọn hôm nay chỉ lấy đến lúc cập nhật. Kỳ trước có cùng thời lượng. Tham số SQL đều dùng bind parameters.
+Controller dùng `@Validated` cho query parameters. Định dạng/giới hạn sai trả 400; Service kiểm tra quan hệ giữa hai đầu ngày và miền DATETIME (khoảng chọn và kỳ so sánh từ năm 1000). Khoảng tự chọn thay thế kỳ rolling `days`, tính cả ngày kết thúc; chọn hôm nay chỉ lấy đến lúc cập nhật. Kỳ trước có cùng thời lượng. Tham số SQL đều dùng bind parameters.
 
 Ví dụ: `GET /api/v1/admin/dashboard/products?from=2026-10-01&to=2026-10-31&topLimit=20`.
 

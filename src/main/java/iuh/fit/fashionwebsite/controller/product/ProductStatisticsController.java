@@ -28,7 +28,7 @@ public class ProductStatisticsController {
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ApiResponse<ProductStatisticsResponse> getStatistics(
-            @RequestParam(defaultValue = "30") @Min(1) @Max(365) int days,
+            @RequestParam(defaultValue = "30") @Min(1) int days,
             @RequestParam(defaultValue = "5") @Min(1) @Max(100) int topLimit,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {

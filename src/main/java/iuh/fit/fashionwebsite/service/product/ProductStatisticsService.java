@@ -58,7 +58,7 @@ public class ProductStatisticsService {
 
     @Transactional(readOnly = true)
     public ProductStatisticsResponse getStatistics(int days, int topLimit, LocalDate from, LocalDate to) {
-        if (days < 1 || days > 365) throw new IllegalArgumentException("Kỳ thống kê phải từ 1 đến 365 ngày.");
+        if (days < 1) throw new IllegalArgumentException("Kỳ thống kê phải có ít nhất 1 ngày.");
         if (topLimit < 1 || topLimit > 100) throw new IllegalArgumentException("Top phải là số nguyên từ 1 đến 100.");
         LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
         boolean customRange = from != null || to != null;
@@ -69,15 +69,17 @@ public class ProductStatisticsService {
             if (from.isAfter(to)) throw new IllegalArgumentException("Từ ngày phải trước hoặc bằng đến ngày.");
             if (to.isAfter(now.toLocalDate())) throw new IllegalArgumentException("Không chọn ngày trong tương lai.");
             long calendarDays = ChronoUnit.DAYS.between(from, to) + 1;
-            if (calendarDays > 365) throw new IllegalArgumentException("Khoảng ngày tối đa là 365 ngày.");
-            // Keep both the requested period and its comparison inside JDBC DATETIME's supported years.
-            if (from.isBefore(LocalDate.of(1001, 1, 1))) throw new IllegalArgumentException("Ngày bắt đầu phải từ năm 1001.");
+            // Validate the database date domain, without an arbitrary limit on period length.
+            if (from.isBefore(LocalDate.of(1000, 1, 1))) throw new IllegalArgumentException("Ngày bắt đầu phải từ năm 1000.");
             days = (int) calendarDays;
             rangeStart = from.atStartOfDay();
             rangeEnd = to.plusDays(1).atStartOfDay();
             if (rangeEnd.isAfter(now)) rangeEnd = now;
         }
         LocalDateTime comparisonStart = rangeStart.minus(Duration.between(rangeStart, rangeEnd));
+        if (comparisonStart.isBefore(LocalDate.of(1000, 1, 1).atStartOfDay())) {
+            throw new IllegalArgumentException("Kỳ so sánh nằm ngoài phạm vi ngày được database hỗ trợ.");
+        }
         // Aggregate variants before joining, so products with multiple variants are counted once.
         var totals = jdbc.queryForObject("""
                 SELECT COUNT(*) AS total,

@@ -22,7 +22,7 @@ Kiểm tra: `./mvnw -Dtest=ProductStatisticsIntegrationTest,ProductStatisticsCon
 
 ## So sánh và hỗ trợ ra quyết định
 
-Query `days` mặc định 30, chấp nhận 1–365; FE cung cấp 7/30/90. Sai khoảng trả 400. Không thay đổi snapshot hiện tại khi đổi kỳ.
+Query `days` mặc định 30, nhận số ngày dương, hỗ trợ nhiều năm; FE cung cấp 7/30/90. Sai khoảng trả 400. Không thay đổi snapshot hiện tại khi đổi kỳ.
 
 `data.insights` bổ sung:
 
@@ -51,6 +51,6 @@ API tổng quan nhận thêm `from=yyyy-MM-dd`, `to=yyyy-MM-dd`, `topLimit=5`.
 
 - `topLimit`: số nguyên 1–100, mặc định 5. LIMIT dùng bind parameter, không ghép SQL từ input. Nếu không đủ sản phẩm có lượng giao > 0 thì trả số sản phẩm thực tế.
 - Chọn đủ `from` và `to` sẽ thay kỳ rolling `days`. Tính cả ngày kết thúc, truy vấn từ 00:00 ngày bắt đầu đến trước 00:00 ngày sau ngày kết thúc. Dùng múi giờ Asia/Ho_Chi_Minh.
-- Chặn thiếu một đầu ngày, from > to, ngày tương lai, khoảng quá 365 ngày. Ngày bắt đầu từ năm 1001 để kỳ so sánh cũng nằm trong miền DATETIME của MariaDB. Vi phạm trả HTTP 400.
+- Chặn thiếu một đầu ngày, from > to, ngày tương lai, ngày không hợp lệ. Không giới hạn 365 ngày; khoảng chọn và kỳ so sánh phải nằm trong miền DATETIME của MariaDB (từ năm 1000). Vi phạm trả HTTP 400.
 - Nếu `to` là hôm nay, cuối kỳ lấy thời điểm cập nhật; kỳ so sánh có cùng thời lượng đã trôi qua và kết thúc ngay trước đầu kỳ hiện tại. Các truy vấn kỳ dùng `[start, end)` để không đếm hai lần ở ranh giới.
 - `insights` bổ sung `topLimit`, `customRange`, `fromDate`, `toDate`. `periodDays` là số ngày lịch được chọn (bao gồm hai đầu); `periodEnd` là mốc kết thúc loại trừ hoặc thời điểm cập nhật. FE dùng `toDate` để hiển thị ngày kết thúc cho người dùng.
