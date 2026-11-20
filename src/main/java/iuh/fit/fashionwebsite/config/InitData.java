@@ -82,7 +82,7 @@ public class InitData implements CommandLineRunner {
             "productVariant", "oldVariant", "description", "reasonDetail",
             "inspectionNote", "userHeight", "userWeight", "fitRating",
             "discountPercent", "discountAmount", "minOrderAmount", "maxDiscountAmount",
-            "iconUrl", "acceptedQuantity", "itemRefundAmount"
+            "iconUrl", "acceptedQuantity", "itemRefundAmount", "imageUrl"
     );
 
     // Tham chiếu các thực thể gốc để liên kết khóa ngoại giữa các bảng
@@ -190,7 +190,8 @@ public class InitData implements CommandLineRunner {
         seedChatMessage("truong01", "truong01", ChatRole.CUSTOMER,
                 "Chào shop, mình cao 1m72 nặng 65kg thì mặc Áo Sơ Mi Oxford size M hay L vừa ạ?");
         seedChatMessage("truong01", "staff01", ChatRole.ADMIN,
-                "Dạ chào anh Trường! Với chiều cao 1m72 và 65kg, anh mặc size M sẽ ôm vừa vặn chuẩn form Smart Casual ạ.");
+                "Dạ chào anh Trường! Với chiều cao 1m72 và 65kg, anh mặc size M sẽ ôm vừa vặn chuẩn form Smart Casual ạ.",
+                "https://res.cloudinary.com/n8agmdkc/image/upload/v1792905334/fashion_website/demo/owen-v1/products/owen-008-01-3859473c722e24c0.jpg");
         seedChatMessage("an01", "an01", ChatRole.CUSTOMER,
                 "Shop kiểm tra giúp mình đơn hàng gần nhất khi nào giao tới Quận Gò Vấp nhé!");
     }
@@ -221,6 +222,11 @@ public class InitData implements CommandLineRunner {
 
     private ChatMessage seedChatMessage(String customerUsername, String senderUsername,
                                         ChatRole senderRole, String content) {
+        return seedChatMessage(customerUsername, senderUsername, senderRole, content, null);
+    }
+
+    private ChatMessage seedChatMessage(String customerUsername, String senderUsername,
+                                        ChatRole senderRole, String content, String imageUrl) {
         List<ChatMessage> existing = entityManager.createQuery(
                         "SELECT c FROM ChatMessage c WHERE c.customerUsername = :cu "
                                 + "AND c.senderUsername = :su AND c.senderRole = :sr AND c.content = :ct",
@@ -232,17 +238,16 @@ public class InitData implements CommandLineRunner {
                 .setMaxResults(1)
                 .getResultList();
 
-        ChatMessage msg = existing.isEmpty()
-                ? chatMessageRepository.save(ChatMessage.builder()
-                        .customerUsername(customerUsername)
-                        .senderUsername(senderUsername)
-                        .senderRole(senderRole)
-                        .content(content)
-                        .build())
-                : existing.get(0);
+        ChatMessage msg = existing.isEmpty() ? new ChatMessage() : existing.get(0);
+        msg.setCustomerUsername(customerUsername);
+        msg.setSenderUsername(senderUsername);
+        msg.setSenderRole(senderRole);
+        msg.setContent(content);
+        msg.setImageUrl(imageUrl);
 
-        trackSeeded(msg, msg.getId());
-        return msg;
+        ChatMessage saved = chatMessageRepository.save(msg);
+        trackSeeded(saved, saved.getId());
+        return saved;
     }
 
     // =========================================================================
