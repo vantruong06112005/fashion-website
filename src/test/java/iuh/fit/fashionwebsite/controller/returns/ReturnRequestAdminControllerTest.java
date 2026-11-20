@@ -16,12 +16,14 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -32,6 +34,7 @@ import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -79,10 +82,10 @@ class ReturnRequestAdminControllerTest {
                 .andExpect(jsonPath("$.message").value("Bạn không có quyền thực hiện thao tác trả hàng này."));
 
         // Khách hàng tuyệt đối không được phép gọi API thực hiện hoàn tiền (chỉ Admin/Staff nội bộ)
-        mvc.perform(post("/admin/returns/1/refund")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER")))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refundTransactionCode\":\"UNC-1\"}"))
+        mvc.perform(multipart("/admin/returns/1/refund")
+                        .file(new MockMultipartFile("proofImage", "proof.png", MediaType.IMAGE_PNG_VALUE,
+                                new byte[]{(byte) 0x89, 'P', 'N', 'G', 13, 10, 26, 10}))
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER"))))
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(returnRequestAdminService);
@@ -147,6 +150,21 @@ class ReturnRequestAdminControllerTest {
                         .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("WAITING_FOR_RETURN_DELIVERY"));
+
+        // Duyệt phiếu có truyền cờ autoCreateShippingOrder = false (bỏ qua GHN) -> hợp lệ 200 OK
+        mvc.perform(patch("/admin/returns/1/approve")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"instructionNote\":\"Khách mang trực tiếp tới shop\",\"autoCreateShippingOrder\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("WAITING_FOR_RETURN_DELIVERY"));
+
+        // Chặn trường lạ không thuộc ReturnRequestApproveRequest -> 400 Bad Request
+        mvc.perform(patch("/admin/returns/1/approve")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_STAFF")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"returnTrackingCode\":\"FAKE\"}"))
+                .andExpect(status().isBadRequest());
 
         // Thiếu lý do từ chối -> 400 Bad Request
         mvc.perform(patch("/admin/returns/1/reject")
@@ -250,26 +268,36 @@ class ReturnRequestAdminControllerTest {
                                 """))
                 .andExpect(status().isBadRequest());
 
-        // Thực hiện hoàn tiền hợp lệ cho phiếu ID = 3
-        when(returnRequestAdminService.executeRefund(eq(3L), any()))
+        // Thực hiện hoàn tiền hợp lệ cho phiếu ID = 3 bằng multipart (tệp ảnh chụp màn hình + ghi chú tùy chọn)
+        when(returnRequestAdminService.executeRefund(eq(3L), any(), any()))
                 .thenReturn(ReturnRequestResponse.builder().id(3L)
-                        .status(ReturnRequestStatus.REFUNDED).refundTransactionCode("UNC-99").build());
+                        .status(ReturnRequestStatus.REFUNDED)
+                        .refundTransactionCode("REFUND-20261120-RT3-ABCDEF")
+                        .refundProofImageUrl("https://res.cloudinary.com/demo/proof.png")
+                        .build());
 
-        mvc.perform(post("/admin/returns/3/refund")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refundTransactionCode\":\"UNC-99\"}"))
+        MockMultipartFile refundRequestPart = new MockMultipartFile(
+                "request", "", MediaType.APPLICATION_JSON_VALUE,
+                "{\"note\":\"Đã chuyển khoản qua VietQR\"}".getBytes(StandardCharsets.UTF_8));
+        MockMultipartFile proofImagePart = new MockMultipartFile(
+                "proofImage", "receipt.png", MediaType.IMAGE_PNG_VALUE,
+                new byte[]{(byte) 0x89, 'P', 'N', 'G', 13, 10, 26, 10});
+
+        mvc.perform(multipart("/admin/returns/3/refund")
+                        .file(refundRequestPart)
+                        .file(proofImagePart)
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("REFUNDED"));
+                .andExpect(jsonPath("$.data.status").value("REFUNDED"))
+                .andExpect(jsonPath("$.data.refundTransactionCode").value("REFUND-20261120-RT3-ABCDEF"));
 
         // Trả 409 Conflict khi nhấn hoàn tiền lần 2
-        when(returnRequestAdminService.executeRefund(eq(4L), any()))
+        when(returnRequestAdminService.executeRefund(eq(4L), any(), any()))
                 .thenThrow(new AppException(ReturnRequestErrorCode.RETURN_ALREADY_REFUNDED));
 
-        mvc.perform(post("/admin/returns/4/refund")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refundTransactionCode\":\"UNC-100\"}"))
+        mvc.perform(multipart("/admin/returns/4/refund")
+                        .file(proofImagePart)
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isConflict());
 
         // Nhập kho lại số lượng hàng đạt chuẩn sau kiểm định
@@ -635,33 +663,53 @@ class ReturnRequestAdminControllerTest {
 
     /**
      * Kịch bản API 9 & 10 (POST /refund & POST /restock):
-     * kiểm tra mã giao dịch hoàn tiền bắt buộc (<= 100 ký tự), ảnh & ghi chú giới hạn độ dài, chặn field lạ,
+     * kiểm tra chặn kế toán nhập tay {@code refundTransactionCode} / {@code refundProofImageUrl} / field lạ,
+     * chặn thiếu tệp ảnh chụp màn hình ({@code REFUND_PROOF_IMAGE_REQUIRED}),
      * đồng thời xác nhận /restock hỗ trợ @JsonAlias("id") và chặn items rỗng, số lượng âm hoặc field lạ.
      */
     @Test
     void refundAndRestockValidatePayloadAliasAndUnknownFields() throws Exception {
-        mvc.perform(post("/admin/returns/25/refund")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refundTransactionCode\":\"  \"}"))
+        MockMultipartFile proofImagePart = new MockMultipartFile(
+                "proofImage", "receipt.png", MediaType.IMAGE_PNG_VALUE,
+                new byte[]{(byte) 0x89, 'P', 'N', 'G', 13, 10, 26, 10});
+
+        // Cố tình gửi refundTransactionCode (không cho nhập tay) -> bị @JsonAnySetter chặn 400 Bad Request
+        MockMultipartFile forbiddenTxnCodePart = new MockMultipartFile(
+                "request", "", MediaType.APPLICATION_JSON_VALUE,
+                "{\"refundTransactionCode\":\"UNC-MANUAL\"}".getBytes(StandardCharsets.UTF_8));
+        mvc.perform(multipart("/admin/returns/25/refund")
+                        .file(forbiddenTxnCodePart)
+                        .file(proofImagePart)
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isBadRequest());
 
-        mvc.perform(post("/admin/returns/25/refund")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refundTransactionCode\":\"" + "R".repeat(101) + "\"}"))
+        // Cố tình gửi refundProofImageUrl dạng chuỗi -> bị @JsonAnySetter chặn 400 Bad Request
+        MockMultipartFile forbiddenUrlPart = new MockMultipartFile(
+                "request", "", MediaType.APPLICATION_JSON_VALUE,
+                "{\"refundProofImageUrl\":\"https://example.com/fake.png\"}".getBytes(StandardCharsets.UTF_8));
+        mvc.perform(multipart("/admin/returns/25/refund")
+                        .file(forbiddenUrlPart)
+                        .file(proofImagePart)
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isBadRequest());
 
-        mvc.perform(post("/admin/returns/25/refund")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refundTransactionCode\":\"RF-25\",\"refundProofImageUrl\":\"" + "u".repeat(256) + "\"}"))
+        // Ghi chú vượt 500 ký tự -> 400 Bad Request
+        MockMultipartFile longNotePart = new MockMultipartFile(
+                "request", "", MediaType.APPLICATION_JSON_VALUE,
+                ("{\"note\":\"" + "N".repeat(501) + "\"}").getBytes(StandardCharsets.UTF_8));
+        mvc.perform(multipart("/admin/returns/25/refund")
+                        .file(longNotePart)
+                        .file(proofImagePart)
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isBadRequest());
 
+        // Gửi JSON không kèm tệp ảnh -> Service ném REFUND_PROOF_IMAGE_REQUIRED (400 Bad Request)
+        when(returnRequestAdminService.executeRefund(eq(25L), any(), eq(null)))
+                .thenThrow(new AppException(ReturnRequestErrorCode.REFUND_PROOF_IMAGE_REQUIRED));
         mvc.perform(post("/admin/returns/25/refund")
                         .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refundTransactionCode\":\"RF-25\",\"extra\":\"bad\"}"))
+                        .content("{\"note\":\"Thiếu ảnh\"}"))
                 .andExpect(status().isBadRequest());
 
         LocalDateTime restockedAt = LocalDateTime.of(2026, 10, 27, 8, 0);

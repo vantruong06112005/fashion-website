@@ -13,8 +13,10 @@ import iuh.fit.fashionwebsite.dto.request.ReturnRequestRefundRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestRejectRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestRestockItemRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestRestockRequest;
+import iuh.fit.fashionwebsite.dto.request.shipping.GhnOrderCreationRequest;
 import iuh.fit.fashionwebsite.dto.response.ReturnRequestHolidayResponse;
 import iuh.fit.fashionwebsite.dto.response.ReturnRequestResponse;
+import iuh.fit.fashionwebsite.dto.response.shipping.GhnOrderResponse;
 import iuh.fit.fashionwebsite.entity.Order;
 import iuh.fit.fashionwebsite.entity.OrderItem;
 import iuh.fit.fashionwebsite.entity.PaymentMethod;
@@ -24,7 +26,10 @@ import iuh.fit.fashionwebsite.entity.ReturnRequest;
 import iuh.fit.fashionwebsite.entity.ReturnRequestHoliday;
 import iuh.fit.fashionwebsite.entity.ReturnRequestItem;
 import iuh.fit.fashionwebsite.entity.User;
+import iuh.fit.fashionwebsite.enums.OrderStatus;
+import iuh.fit.fashionwebsite.enums.PaymentStatus;
 import iuh.fit.fashionwebsite.enums.ReturnRequestStatus;
+import iuh.fit.fashionwebsite.enums.ShippingProvider;
 import iuh.fit.fashionwebsite.enums.TransactionStatus;
 import iuh.fit.fashionwebsite.event.StockChangedEvent;
 import iuh.fit.fashionwebsite.exception.AppException;
@@ -38,6 +43,8 @@ import iuh.fit.fashionwebsite.repository.ReturnRequestItemRepository;
 import iuh.fit.fashionwebsite.repository.ReturnRequestRepository;
 import iuh.fit.fashionwebsite.service.returns.ReturnRefundCalculator;
 import iuh.fit.fashionwebsite.service.returns.ReturnRequestAdminService;
+import iuh.fit.fashionwebsite.service.returns.ReturnRequestImageService;
+import iuh.fit.fashionwebsite.service.returns.ReturnRequestShippingService;
 import iuh.fit.fashionwebsite.service.returns.ReturnRequestStatusChangedEvent;
 import iuh.fit.fashionwebsite.service.user.UserService;
 import lombok.RequiredArgsConstructor;
@@ -46,10 +53,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -58,6 +68,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
@@ -73,6 +84,9 @@ import java.util.function.Function;
 public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService {
 
     private static final DateTimeFormatter CONTACT_LOG_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+    private static final DateTimeFormatter REFUND_TXN_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
+    private static final String REFUND_TXN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final ReturnRequestRepository returnRequestRepository;
     private final ReturnRequestItemRepository returnRequestItemRepository;
@@ -82,6 +96,9 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
     private final PaymentMethodRepository paymentMethodRepository;
     private final ReturnRequestMapper returnRequestMapper;
     private final ReturnRefundCalculator returnRefundCalculator;
+    private final ReturnRequestShippingService returnRequestShippingService;
+    private final ReturnRequestImageService returnRequestImageService;
+    private final TransactionTemplate transactionTemplate;
     private final UserService userService;
     private final Clock returnRequestClock;
     private final ApplicationEventPublisher eventPublisher;
@@ -123,39 +140,89 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
     }
 
     /**
-     * Chức năng (Bước 2): Thẩm định và phê duyệt phiếu trả hàng, chuyển sang trạng thái chờ nhận hàng trả
-     * đồng thời thiết lập hạn bàn giao 7 ngày lịch kể từ thời điểm duyệt.
+     * Chức năng (Bước 2): Thẩm định và phê duyệt phiếu trả hàng theo quy trình 3 pha an toàn giao dịch:
+     * (1) Đọc nhanh kiểm tra trạng thái &amp; dựng payload GHN (không giữ khóa ghi);
+     * (2) Gọi HTTP tạo đơn thu gom chiều về GHN bên ngoài transaction (trừ khi nhân viên chọn bỏ qua GHN);
+     * (3) Mở transaction ngắn giữ khóa bi quan {@code PESSIMISTIC_WRITE} để xác minh lại trạng thái, lưu mã vận đơn,
+     * ghi nhận phí ship dự kiến theo lý do, đặt hạn bàn giao 7 ngày và phát sự kiện thông báo.
      *
      * @param id      Mã ID phiếu trả hàng cần duyệt.
-     * @param request DTO chứa hướng dẫn đóng gói/gửi hàng gửi kèm cho khách (tùy chọn).
-     * @return {@link ReturnRequestResponse} phiếu đã duyệt kèm {@code approvedAt} và {@code handoverDeadline}.
+     * @param request DTO chứa hướng dẫn bàn giao và cờ {@code autoCreateShippingOrder} (mặc định {@code true}).
+     * @return {@link ReturnRequestResponse} phiếu đã duyệt kèm {@code approvedAt}, {@code handoverDeadline} và thông tin vận đơn chiều hoàn (nếu có).
      */
     @Override
-    @Transactional
     public ReturnRequestResponse approveReturnRequest(Long id, ReturnRequestApproveRequest request) {
-        User staff = userService.getCurrentUserEntity();
-        // Khóa bi quan dòng ReturnRequest tránh xung đột nếu khách hàng bấm sửa/hủy ngay đúng thời điểm nhân viên bấm duyệt.
-        ReturnRequest returnRequest = getLockedReturnRequest(id);
-        if (returnRequest.getStatus() != ReturnRequestStatus.PENDING_APPROVAL) {
-            throw new AppException(ReturnRequestErrorCode.INVALID_RETURN_STATUS_TRANSITION);
-        }
+        boolean shouldCreateShippingOrder = request == null
+                || request.getAutoCreateShippingOrder() == null
+                || request.getAutoCreateShippingOrder();
 
-        LocalDateTime now = LocalDateTime.now(returnRequestClock);
-        returnRequest.setStatus(ReturnRequestStatus.WAITING_FOR_RETURN_DELIVERY);
-        returnRequest.setApprovedAt(now);
-        returnRequest.setApprovedBy(staff.getId());
-        // Hạn bàn giao 7 ngày lịch tính từ thời điểm shop phê duyệt và gửi hướng dẫn (Tình huống 11).
-        returnRequest.setHandoverDeadline(now.plusDays(7));
-        // Chuyển sang bước mới nên xóa cờ quá hạn (nếu có) của bước thẩm định trước đó.
-        clearCurrentStepOverdueState(returnRequest);
+        // Pha 1 (đọc ngắn, không giữ PESSIMISTIC_WRITE): xác minh phiếu đang PENDING_APPROVAL và dựng payload GHN nếu cần.
+        ApprovalShippingDraft draft = transactionTemplate.execute(status -> {
+            ReturnRequest snapshot = returnRequestRepository.findByIdWithItemsForShipping(id)
+                    .orElseThrow(() -> new AppException(ReturnRequestErrorCode.RETURN_REQUEST_NOT_FOUND));
+            if (snapshot.getStatus() != ReturnRequestStatus.PENDING_APPROVAL) {
+                throw new AppException(ReturnRequestErrorCode.INVALID_RETURN_STATUS_TRANSITION);
+            }
+            GhnOrderCreationRequest ghnPayload = shouldCreateShippingOrder
+                    ? returnRequestShippingService.buildReturnPickupOrderRequest(snapshot)
+                    : null;
+            return new ApprovalShippingDraft(snapshot.getReturnCode(), ghnPayload);
+        });
 
-        ReturnRequest saved = returnRequestRepository.save(returnRequest);
-        String note = (request != null && request.getInstructionNote() != null && !request.getInstructionNote().isBlank())
-                ? request.getInstructionNote().trim()
-                : "Yêu cầu trả hàng đã được duyệt. Vui lòng bàn giao kiện hàng cho đơn vị vận chuyển trong vòng 7 ngày.";
-        publishStatusEvent(saved, "APPROVED", note, now);
-        return returnRequestMapper.toReturnRequestResponse(saved);
+        // Pha 2 (bên ngoài @Transactional / khóa DB): gọi API GHN tạo đơn thu gom chiều về để không treo lock CSDL khi gọi mạng.
+        GhnOrderResponse ghnResponse = shouldCreateShippingOrder
+                ? returnRequestShippingService.createReturnPickupOrder(draft.ghnRequest(), draft.returnCode())
+                : null;
+
+        // Pha 3 (transaction ngắn giữ PESSIMISTIC_WRITE): khóa dòng, kiểm tra lại trạng thái phòng xung đột rồi chốt lưu DB.
+        return transactionTemplate.execute(status -> {
+            User staff = userService.getCurrentUserEntity();
+            ReturnRequest returnRequest = getLockedReturnRequest(id);
+            if (returnRequest.getStatus() != ReturnRequestStatus.PENDING_APPROVAL) {
+                throw new AppException(ReturnRequestErrorCode.INVALID_RETURN_STATUS_TRANSITION);
+            }
+
+            LocalDateTime now = LocalDateTime.now(returnRequestClock);
+            returnRequest.setStatus(ReturnRequestStatus.WAITING_FOR_RETURN_DELIVERY);
+            returnRequest.setApprovedAt(now);
+            returnRequest.setApprovedBy(staff.getId());
+            // Hạn bàn giao 7 ngày lịch tính từ thời điểm shop phê duyệt và gửi hướng dẫn (Tình huống 11).
+            returnRequest.setHandoverDeadline(now.plusDays(7));
+            // Chuyển sang bước mới nên xóa cờ quá hạn (nếu có) của bước thẩm định trước đó.
+            clearCurrentStepOverdueState(returnRequest);
+
+            if (shouldCreateShippingOrder && ghnResponse != null) {
+                returnRequest.setReturnShippingProvider(ShippingProvider.GHN);
+                returnRequest.setReturnTrackingCode(ghnResponse.orderCode());
+                // Quy tắc phí chiều hoàn: Đổi ý gán cước GHN làm phí dự kiến; Hàng lỗi / Giao sai cửa hàng chịu 100% (0đ).
+                if ("CHANGE_OF_MIND".equals(returnRequest.getReason())) {
+                    returnRequest.setReturnShippingFee(BigDecimal.valueOf(Math.max(0L, ghnResponse.totalFee())));
+                } else {
+                    returnRequest.setReturnShippingFee(BigDecimal.ZERO);
+                }
+            } else {
+                // Nhân viên chọn bỏ qua GHN (ví dụ khách tự mang hàng đến cửa hàng) -> không tạo vận đơn, phí = 0đ.
+                returnRequest.setReturnShippingProvider(null);
+                returnRequest.setReturnTrackingCode(null);
+                returnRequest.setReturnShippingFee(BigDecimal.ZERO);
+            }
+
+            ReturnRequest saved = returnRequestRepository.save(returnRequest);
+            String baseNote = (request != null && request.getInstructionNote() != null && !request.getInstructionNote().isBlank())
+                    ? request.getInstructionNote().trim()
+                    : "Yêu cầu trả hàng đã được duyệt. Vui lòng bàn giao kiện hàng cho đơn vị vận chuyển trong vòng 7 ngày.";
+            String note = (saved.getReturnTrackingCode() != null && !saved.getReturnTrackingCode().isBlank())
+                    ? baseNote + " Mã vận đơn chiều hoàn GHN: " + saved.getReturnTrackingCode() + "."
+                    : baseNote;
+            publishStatusEvent(saved, "APPROVED", note, now);
+            return returnRequestMapper.toReturnRequestResponse(saved);
+        });
     }
+
+    /**
+     * Bản ghi tạm chứa mã phiếu và payload GHN đã dựng ở Pha 1 để chuyển sang Pha 2 gọi mạng ngoài transaction.
+     */
+    private record ApprovalShippingDraft(String returnCode, GhnOrderCreationRequest ghnRequest) {}
 
     /**
      * Chức năng (Bước 2 hoặc sau kiểm định): Từ chối phiếu trả hàng kèm lý do cụ thể, đặt lại tiền hoàn về 0đ
@@ -370,9 +437,17 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
                 && !"CHANGE_OF_MIND".equals(returnRequest.getReason());
         boolean effectiveChangeOfMind = "CHANGE_OF_MIND".equals(returnRequest.getReason()) || reclassifyToChangeOfMind;
 
-        BigDecimal shippingFee = request.getReturnShippingFee() == null
-                ? BigDecimal.ZERO
-                : request.getReturnShippingFee().setScale(0, RoundingMode.HALF_UP);
+        // Kế thừa phí ship chiều hoàn đã lưu từ GHN ở Bước 2 nếu nhân viên không nhập đè khi kiểm định đơn Đổi ý.
+        BigDecimal shippingFee;
+        if (request.getReturnShippingFee() != null) {
+            shippingFee = request.getReturnShippingFee().setScale(0, RoundingMode.HALF_UP);
+        } else if (effectiveChangeOfMind
+                && returnRequest.getReturnShippingFee() != null
+                && returnRequest.getReturnShippingFee().signum() > 0) {
+            shippingFee = returnRequest.getReturnShippingFee().setScale(0, RoundingMode.HALF_UP);
+        } else {
+            shippingFee = BigDecimal.ZERO;
+        }
         // Nếu lỗi thuộc về shop thì tuyệt đối không được trừ phí vận chuyển gửi trả của khách.
         if (shippingFee.signum() > 0 && !effectiveChangeOfMind) {
             throw new AppException(ReturnRequestErrorCode.INVALID_RETURN_SHIPPING_FEE);
@@ -466,17 +541,20 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
     }
 
     /**
-     * Chức năng (Bước 5): Thực hiện xác nhận hoàn tiền thật sau khi kế toán/nhân viên đã chuyển khoản.
-     * Dùng khóa bi quan {@code PESSIMISTIC_WRITE} chống bấm hoàn tiền 2 lần, kiểm tra mã giao dịch duy nhất
-     * và lưu vết vào bảng {@link PaymentTransaction}.
+     * Chức năng (Bước 5): Thực hiện xác nhận hoàn tiền thật sau khi kế toán chuyển khoản qua VietQR/ngân hàng
+     * bằng tệp ảnh chụp màn hình biên lai (bắt buộc). Hệ thống dùng khóa bi quan {@code PESSIMISTIC_WRITE}
+     * chống bấm hoàn tiền 2 lần, kiểm tra và tải ảnh chứng từ lên Cloudinary, tự sinh mã giao dịch duy nhất
+     * {@code REFUND-<YYYYMMDD>-<RETURN_CODE_SHORT>-<RAND6>}, lưu vết vào {@link PaymentTransaction} và đồng bộ
+     * trạng thái {@code RETURNED} / {@code REFUNDED} về đơn hàng gốc nếu đã hoàn đủ 100% đơn.
      *
-     * @param id      Mã ID phiếu trả hàng đang ở trạng thái {@code WAITING_REFUND}.
-     * @param request DTO chứa mã giao dịch ngân hàng/ủy nhiệm chi, ảnh chứng từ (tùy chọn) và ghi chú.
+     * @param id         Mã ID phiếu trả hàng đang ở trạng thái {@code WAITING_REFUND}.
+     * @param request    DTO chứa ghi chú hoàn tiền (tùy chọn).
+     * @param proofImage Tệp ảnh chụp màn hình giao dịch chuyển khoản thành công (bắt buộc).
      * @return {@link ReturnRequestResponse} phiếu đã chuyển sang {@code REFUNDED}.
      */
     @Override
     @Transactional
-    public ReturnRequestResponse executeRefund(Long id, ReturnRequestRefundRequest request) {
+    public ReturnRequestResponse executeRefund(Long id, ReturnRequestRefundRequest request, MultipartFile proofImage) {
         User staff = userService.getCurrentUserEntity();
         // Khóa bi quan dòng ReturnRequest ngay đầu transaction để hai request bấm đúp chạy tuần tự và request thứ 2 bị chặn.
         ReturnRequest returnRequest = getLockedReturnRequest(id);
@@ -500,16 +578,24 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
                 && returnRequest.getReturnShippingFee().compareTo(returnRequest.getItemsRefundAmount()) >= 0) {
             throw new AppException(ReturnRequestErrorCode.NEGATIVE_REFUND_NOT_ALLOWED);
         }
-
-        // Chặn tái sử dụng một mã giao dịch/ủy nhiệm chi ngân hàng cho nhiều phiếu khác nhau.
-        String txnCode = request.getRefundTransactionCode().trim();
-        if (returnRequestRepository.existsByRefundTransactionCodeAndIdNot(txnCode, returnRequest.getId())
-                || paymentTransactionRepository.findByTransactionCode(txnCode).isPresent()) {
-            throw new AppException(ReturnRequestErrorCode.DUPLICATE_REFUND_TRANSACTION_CODE);
+        if (proofImage == null || proofImage.isEmpty()) {
+            throw new AppException(ReturnRequestErrorCode.REFUND_PROOF_IMAGE_REQUIRED);
         }
 
+        // Kiểm tra định dạng thật (magic bytes) & dung lượng tối đa 5MB trước khi tải ảnh lên Cloudinary.
+        List<MultipartFile> proofFiles = List.of(proofImage);
+        returnRequestImageService.validate(proofFiles);
+        List<String> uploadedUrls = returnRequestImageService.upload(proofFiles);
+        if (uploadedUrls == null || uploadedUrls.isEmpty() || uploadedUrls.getFirst() == null || uploadedUrls.getFirst().isBlank()) {
+            throw new AppException(ReturnRequestErrorCode.IMAGE_UPLOAD_FAILED);
+        }
+        String proofImageUrl = uploadedUrls.getFirst();
+
         LocalDateTime now = LocalDateTime.now(returnRequestClock);
+        // Tự động sinh mã giao dịch hoàn tiền duy nhất chuẩn REFUND-<YYYYMMDD>-<RETURN_CODE_SHORT>-<RAND6>.
+        String txnCode = generateRefundTransactionCode(returnRequest, now);
         PaymentMethod paymentMethod = resolveRefundPaymentMethod(returnRequest.getOrder());
+        String noteText = (request != null && request.getNote() != null) ? request.getNote().trim() : "";
         // Lưu chuỗi tóm tắt thông tin người thực hiện + STK nhận tiền để dễ tra soát đối chiếu kế toán.
         String gatewaySummary = String.format(
                 "RETURN_REFUND|returnCode=%s|refundedBy=%d|username=%s|bank=%s|account=%s|holder=%s|note=%s",
@@ -519,7 +605,7 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
                 returnRequest.getBankName(),
                 returnRequest.getAccountNumber(),
                 returnRequest.getAccountHolderName(),
-                request.getNote() == null ? "" : request.getNote().trim()
+                noteText
         );
 
         PaymentTransaction refundTx = PaymentTransaction.builder()
@@ -536,9 +622,7 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
 
         returnRequest.setStatus(ReturnRequestStatus.REFUNDED);
         returnRequest.setRefundTransactionCode(txnCode);
-        if (request.getRefundProofImageUrl() != null && !request.getRefundProofImageUrl().isBlank()) {
-            returnRequest.setRefundProofImageUrl(request.getRefundProofImageUrl().trim());
-        }
+        returnRequest.setRefundProofImageUrl(proofImageUrl);
         returnRequest.setRefundedAt(now);
         returnRequest.setRefundedBy(staff.getId());
         clearCurrentStepOverdueState(returnRequest);
@@ -548,6 +632,9 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
             returnRequest.setResolvedAt(now);
             returnRequest.setCompletedAt(now);
         }
+
+        // Đồng bộ trạng thái RETURNED / REFUNDED về đơn hàng gốc nếu toàn bộ sản phẩm trong đơn đã được hoàn tiền đủ 100%.
+        syncOrderStatusIfFullyRefunded(returnRequest.getOrder(), returnRequest);
 
         ReturnRequest saved = returnRequestRepository.save(returnRequest);
         publishStatusEvent(saved, "REFUNDED", "Hoàn tiền thành công. Mã giao dịch: " + txnCode, now);
@@ -1061,6 +1148,101 @@ public class ReturnRequestAdminServiceImpl implements ReturnRequestAdminService 
                 .or(() -> paymentMethodRepository.findByCode("FWDEMO1_BANK"))
                 .or(() -> paymentMethodRepository.findAll().stream().findFirst())
                 .orElseThrow(() -> new AppException(ReturnRequestErrorCode.REFUND_PAYMENT_METHOD_NOT_FOUND));
+    }
+
+    /**
+     * Chức năng: Tự động sinh mã giao dịch hoàn tiền duy nhất theo cấu trúc
+     * {@code REFUND-<YYYYMMDD>-<RETURN_CODE_SHORT>-<RAND6>} và kiểm tra không trùng trong cả bảng
+     * {@code return_requests} lẫn {@code payment_transactions}.
+     *
+     * @param returnRequest Phiếu trả hàng đang hoàn tiền.
+     * @param now           Thời điểm hoàn tiền theo múi giờ Việt Nam.
+     * @return Chuỗi mã giao dịch duy nhất có dấu hiệu nhận diện {@code REFUND-}.
+     */
+    private String generateRefundTransactionCode(ReturnRequest returnRequest, LocalDateTime now) {
+        String datePart = now.format(REFUND_TXN_DATE_FORMATTER);
+        String rawCode = returnRequest.getReturnCode() == null
+                ? ""
+                : returnRequest.getReturnCode().replaceAll("[^A-Za-z0-9]", "").toUpperCase(Locale.ROOT);
+        String shortReturnCode;
+        if (!rawCode.isEmpty()) {
+            shortReturnCode = rawCode.substring(0, Math.min(rawCode.length(), 10));
+        } else {
+            shortReturnCode = "RR" + (returnRequest.getId() == null ? "0" : returnRequest.getId());
+        }
+
+        String candidate;
+        do {
+            StringBuilder suffix = new StringBuilder(6);
+            for (int i = 0; i < 6; i++) {
+                suffix.append(REFUND_TXN_ALPHABET.charAt(SECURE_RANDOM.nextInt(REFUND_TXN_ALPHABET.length())));
+            }
+            candidate = "REFUND-" + datePart + "-" + shortReturnCode + "-" + suffix;
+        } while (returnRequestRepository.existsByRefundTransactionCodeAndIdNot(candidate, returnRequest.getId())
+                || paymentTransactionRepository.findByTransactionCode(candidate).isPresent());
+        return candidate;
+    }
+
+    /**
+     * Chức năng: Kiểm tra toàn bộ sản phẩm trong đơn hàng gốc đã được hoàn tiền đủ số lượng mua hay chưa
+     * (tính cộng dồn các phiếu trả hàng ở trạng thái {@code REFUNDED} cùng đơn); nếu đủ 100% thì tự động
+     * cập nhật trạng thái thanh toán {@code REFUNDED} và trạng thái đơn hàng {@code RETURNED}.
+     *
+     * @param order         Đơn hàng gốc cần đối chiếu.
+     * @param currentRefund Phiếu trả hàng vừa hoàn tiền xong.
+     */
+    private void syncOrderStatusIfFullyRefunded(Order order, ReturnRequest currentRefund) {
+        if (order == null || order.getOrderItems() == null || order.getOrderItems().isEmpty()) {
+            return;
+        }
+
+        Map<Long, ReturnRequestItem> currentItemsByOrderItemId = new LinkedHashMap<>();
+        if (currentRefund.getItems() != null) {
+            for (ReturnRequestItem rItem : currentRefund.getItems()) {
+                if (rItem.getOrderItem() != null && rItem.getOrderItem().getId() != null) {
+                    currentItemsByOrderItemId.put(rItem.getOrderItem().getId(), rItem);
+                }
+            }
+        }
+
+        boolean allItemsFullyRefunded = true;
+        for (OrderItem orderItem : order.getOrderItems()) {
+            if (orderItem == null || orderItem.getId() == null || orderItem.getQuantity() == null || orderItem.getQuantity() <= 0) {
+                allItemsFullyRefunded = false;
+                break;
+            }
+            int totalRefundedQty = 0;
+            boolean countedCurrentLine = false;
+            List<ReturnRequestItem> historyItems = returnRequestItemRepository.findForReturnValidation(orderItem.getId());
+            if (historyItems != null) {
+                for (ReturnRequestItem histItem : historyItems) {
+                    ReturnRequest parent = histItem.getReturnRequest();
+                    boolean isCurrentRequest = parent != null && Objects.equals(parent.getId(), currentRefund.getId());
+                    if (isCurrentRequest) {
+                        countedCurrentLine = true;
+                    }
+                    if ((parent != null && parent.getStatus() == ReturnRequestStatus.REFUNDED) || isCurrentRequest) {
+                        totalRefundedQty += histItem.getAcceptedQuantity() == null ? 0 : histItem.getAcceptedQuantity();
+                    }
+                }
+            }
+            // Phòng trường hợp lịch sử query chưa trả dòng của chính phiếu vừa cập nhật trong test hoặc trước flush.
+            if (!countedCurrentLine) {
+                ReturnRequestItem currentLine = currentItemsByOrderItemId.get(orderItem.getId());
+                if (currentLine != null) {
+                    totalRefundedQty += currentLine.getAcceptedQuantity() == null ? 0 : currentLine.getAcceptedQuantity();
+                }
+            }
+            if (totalRefundedQty < orderItem.getQuantity()) {
+                allItemsFullyRefunded = false;
+                break;
+            }
+        }
+
+        if (allItemsFullyRefunded) {
+            order.setPaymentStatus(PaymentStatus.REFUNDED);
+            order.setOrderStatus(OrderStatus.RETURNED);
+        }
     }
 
     /**

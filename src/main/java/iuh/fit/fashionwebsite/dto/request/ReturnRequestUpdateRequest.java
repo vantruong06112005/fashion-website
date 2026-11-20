@@ -9,6 +9,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 
@@ -59,6 +60,20 @@ public class ReturnRequestUpdateRequest {
     @JsonAlias("bankAccountHolder")
     @Size(max = 100, message = "Tên chủ tài khoản không được quá 100 ký tự.")
     private String accountHolderName;
+
+    // Mã địa chỉ mới trong sổ địa chỉ của khách hàng (tùy chọn; bỏ trống sẽ giữ nguyên địa chỉ lấy hàng hiện tại).
+    @Positive(message = "Mã địa chỉ lấy hàng phải lớn hơn 0.")
+    private Long pickupAddressId;
+
+    // Tên người liên hệ bàn giao hàng trả mới (tùy chọn; bỏ trống sẽ giữ nguyên giá trị hiện tại).
+    @Size(max = 100, message = "Tên người liên hệ lấy hàng không được quá 100 ký tự.")
+    private String pickupContactName;
+
+    // Số điện thoại người bàn giao hàng trả mới (tùy chọn; bỏ trống sẽ giữ nguyên giá trị hiện tại).
+    @Pattern(regexp = "^(\\+84|0)[0-9]{9,10}$",
+            message = "Số điện thoại lấy hàng phải là số điện thoại Việt Nam hợp lệ.")
+    @Size(max = 20, message = "Số điện thoại lấy hàng không được quá 20 ký tự.")
+    private String pickupPhone;
 
     // Tệp minh chứng phải gửi qua multipart/form-data; từ chối URL do client tự khai.
     @Size(max = 5, message = "Mỗi yêu cầu trả hàng chỉ được gửi tối đa 5 ảnh.")

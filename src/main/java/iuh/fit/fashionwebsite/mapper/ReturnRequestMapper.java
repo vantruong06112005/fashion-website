@@ -8,6 +8,7 @@ import iuh.fit.fashionwebsite.dto.response.ReturnRequestResponse;
 import iuh.fit.fashionwebsite.entity.ReturnRequest;
 import iuh.fit.fashionwebsite.entity.ReturnRequestImage;
 import iuh.fit.fashionwebsite.entity.ReturnRequestItem;
+import iuh.fit.fashionwebsite.enums.ReturnRequestStatus;
 import org.mapstruct.Builder;
 import org.mapstruct.IterableMapping;
 import org.mapstruct.Mapper;
@@ -15,7 +16,12 @@ import org.mapstruct.Mapping;
 import org.mapstruct.NullValueMappingStrategy;
 import org.mapstruct.ReportingPolicy;
 
+import java.math.RoundingMode;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 /**
  * Mapper chuyển đổi dữ liệu qua lại giữa Entity và DTO của module Trả hàng & Hoàn tiền (MapStruct).
@@ -64,6 +70,13 @@ public interface ReturnRequestMapper {
     @Mapping(target = "overdueReason", ignore = true)
     @Mapping(target = "estimatedCompletionAt", ignore = true)
     @Mapping(target = "itemsRefundAmount", ignore = true)
+    @Mapping(target = "returnShippingProvider", ignore = true)
+    @Mapping(target = "returnTrackingCode", ignore = true)
+    @Mapping(target = "pickupContactName", ignore = true)
+    @Mapping(target = "pickupPhone", ignore = true)
+    @Mapping(target = "pickupAddress", ignore = true)
+    @Mapping(target = "pickupProvinceName", ignore = true)
+    @Mapping(target = "pickupWardName", ignore = true)
     @Mapping(target = "returnShippingFee", ignore = true)
     @Mapping(target = "refundAmount", ignore = true)
     @Mapping(target = "bankAccountNumber", ignore = true)
@@ -144,7 +157,89 @@ public interface ReturnRequestMapper {
     @Mapping(target = "userId", source = "user.id")
     @Mapping(target = "orderId", source = "order.id")
     @Mapping(target = "orderCode", source = "order.orderCode")
+    @Mapping(target = "refundVietQrUrl", expression = "java(buildRefundVietQrUrl(returnRequest))")
     ReturnRequestResponse toReturnRequestResponse(ReturnRequest returnRequest);
+
+    /**
+     * Chức năng: Tự động sinh đường dẫn ảnh VietQR khi phiếu đang ở trạng thái chờ hoàn tiền ({@code WAITING_REFUND}),
+     * có số tiền hoàn dương và đã đủ 3 thông tin tài khoản ngân hàng, giúp kế toán quét chuyển khoản nhanh không nhập nhầm.
+     *
+     * @param returnRequest Entity {@link ReturnRequest} cần dựng mã VietQR.
+     * @return URL ảnh VietQR chuẩn công khai, hoặc {@code null} nếu chưa đủ điều kiện hoặc tên ngân hàng chưa có trong bảng mã BIN.
+     */
+    default String buildRefundVietQrUrl(ReturnRequest returnRequest) {
+        if (returnRequest == null
+                || returnRequest.getStatus() != ReturnRequestStatus.WAITING_REFUND
+                || returnRequest.getRefundAmount() == null
+                || returnRequest.getRefundAmount().signum() <= 0
+                || returnRequest.getBankName() == null || returnRequest.getBankName().isBlank()
+                || returnRequest.getAccountNumber() == null || returnRequest.getAccountNumber().isBlank()
+                || returnRequest.getAccountHolderName() == null || returnRequest.getAccountHolderName().isBlank()) {
+            return null;
+        }
+        String bankBin = resolveVietQrBankBin(returnRequest.getBankName());
+        if (bankBin == null) {
+            return null;
+        }
+        long amountVnd = returnRequest.getRefundAmount().setScale(0, RoundingMode.HALF_UP).longValue();
+        if (amountVnd <= 0) {
+            return null;
+        }
+        String accountNo = returnRequest.getAccountNumber().trim();
+        String addInfo = "Hoan tien " + (returnRequest.getReturnCode() == null ? "" : returnRequest.getReturnCode().trim());
+        String accountName = returnRequest.getAccountHolderName().trim();
+        return "https://img.vietqr.io/image/" + bankBin + "-" + accountNo + "-compact2.png"
+                + "?amount=" + amountVnd
+                + "&addInfo=" + URLEncoder.encode(addInfo, StandardCharsets.UTF_8).replace("+", "%20")
+                + "&accountName=" + URLEncoder.encode(accountName, StandardCharsets.UTF_8).replace("+", "%20");
+    }
+
+    /**
+     * Chức năng: Ánh xạ tên ngân hàng Việt Nam phổ biến sang mã BIN 6 chữ số chuẩn Napas/VietQR.
+     *
+     * @param bankName Tên ngân hàng khách cung cấp.
+     * @return Mã BIN 6 chữ số, hoặc {@code null} nếu không nhận diện được.
+     */
+    private static String resolveVietQrBankBin(String bankName) {
+        if (bankName == null || bankName.isBlank()) {
+            return null;
+        }
+        String normalized = bankName.trim().toLowerCase(Locale.ROOT)
+                .replaceAll("[\\s._-]+", "");
+        Map<String, String> bins = Map.ofEntries(
+                Map.entry("vietcombank", "970436"),
+                Map.entry("vcb", "970436"),
+                Map.entry("mbbank", "970422"),
+                Map.entry("mb", "970422"),
+                Map.entry("techcombank", "970407"),
+                Map.entry("tcb", "970407"),
+                Map.entry("vietinbank", "970415"),
+                Map.entry("ctg", "970415"),
+                Map.entry("icb", "970415"),
+                Map.entry("bidv", "970418"),
+                Map.entry("acb", "970416"),
+                Map.entry("tpbank", "970423"),
+                Map.entry("tpb", "970423"),
+                Map.entry("vpbank", "970432"),
+                Map.entry("vpb", "970432"),
+                Map.entry("sacombank", "970403"),
+                Map.entry("stb", "970403"),
+                Map.entry("agribank", "970405"),
+                Map.entry("vba", "970405"),
+                Map.entry("hdbank", "970437"),
+                Map.entry("hdb", "970437"),
+                Map.entry("vib", "970441"),
+                Map.entry("shb", "970443"),
+                Map.entry("msb", "970426"),
+                Map.entry("ocb", "970448"),
+                Map.entry("seabank", "970440"),
+                Map.entry("eximbank", "970431"),
+                Map.entry("eib", "970431"),
+                Map.entry("lpbank", "970449"),
+                Map.entry("lienvietpostbank", "970449")
+        );
+        return bins.get(normalized);
+    }
 
     /**
      * Chức năng: Chuyển đổi từng dòng sản phẩm trả sang DTO phản hồi.

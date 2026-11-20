@@ -57,7 +57,14 @@ public enum ReturnRequestErrorCode implements BaseErrorCode {
     RETURN_CONTACT_LOG_NOT_ALLOWED("Chỉ được ghi nhận nhật ký liên hệ khi phiếu đang chờ khách phản hồi hoặc đang lưu giữ hàng trả bị từ chối chưa kết thúc.", HttpStatus.CONFLICT),
     HOLIDAY_NOT_FOUND("Không tìm thấy ngày nghỉ lễ.", HttpStatus.NOT_FOUND),
     HOLIDAY_ALREADY_EXISTS("Ngày nghỉ lễ này đã tồn tại trong cấu hình.", HttpStatus.CONFLICT),
-    DEFAULT_HOLIDAY_IMMUTABLE("Không thể chỉnh sửa hoặc xóa 6 ngày lễ mặc định của hệ thống.", HttpStatus.BAD_REQUEST);
+    DEFAULT_HOLIDAY_IMMUTABLE("Không thể chỉnh sửa hoặc xóa 6 ngày lễ mặc định của hệ thống.", HttpStatus.BAD_REQUEST),
+    PICKUP_ADDRESS_NOT_FOUND("Không tìm thấy địa chỉ lấy hàng trong sổ địa chỉ của bạn.", HttpStatus.NOT_FOUND),
+    PICKUP_ADDRESS_INCOMPLETE("Địa chỉ lấy hàng được chọn chưa đầy đủ thông tin tỉnh/thành phố và phường/xã. Vui lòng cập nhật sổ địa chỉ trước khi chọn.", HttpStatus.BAD_REQUEST),
+    RETURN_SHIPPING_ADDRESS_MISSING("Phiếu trả hàng chưa có đủ địa chỉ lấy hàng (địa chỉ chi tiết, tỉnh/thành phố, phường/xã) để tạo đơn thu gom GHN.", HttpStatus.BAD_REQUEST),
+    RETURN_SHIPPING_ORDER_FAILED("Không thể tạo đơn thu gom chiều hoàn qua dịch vụ vận chuyển GHN. Vui lòng thử lại sau.", HttpStatus.SERVICE_UNAVAILABLE),
+    INVALID_GHN_WEBHOOK_SECRET("Mã bí mật xác thực Webhook GHN không hợp lệ hoặc bị thiếu.", HttpStatus.UNAUTHORIZED),
+    INVALID_GHN_WEBHOOK_PAYLOAD("Dữ liệu Webhook GHN thiếu mã vận đơn (OrderCode) hoặc trạng thái (Status).", HttpStatus.BAD_REQUEST),
+    REFUND_PROOF_IMAGE_REQUIRED("Vui lòng tải lên ảnh chụp màn hình biên lai hoặc chứng từ chuyển khoản hoàn tiền.", HttpStatus.BAD_REQUEST);
 
     // Thông báo lỗi tiếng Việt hiển thị cho người dùng khi ngoại lệ xảy ra.
     private final String message;

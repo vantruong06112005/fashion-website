@@ -250,11 +250,18 @@ Quy trình chuẩn gồm 6 bước thực hiện mạch lạc và chặt chẽ:
   - *Ví dụ:* Kiện hàng được bàn giao thành công lúc 10:00 sáng ngày 01/10 thì khách được gửi yêu cầu chậm nhất lúc 10:00 sáng ngày 08/10, gồm cả đúng thời điểm 10:00 này.
   - Thời hạn được xác định tại thời điểm khách hàng bấm gửi trên hệ thống. Nếu khách gửi đúng hạn, dù nhân viên cửa hàng duyệt sau đó thì yêu cầu của khách vẫn luôn được đảm bảo giải quyết đầy đủ.
 - **Thao tác của khách:** Khách hàng vào mục quản lý đơn hàng, chọn sản phẩm cần trả, chọn lý do và mô tả. Với hàng lỗi/giao sai, đính kèm ảnh như quy định tại Phần II; đổi ý không bị bắt buộc ảnh theo quy tắc này.
+- **Địa chỉ & người bàn giao lấy hàng:** Khách hàng có thể chọn địa chỉ lấy hàng từ sổ địa chỉ cá nhân (đã tách sẵn Tỉnh/Thành phố và Phường/Xã) hoặc giữ mặc định theo địa chỉ nhận hàng của đơn hàng gốc, đồng thời có thể cập nhật tên và số điện thoại người bàn giao. Thông tin này được lưu cố định trên phiếu tại thời điểm tạo/sửa (trước khi duyệt) để không bị sai lệch nếu khách thay đổi sổ địa chỉ về sau.
 
 ### BƯỚC 2: Cửa hàng thẩm định và phê duyệt yêu cầu
 - **Thời gian xử lý:** Tối đa trong vòng **2 ngày làm việc** (từ thứ Hai đến thứ Sáu, không tính cuối tuần và ngày lễ).
 - Nhân viên kiểm tra tính hợp lệ của lý do và hình ảnh đính kèm:
   - Nếu thông tin đầy đủ và hợp lệ: Duyệt chấp thuận tiếp nhận, điều phối chuyến lấy hàng và gửi thông báo hẹn lịch cho khách hàng.
+    - **Tạo đơn thu gom chiều về qua GHN (Mặc định):** Ngay khi duyệt, hệ thống tự động gọi dịch vụ **Giao Hàng Nhanh (GHN)** để tạo đơn thu gom chiều về (lấy hàng từ địa chỉ khách hàng trên phiếu về kho cửa hàng, không thu tiền hộ COD), lưu lại **đơn vị vận chuyển** và **mã vận đơn chiều hoàn** lên phiếu để gửi kèm thông báo cho khách hàng.
+    - **Cho phép bỏ qua GHN:** Trường hợp khách tự mang hàng đến trả trực tiếp tại cửa hàng (hoặc hai bên thống nhất không dùng dịch vụ thu gom GHN), nhân viên được phép chọn **bỏ qua tạo đơn GHN** khi duyệt; khi đó phiếu không tạo mã vận đơn chiều hoàn và phí vận chuyển trả về bằng **0 đồng**.
+    - **Ghi nhận phí vận chuyển chiều hoàn khi tạo đơn GHN:**
+      - Nếu lý do trả hàng là **Đổi ý**: Ghi nhận mức cước do GHN trả về làm phí vận chuyển trả hàng dự kiến (nhân viên vẫn có thể điều chỉnh lại ở Bước 4 khi kiểm định thực tế, và chỉ khấu trừ sau khi khách xác nhận đồng ý phương án).
+      - Nếu lý do là **Hàng lỗi** hoặc **Cửa hàng giao sai**: Cửa hàng chịu toàn bộ cước chiều về, phí vận chuyển trả hàng tính cho khách giữ bằng **0 đồng**.
+    - **Xử lý khi kết nối GHN gián đoạn:** Khi bật cờ dự phòng cho môi trường thử nghiệm/vận hành nội bộ, nếu GHN tạm lỗi hoặc chưa cấu hình kết nối, hệ thống sinh mã vận đơn mô phỏng và áp mức phí tiêu chuẩn **30.000 đồng** để quy trình không bị tắc; khi tắt cờ dự phòng (môi trường vận hành thật), hệ thống báo lỗi dịch vụ vận chuyển tạm thời gián đoạn và chưa chốt duyệt phiếu.
   - Nếu lý do chưa rõ hoặc thiếu hình ảnh: Liên hệ hỗ trợ khách hàng bổ sung.
   - Nếu không đúng điều kiện (ví dụ gửi yêu cầu quá hạn hoặc sản phẩm không thuộc đơn mua của khách): Từ chối và nêu rõ lý do cụ thể gửi khách hàng.
 - **Lưu ý khi cửa hàng trễ hạn:** Nếu cửa hàng quá 2 ngày làm việc chưa duyệt xong, khách hàng không bị mất quyền lợi. Thời hạn 7 ngày gửi hàng chỉ bắt đầu tính sau khi cửa hàng chính thức phê duyệt và gửi hướng dẫn cho khách (chi tiết tại Mục 6 - Phần V).
@@ -262,6 +269,10 @@ Quy trình chuẩn gồm 6 bước thực hiện mạch lạc và chặt chẽ:
 ### BƯỚC 3: Bàn giao hàng hóa cho nhân viên giao vận
 - **Thời hạn gửi hàng:** Trong vòng **7 ngày** kể từ khi cửa hàng đã phê duyệt và gửi thông báo, hướng dẫn bàn giao hàng cho khách. Nếu duyệt và gửi hướng dẫn khác thời điểm, tính từ lúc gửi hướng dẫn sau khi đã duyệt. Khách hàng đóng gói cẩn thận sản phẩm (tốt nhất là dùng lại hộp ban đầu) để bàn giao cho nhân viên giao hàng.
 - **Hệ thống nhắc nhở:** Trước hạn chót 1 ngày, hệ thống sẽ tự động gửi tin nhắn/thông báo nhắc khách hàng chuẩn bị sẵn gói hàng.
+- **Đồng bộ tự động từ GHN (kèm thao tác thủ công dự phòng):**
+  - Khi có thông báo đẩy (webhook) hợp lệ từ GHN (có xác thực mã bí mật) hoặc khi tác vụ chạy nền đối soát chi tiết vận đơn từ GHN ghi nhận shipper đã lấy hàng thành công (`picked`, `storing`, `transporting`, `delivering`), hệ thống **tự động ghi nhận thời điểm bàn giao** (khóa quyền tự hủy của khách hàng) và gửi thông báo cho khách mà nhân viên không cần bấm tay.
+  - Cơ chế chống xử lý trùng: nếu phiếu đã được ghi nhận bàn giao trước đó thì bỏ qua các lần báo lặp lại.
+  - Thao tác xác nhận bàn giao thủ công của nhân viên vẫn được giữ lại cho trường hợp khách tự mang hàng đến cửa hàng (bỏ qua GHN) hoặc chạy ở chế độ mô phỏng/dự phòng.
 - **Chính sách gia hạn linh hoạt:** 
   - Nếu nhân viên lấy hàng không đến lấy đúng hẹn vì lý do khách quan (thời tiết xấu, quá tải bưu cục...), sau khi xác nhận thông tin, cửa hàng sẽ chủ động **gia hạn thêm 3 ngày** và tạo lại lịch lấy hàng mới. 
   - Cửa hàng tuyệt đối không tự ý hủy yêu cầu của khách khi lỗi chậm trễ thuộc về phía dịch vụ vận chuyển.
@@ -270,9 +281,11 @@ Quy trình chuẩn gồm 6 bước thực hiện mạch lạc và chặt chẽ:
 
 ### BƯỚC 4: Tiếp nhận và kiểm định chất lượng tại kho
 - **Thời gian xử lý:** Tối đa trong vòng **2 ngày làm việc** kể từ thời điểm kho nhận được kiện hàng trả về.
+- **Tự động ghi nhận hàng đã về kho từ GHN:** Khi webhook hoặc tác vụ chạy nền nhận được trạng thái GHN đã giao kiện hàng hoàn về tới kho cửa hàng (`delivered`), hệ thống **tự động chuyển phiếu sang trạng thái Đang kiểm tra hàng**, ghi nhận thời điểm nhận kho (và tự điền mốc bàn giao nếu trước đó bị sót). **Tuyệt đối không tự động hoàn tiền** ở bước này; nhân viên kho vẫn phải mở kiện kiểm định chất lượng rồi mới chuyển sang bước tiếp theo. Thao tác xác nhận nhận kho thủ công vẫn được giữ lại cho trường hợp bỏ qua GHN hoặc chế độ dự phòng.
 - Nhân viên kho tiến hành mở hộp, quay video hoặc chụp ảnh đối chiếu:
   - Kiểm tra có đúng sản phẩm khách đã đăng ký trả không.
    - Kiểm tra theo đúng lý do trả tại Phần II. Đổi ý cần đáp ứng điều kiện hàng còn mới. Hàng lỗi/giao sai phải đối chiếu lỗi hoặc sai lệch khách báo; không dùng chính lỗi đã xác nhận, ví dụ bung đường may, làm lý do từ chối nhận trả.
+- **Kế thừa phí vận chuyển chiều hoàn khi kiểm định:** Khi nhân viên cập nhật kết quả kiểm định, nếu **không nhập đè mức phí mới** thì hệ thống **tự động giữ nguyên mức phí vận chuyển chiều hoàn đã ghi nhận từ GHN ở Bước 2** (đối với đơn Đổi ý; còn đơn Hàng lỗi / Giao sai hoặc bỏ qua GHN giữ `0 đồng`). Nếu cân nặng thực tế có chênh lệch, nhân viên vẫn có thể nhập số phí mới để điều chỉnh.
 - Cập nhật kết quả kiểm định chính thức lên hệ thống.
 - **Đã chốt hạn gửi kết quả và yêu cầu bổ sung:** sau khi có kết quả kiểm hàng, chậm nhất **17:00 ngày làm việc kế tiếp**, shop phải gửi khách kết quả, số tiền hoàn và yêu cầu cung cấp thông tin còn thiếu. Nếu chỉ nhận trả một phần thì gửi rõ món nào được nhận và số tiền để khách xác nhận. Đây là hạn shop gửi thông tin, khác với hạn hai ngày để thực hiện hoàn khi đã đủ điều kiện.
 - **Lưu ý khi cửa hàng trễ hạn:** Nếu quá 2 ngày làm việc chưa kiểm tra xong, hệ thống tự cảnh báo quá hạn. Nhân viên nhập lý do và ngày dự kiến có kết quả để hệ thống gửi thông báo cho khách, xác nhận hàng đã về kho nhưng đang chậm kiểm tra; tuyệt đối không tự động hoàn tiền khi chưa kiểm định xong (chi tiết tại Mục 6 - Phần V).
@@ -281,11 +294,12 @@ Quy trình chuẩn gồm 6 bước thực hiện mạch lạc và chặt chẽ:
 - **Thời gian thực hiện:** Shop có tối đa **2 ngày làm việc** để thực hiện hoàn sau khi hàng kiểm tra hợp lệ và có đủ thông tin để chuyển tiền theo phương thức áp dụng. Nếu chỉ nhận trả một phần, cần thêm khách xác nhận phần hàng và số tiền hoàn.
 - **Trường hợp chỉ chấp nhận trả một phần:** Shop gửi kết quả từng món và số tiền được hoàn cho khách xác nhận. Chờ khách theo Mục 4 - Phần V. Phần tiền đã hoàn và phần hàng chưa giải quyết phải được theo dõi riêng; không tự coi cả phiếu đã kết thúc chỉ vì đã chuyển tiền cho một món.
 - **Không đẩy lỗi chậm của shop sang khách:** Shop phải gửi yêu cầu bổ sung thông tin hoặc phương án trả một phần cho khách. Nếu shop chưa hỏi tài khoản, chưa gửi số tiền cần xác nhận hoặc đã nhận thông tin nhưng nhập lên hệ thống chậm, không được ghi là khách chậm cung cấp. Lưu thời điểm thông báo, khách phản hồi và đủ điều kiện thực hiện hoàn để kiểm tra việc chậm ở đâu. Cách hiểu đơn giản và ví dụ tại Mục 6C - Phần V.
-- **Hình thức hoàn trả:**
-   - Đối với đơn hàng ban đầu trả tiền mặt khi nhận hàng (COD) hoặc chuyển khoản: Hoàn vào tài khoản ngân hàng khách cung cấp và xác nhận. Không tự thêm điều kiện tài khoản phải đứng cùng tên người đặt hàng khi nhóm chưa chốt điều kiện đó.
-   - Đối với đơn thanh toán qua thẻ hoặc cổng thanh toán có hỗ trợ hoàn: Hoàn về phương thức ban đầu qua chức năng của dịch vụ đó. Đây là nguyên tắc áp dụng nếu nhóm có dùng phương thức tương ứng; tên dịch vụ, khả năng hoàn và cách nhận kết quả vẫn chờ xác nhận ở Phần VIII.
+- **Hình thức hoàn trả (Đã chốt áp dụng thống nhất):**
+   - Mọi giao dịch hoàn tiền (bao gồm cả đơn thanh toán khi nhận hàng COD và đơn thanh toán trực tuyến như VNPay) đều thực hiện **chuyển khoản ngân hàng ngoài hệ thống về tài khoản ngân hàng do khách hàng cung cấp và xác nhận**. Không tự thêm điều kiện tài khoản phải đứng cùng tên người đặt hàng khi nhóm chưa chốt điều kiện đó.
+   - Khi phiếu đủ điều kiện chờ hoàn tiền, hệ thống tự động tạo sẵn **mã VietQR** (điền sẵn ngân hàng, số tài khoản, đúng số tiền hoàn và mã phiếu) để kế toán quét chuyển khoản nhanh, hạn chế tối đa nhập sai thông tin.
 - **Quy định bảo mật thông tin thanh toán:** Cửa hàng chỉ thu thập các thông tin cơ bản phục vụ nhận tiền gồm: *Tên ngân hàng, Số tài khoản, Tên chủ tài khoản*. Cửa hàng **tuyệt đối không bao giờ hỏi** mật khẩu đăng nhập, mã xác thực OTP hay mã bảo mật thẻ của khách hàng.
-- **Lưu trữ bằng chứng hoàn tất:** Mọi lệnh chuyển tiền phải lưu lại mã giao dịch ngân hàng hoặc hình ảnh ủy nhiệm chi thành công, ghi nhận rõ thời gian và nhân viên phụ trách. Trạng thái chỉ được chuyển sang "Đã hoàn tiền" khi tiền đã thực sự được chuyển đi thành công.
+- **Lưu trữ bằng chứng hoàn tất (Bắt buộc):** Kế toán thực hiện chuyển khoản xong **bắt buộc phải tải lên tệp ảnh chụp màn hình giao dịch thành công** trực tiếp lên hệ thống (JPG, JPEG, PNG, WebP, tối đa 5 MB), kèm ghi chú (tùy chọn). **Không cho phép kế toán nhập tay mã giao dịch**; hệ thống tự động sinh mã giao dịch hoàn tiền duy nhất theo cấu trúc `REFUND-<YYYYMMDD>-<RETURN_CODE_SHORT>-<RAND6>` (ví dụ `REFUND-20261120-RT8A91B2C3-K4M9P2`) để ghi nhận thời gian, nhân viên phụ trách và phân biệt rõ với giao dịch thu tiền lúc mua hàng. Trạng thái chỉ được chuyển sang "Đã hoàn tiền" khi tiền đã thực sự được chuyển đi thành công và lưu đủ chứng từ.
+- **Đồng bộ trạng thái về đơn hàng gốc:** Ngay sau khi xác nhận hoàn tiền thành công, nếu tổng số lượng đã được hoàn tiền trên các phiếu của đơn hàng đã đạt **100% số lượng từng sản phẩm trong đơn gốc**, hệ thống tự động cập nhật đơn hàng gốc sang trạng thái **Đã trả hàng** và trạng thái thanh toán **Đã hoàn tiền**. Nếu khách chỉ trả và hoàn tiền một phần đơn hàng thì giữ nguyên trạng thái đơn hàng gốc.
 - **Lưu ý khi cửa hàng trễ hạn:** Nếu quá 2 ngày làm việc kể từ khi đủ điều kiện thực hiện hoàn ở bước này mà chưa hoàn tất chuyển tiền, hệ thống tự cảnh báo quá hạn. Nhân viên nhập lý do và ngày dự kiến chuyển tiền để hệ thống thông báo cho khách; không yêu cầu khách hàng phải làm lại thủ tục (chi tiết tại Mục 6 - Phần V).
 
 ### BƯỚC 6: Phân loại hàng hóa và cập nhật nhập kho
@@ -519,8 +533,8 @@ Các quy tắc về hạn xử lý, gia hạn, ảnh, lưu 5 năm từ khi giả
 
 | Nội dung | Đã chốt | Chưa chốt hoặc cần nhóm cung cấp |
 | :--- | :--- | :--- |
-| Vận chuyển | Shop đặt chuyến, báo phí khách xác nhận; ai chịu phí theo lý do đã xác minh | Tên đơn vị đang dùng, cách lấy giá, phí thực tế; nhập giá thủ công hay kết nối tự động. Chưa có mức phí cố định. |
-| Thanh toán thật | COD/chuyển khoản hoàn về tài khoản khách xác nhận; qua dịch vụ có hỗ trợ hoàn thì ưu tiên phương thức gốc | Phương thức mua hàng nhóm thực sự hỗ trợ, tên dịch vụ, khả năng hoàn, cách kết nối và nhận kết quả. Nếu dịch vụ không hỗ trợ hoàn thì cần chọn phương án trước khi triển khai. Không mặc định đã có ngân hàng/ví điện tử tích hợp. |
+| Vận chuyển | Dùng **Giao Hàng Nhanh (GHN)** cho chiều thu gom hàng trả; khách chọn địa chỉ từ sổ địa chỉ hoặc mặc định theo đơn gốc; shop tự động tạo đơn thu gom GHN ngay tại **Bước 2 (Duyệt)** (cho phép bỏ qua GHN nếu khách tự mang tới cửa hàng); phân định người chịu phí theo lý do trả hàng (`Đổi ý` chịu phí GHN/dự phòng 30.000 đ, `Hàng lỗi`/`Giao sai` hoặc bỏ qua GHN giữ 0 đ); **tự động đồng bộ trạng thái bàn giao & nhận kho ở Bước 3–4 qua Webhook GHN (có khóa bí mật) kết hợp tác vụ chạy nền, vẫn giữ thao tác tay dự phòng và tự động kế thừa phí GHN sang Bước 4 kiểm định.** | *(Đã chốt đủ luồng vận chuyển GHN chiều hoàn)* |
+| Thanh toán thật | Thống nhất hoàn tiền qua **chuyển khoản ngân hàng** về đủ 3 thông tin tài khoản khách xác nhận (cho cả COD và thanh toán trực tuyến); hệ thống sinh sẵn **mã VietQR** cho kế toán quét chuyển nhanh; **bắt buộc tải lên ảnh chụp màn hình giao dịch** khi xác nhận hoàn tiền và **không cho nhập tay mã giao dịch** (hệ thống tự sinh mã duy nhất `REFUND-<YYYYMMDD>-<RETURN_CODE_SHORT>-<RAND6>`); tự động đồng bộ **Đã trả hàng / Đã hoàn tiền** về đơn hàng gốc khi hoàn đủ 100% đơn. | *(Đã chốt phương án hoàn tiền hiện tại; nếu sau này mở rộng hoàn tự động trực tiếp qua API cổng VNPay/ví điện tử sẽ bổ sung ở giai đoạn nâng cấp)* |
 
 **Phân biệt thời gian lưu và hạn trả:** lưu lịch sử 5 năm không có nghĩa khách được tạo yêu cầu trả sau 5 năm. Hạn gửi yêu cầu vẫn là 7 ngày theo quy tắc đã chốt. Khi đủ 5 năm kể từ khi giải quyết xong cả hàng và tiền thì xóa dữ liệu hồ sơ trả hàng theo phạm vi ở Phần V; không còn để cách xử lý hết hạn ở trạng thái chưa chốt.
 

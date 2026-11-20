@@ -27,6 +27,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -39,7 +40,9 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -242,20 +245,46 @@ public class ReturnRequestAdminController {
     }
 
     /**
-     * Chức năng (Bước 5): Xác nhận hoàn tiền thật và lưu giao dịch hoàn tiền (có khóa bi quan chống bấm lặp 2 lần).
+     * Chức năng (Bước 5): Xác nhận hoàn tiền thật qua biểu mẫu {@code multipart/form-data} kèm tệp ảnh chụp màn hình
+     * biên lai chuyển khoản; hệ thống tự tải ảnh lên Cloudinary, tự sinh mã giao dịch {@code REFUND-...} và lưu đối soát.
      *
-     * @param id      Mã ID phiếu trả hàng (> 0).
-     * @param request DTO chứa mã giao dịch/ủy nhiệm chi duy nhất và ảnh chứng từ chuyển khoản (tùy chọn).
+     * @param id         Mã ID phiếu trả hàng (> 0).
+     * @param request    Phần JSON chứa ghi chú hoàn tiền (tùy chọn).
+     * @param proofImage Tệp ảnh chụp màn hình giao dịch chuyển khoản thành công (bắt buộc).
      * @return {@link ResponseEntity} mã 200 OK kèm phiếu đã chuyển sang {@code REFUNDED}.
      */
-    @PostMapping("/{id}/refund")
+    @PostMapping(value = "/{id}/refund", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
     public ResponseEntity<ApiResponse<ReturnRequestResponse>> executeRefund(
             @PathVariable
             @NotNull(message = "Vui lòng chọn mã yêu cầu trả hàng.")
             @Positive(message = "Mã yêu cầu trả hàng phải lớn hơn 0.") Long id,
-            @RequestBody @Valid ReturnRequestRefundRequest request) {
-        ReturnRequestResponse response = returnRequestAdminService.executeRefund(id, request);
+            @RequestPart(value = "request", required = false) @Valid ReturnRequestRefundRequest request,
+            @RequestPart(value = "proofImage", required = false) MultipartFile proofImage) {
+        ReturnRequestResponse response = returnRequestAdminService.executeRefund(id, request, proofImage);
+        return ResponseEntity.ok(ApiResponse.<ReturnRequestResponse>builder()
+                .code(HttpStatus.OK.value())
+                .message("Đã xác nhận hoàn tiền thành công.")
+                .data(response)
+                .build());
+    }
+
+    /**
+     * Chức năng (Bước 5 - Chặn JSON không có ảnh): Tiếp nhận request JSON thuần để tầng Service trả lỗi
+     * {@code REFUND_PROOF_IMAGE_REQUIRED} (hoặc {@code UNSUPPORTED_FIELD} nếu gửi trường cấm) thống nhất theo chuẩn {@code ApiResponse}.
+     *
+     * @param id      Mã ID phiếu trả hàng (> 0).
+     * @param request Phần JSON gửi lên (không có tệp ảnh).
+     * @return Không bao giờ thành công vì bắt buộc phải tải lên tệp ảnh chụp màn hình giao dịch.
+     */
+    @PostMapping(value = "/{id}/refund", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
+    public ResponseEntity<ApiResponse<ReturnRequestResponse>> executeRefundJsonFallback(
+            @PathVariable
+            @NotNull(message = "Vui lòng chọn mã yêu cầu trả hàng.")
+            @Positive(message = "Mã yêu cầu trả hàng phải lớn hơn 0.") Long id,
+            @RequestBody(required = false) @Valid ReturnRequestRefundRequest request) {
+        ReturnRequestResponse response = returnRequestAdminService.executeRefund(id, request, null);
         return ResponseEntity.ok(ApiResponse.<ReturnRequestResponse>builder()
                 .code(HttpStatus.OK.value())
                 .message("Đã xác nhận hoàn tiền thành công.")

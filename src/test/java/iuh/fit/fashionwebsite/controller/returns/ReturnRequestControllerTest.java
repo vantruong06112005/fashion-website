@@ -458,4 +458,39 @@ class ReturnRequestControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.customerConfirmedPlan").value(true));
     }
+
+    /**
+     * Kiểm thử tạo phiếu trả hàng chấp nhận {@code pickupAddressId}, {@code pickupContactName}, {@code pickupPhone},
+     * đồng thời chặn khách tự chèn {@code returnTrackingCode}, {@code returnShippingProvider} hoặc text {@code pickupAddress}.
+     */
+    @Test
+    void createReturnAcceptsPickupAddressIdAndRejectsReturnTrackingOrRawPickupText() throws Exception {
+        when(returnRequestService.createReturnRequest(any())).thenReturn(ReturnRequestResponse.builder()
+                .id(1L).returnCode("RT-1").status(ReturnRequestStatus.PENDING_APPROVAL)
+                .pickupContactName("Nguyễn Văn A").pickupPhone("0901234567")
+                .pickupAddress("12 Nguyễn Văn Bảo").pickupProvinceName("Hồ Chí Minh")
+                .pickupWardName("Phường Hạnh Thông").build());
+
+        String validPickupBody = """
+                {"orderId":10,"reason":"CHANGE_OF_MIND","reasonDetail":"Không vừa size.",
+                 "pickupAddressId":55,"pickupContactName":"Nguyễn Văn A","pickupPhone":"0901234567",
+                 "items":[{"orderItemId":101,"quantity":1}]}
+                """;
+        mvc.perform(post("/returns").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER")))
+                        .contentType(MediaType.APPLICATION_JSON).content(validPickupBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.pickupProvinceName").value("Hồ Chí Minh"))
+                .andExpect(jsonPath("$.data.pickupWardName").value("Phường Hạnh Thông"));
+
+        // Khách không được tự gán mã vận đơn chiều hoàn hoặc nhập text địa chỉ trực tiếp
+        mvc.perform(post("/returns").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(BODY.replace("\"orderId\":10,", "\"orderId\":10,\"returnTrackingCode\":\"FAKE123\",")))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(post("/returns").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(BODY.replace("\"orderId\":10,", "\"orderId\":10,\"pickupAddress\":\"Tự nhập tay\",")))
+                .andExpect(status().isBadRequest());
+    }
 }

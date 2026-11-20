@@ -12,6 +12,7 @@ import iuh.fit.fashionwebsite.entity.ReturnRequest;
 import iuh.fit.fashionwebsite.entity.ReturnRequestImage;
 import iuh.fit.fashionwebsite.entity.ReturnRequestItem;
 import iuh.fit.fashionwebsite.entity.User;
+import iuh.fit.fashionwebsite.entity.UserAddress;
 import iuh.fit.fashionwebsite.enums.OrderStatus;
 import iuh.fit.fashionwebsite.enums.ReturnRequestStatus;
 import iuh.fit.fashionwebsite.exception.AppException;
@@ -21,6 +22,7 @@ import iuh.fit.fashionwebsite.repository.OrderItemRepository;
 import iuh.fit.fashionwebsite.repository.OrderRepository;
 import iuh.fit.fashionwebsite.repository.ReturnRequestItemRepository;
 import iuh.fit.fashionwebsite.repository.ReturnRequestRepository;
+import iuh.fit.fashionwebsite.repository.UserAddressRepository;
 import iuh.fit.fashionwebsite.service.returns.ReturnRequestCreatedEvent;
 import iuh.fit.fashionwebsite.service.returns.ReturnRequestImageService;
 import iuh.fit.fashionwebsite.service.returns.ReturnRequestService;
@@ -61,6 +63,7 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
     private final OrderItemRepository orderItemRepository;
     private final ReturnRequestRepository returnRequestRepository;
     private final ReturnRequestItemRepository returnRequestItemRepository;
+    private final UserAddressRepository userAddressRepository;
     private final ReturnRequestMapper returnRequestMapper;
     private final UserService userService;
     private final Clock returnRequestClock;
@@ -114,6 +117,8 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         returnRequest.setUser(currentUser);
         returnRequest.setOrder(order);
         returnRequest.setReturnCode(generateReturnCode());
+        // Chốt snapshot địa chỉ & liên hệ lấy hàng trước khi upload ảnh để chặn sớm nếu pickupAddressId không hợp lệ/thiếu dữ liệu.
+        applyPickupAddressForCreate(returnRequest, order, currentUser, request);
         returnRequest.setImages(returnRequestMapper.toReturnRequestImages(returnRequestImageService.upload(files)));
         // Gán quan hệ hai chiều và lưu snapshot biến thể cũ (oldVariant) phục vụ bước nhập lại kho sau kiểm định.
         for (int index = 0; index < request.getItems().size(); index++) {
@@ -234,6 +239,8 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         if (request.getAccountHolderName() != null) {
             returnRequest.setAccountHolderName(request.getAccountHolderName());
         }
+        // Cập nhật địa chỉ/liên hệ lấy hàng (nếu khách có truyền mới) trước khi tải ảnh mới lên Cloudinary.
+        applyPickupAddressForUpdate(returnRequest, currentUser, request);
 
         List<ReturnRequestItem> updatedItems = returnRequestMapper.toReturnRequestItems(request.getItems());
         for (int index = 0; index < request.getItems().size(); index++) {
@@ -587,6 +594,106 @@ public class ReturnRequestServiceImpl implements ReturnRequestService {
         if (requestedQuantity > (long) orderItem.getQuantity() - usedQuantity) {
             throw new AppException(ReturnRequestErrorCode.QUANTITY_EXCEEDED);
         }
+    }
+
+    /**
+     * Chức năng: Gán snapshot địa chỉ và thông tin người liên hệ lấy hàng trả khi tạo phiếu mới.
+     * Nếu khách chọn {@code pickupAddressId} thì tra cứu trong sổ địa chỉ của chính khách hàng đó (chống IDOR)
+     * và chép bản sao cứng; nếu không truyền thì tự động lấy mặc định từ đơn hàng gốc {@code Order}.
+     *
+     * @param returnRequest Phiếu trả hàng mới đang khởi tạo.
+     * @param order         Đơn hàng gốc đã được xác minh quyền sở hữu.
+     * @param currentUser   Khách hàng đang đăng nhập.
+     * @param request       DTO tạo phiếu trả hàng chứa {@code pickupAddressId}, {@code pickupContactName}, {@code pickupPhone} (tùy chọn).
+     */
+    private void applyPickupAddressForCreate(
+            ReturnRequest returnRequest,
+            Order order,
+            User currentUser,
+            ReturnRequestCreationRequest request
+    ) {
+        if (request.getPickupAddressId() != null) {
+            UserAddress selectedAddress = resolveOwnedCompletePickupAddress(
+                    request.getPickupAddressId(), currentUser.getId());
+            returnRequest.setPickupAddress(trimToNull(selectedAddress.getFullAddress()));
+            returnRequest.setPickupProvinceName(trimToNull(selectedAddress.getProvinceName()));
+            returnRequest.setPickupWardName(trimToNull(selectedAddress.getWardName()));
+        } else {
+            // Không gửi pickupAddressId -> mặc định chép snapshot địa chỉ giao hàng từ đơn hàng gốc.
+            returnRequest.setPickupAddress(trimToNull(order.getShippingAddress()));
+            returnRequest.setPickupProvinceName(trimToNull(order.getShippingProvinceName()));
+            returnRequest.setPickupWardName(trimToNull(order.getShippingWardName()));
+        }
+
+        // Tên & SĐT người bàn giao: ưu tiên giá trị khách truyền mới, nếu bỏ trống thì fallback từ đơn hàng gốc.
+        String contactName = trimToNull(request.getPickupContactName());
+        returnRequest.setPickupContactName(contactName != null ? contactName : trimToNull(order.getShippingRecipientName()));
+
+        String contactPhone = trimToNull(request.getPickupPhone());
+        returnRequest.setPickupPhone(contactPhone != null ? contactPhone : trimToNull(order.getShippingPhone()));
+    }
+
+    /**
+     * Chức năng: Cập nhật snapshot địa chỉ và thông tin người liên hệ lấy hàng khi khách sửa phiếu ở trạng thái chờ duyệt.
+     * Chỉ ghi đè các thông tin khách có truyền lên; giữ nguyên dữ liệu hiện có nếu khách để trống.
+     *
+     * @param returnRequest Phiếu trả hàng đang chỉnh sửa.
+     * @param currentUser   Khách hàng đang đăng nhập.
+     * @param request       DTO cập nhật phiếu trả hàng.
+     */
+    private void applyPickupAddressForUpdate(
+            ReturnRequest returnRequest,
+            User currentUser,
+            ReturnRequestUpdateRequest request
+    ) {
+        if (request.getPickupAddressId() != null) {
+            UserAddress selectedAddress = resolveOwnedCompletePickupAddress(
+                    request.getPickupAddressId(), currentUser.getId());
+            returnRequest.setPickupAddress(trimToNull(selectedAddress.getFullAddress()));
+            returnRequest.setPickupProvinceName(trimToNull(selectedAddress.getProvinceName()));
+            returnRequest.setPickupWardName(trimToNull(selectedAddress.getWardName()));
+        }
+        String contactName = trimToNull(request.getPickupContactName());
+        if (contactName != null) {
+            returnRequest.setPickupContactName(contactName);
+        }
+        String contactPhone = trimToNull(request.getPickupPhone());
+        if (contactPhone != null) {
+            returnRequest.setPickupPhone(contactPhone);
+        }
+    }
+
+    /**
+     * Chức năng: Tra cứu địa chỉ trong sổ địa chỉ {@code user_addresses} thuộc quyền sở hữu của khách hàng
+     * và xác minh địa chỉ đã có đầy đủ số nhà/đường, Tỉnh/Thành phố và Phường/Xã phục vụ gọi GHN.
+     *
+     * @param pickupAddressId ID bản ghi trong bảng {@code user_addresses}.
+     * @param userId          ID khách hàng đang đăng nhập (dùng chống IDOR).
+     * @return Thực thể {@link UserAddress} hợp lệ và đầy đủ thông tin hành chính.
+     */
+    private UserAddress resolveOwnedCompletePickupAddress(Long pickupAddressId, Long userId) {
+        // Truy vấn kèm userId để chống IDOR: địa chỉ không tồn tại hoặc thuộc tài khoản khác đều trả cùng 1 mã lỗi.
+        UserAddress address = userAddressRepository.findByIdAndUserId(pickupAddressId, userId)
+                .orElseThrow(() -> new AppException(ReturnRequestErrorCode.PICKUP_ADDRESS_NOT_FOUND));
+        if (trimToNull(address.getFullAddress()) == null
+                || trimToNull(address.getProvinceName()) == null
+                || trimToNull(address.getWardName()) == null) {
+            throw new AppException(ReturnRequestErrorCode.PICKUP_ADDRESS_INCOMPLETE);
+        }
+        return address;
+    }
+
+    /**
+     * Chức năng: Cắt khoảng trắng hai đầu của chuỗi và quy về {@code null} nếu chuỗi rỗng hoặc chỉ chứa khoảng trắng.
+     *
+     * @param value Chuỗi đầu vào cần chuẩn hóa.
+     * @return Chuỗi đã cắt khoảng trắng, hoặc {@code null} nếu đầu vào rỗng.
+     */
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 
     /**

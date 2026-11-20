@@ -1,6 +1,7 @@
 package iuh.fit.fashionwebsite.dto.response;
 
 import iuh.fit.fashionwebsite.enums.ReturnRequestStatus;
+import iuh.fit.fashionwebsite.enums.ShippingProvider;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -59,6 +60,15 @@ public class ReturnRequestResponse {
     private String overdueReason;
     private LocalDateTime estimatedCompletionAt;
 
+    // --- Nhóm thông tin vận chuyển chiều hoàn & địa chỉ lấy hàng trả ---
+    private ShippingProvider returnShippingProvider;
+    private String returnTrackingCode;
+    private String pickupContactName;
+    private String pickupPhone;
+    private String pickupAddress;
+    private String pickupProvinceName;
+    private String pickupWardName;
+
     // --- Nhóm thông tin tài chính (tiền hoàn, phí ship) & tài khoản ngân hàng nhận hoàn tiền ---
     // Thông tin hoàn tiền, phí vận chuyển & tài khoản ngân hàng
     private BigDecimal itemsRefundAmount;
@@ -73,6 +83,7 @@ public class ReturnRequestResponse {
     private String bankAccountHolder;
     private String refundTransactionCode;
     private String refundProofImageUrl;
+    private String refundVietQrUrl;
 
     // --- Nhóm thông tin kết quả xét duyệt, phản hồi phương án của khách & dấu vết nhân sự xử lý ---
     private String rejectionReason;

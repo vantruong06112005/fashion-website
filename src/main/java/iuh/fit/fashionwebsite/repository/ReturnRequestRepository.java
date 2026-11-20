@@ -2,6 +2,7 @@ package iuh.fit.fashionwebsite.repository;
 
 import iuh.fit.fashionwebsite.entity.ReturnRequest;
 import iuh.fit.fashionwebsite.enums.ReturnRequestStatus;
+import iuh.fit.fashionwebsite.enums.ShippingProvider;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -84,6 +85,52 @@ public interface ReturnRequestRepository extends JpaRepository<ReturnRequest, Lo
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from ReturnRequest r join fetch r.order where r.id = :id")
     Optional<ReturnRequest> findByIdForUpdate(@Param("id") Long id);
+
+    /**
+     * Chức năng: Tải trước phiếu trả hàng cùng danh sách dòng sản phẩm và biến thể (không giữ khóa ghi)
+     * để chuẩn bị dữ liệu kích thước/khối lượng gọi API GHN bên ngoài transaction khóa bi quan.
+     *
+     * @param id Mã ID phiếu trả hàng cần chuẩn bị tạo vận đơn chiều hoàn.
+     * @return {@link Optional}&lt;{@link ReturnRequest}&gt; đã nạp sẵn {@code items}, {@code orderItem} và {@code productVariant}.
+     */
+    @Query("select distinct r from ReturnRequest r " +
+            "left join fetch r.items i " +
+            "left join fetch i.orderItem oi " +
+            "left join fetch i.oldVariant " +
+            "left join fetch oi.productVariant " +
+            "where r.id = :id")
+    Optional<ReturnRequest> findByIdWithItemsForShipping(@Param("id") Long id);
+
+    /**
+     * Chức năng: Tìm và khóa bi quan ({@code PESSIMISTIC_WRITE}) phiếu trả hàng theo mã vận đơn chiều hoàn
+     * để xử lý đồng bộ trạng thái từ Webhook GHN hoặc tác vụ chạy nền an toàn, chống xử lý trùng lặp.
+     *
+     * @param trackingCode Mã vận đơn chiều hoàn ({@code return_tracking_code}).
+     * @return {@link Optional}&lt;{@link ReturnRequest}&gt; đã khóa kèm {@code user} để phát sự kiện thông báo.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from ReturnRequest r left join fetch r.user where r.returnTrackingCode = :trackingCode")
+    Optional<ReturnRequest> findByReturnTrackingCodeForUpdate(@Param("trackingCode") String trackingCode);
+
+    /**
+     * Chức năng: Lấy danh sách phiếu trả hàng đang chờ nhận hàng trả qua GHN thật (loại trừ mã mô phỏng dev/demo)
+     * để tác vụ chạy nền đối soát chi tiết vận đơn với máy chủ GHN.
+     *
+     * @param status   Trạng thái phiếu cần theo dõi ({@link ReturnRequestStatus#WAITING_FOR_RETURN_DELIVERY}).
+     * @param provider Đơn vị vận chuyển ({@link ShippingProvider#GHN}).
+     * @return Danh sách {@link ReturnRequest} có mã vận đơn GHN cần đồng bộ.
+     */
+    @Query("""
+            select r from ReturnRequest r
+            where r.status = :status
+              and r.returnShippingProvider = :provider
+              and r.returnTrackingCode is not null
+              and r.returnTrackingCode not like 'GHN-RET-DEMO-%'
+            """)
+    List<ReturnRequest> findActiveGhnReturnRequestsForSync(
+            @Param("status") ReturnRequestStatus status,
+            @Param("provider") ShippingProvider provider
+    );
 
     /**
      * Chức năng: Tra cứu danh sách phiếu trả hàng cho nhân viên / quản trị viên với các bộ lọc tùy chọn.

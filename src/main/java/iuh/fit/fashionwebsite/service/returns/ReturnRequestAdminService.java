@@ -21,6 +21,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -131,17 +132,20 @@ public interface ReturnRequestAdminService {
             @Valid ReturnRequestInspectRequest request);
 
     /**
-     * Chức năng (Bước 5): Xác nhận hoàn tiền thật, ghi nhận mã giao dịch/ủy nhiệm chi, lưu {@code PaymentTransaction} với khóa chống lặp.
+     * Chức năng (Bước 5): Xác nhận hoàn tiền thật sau khi kế toán chuyển khoản bằng tệp ảnh chụp màn hình biên lai,
+     * hệ thống tự sinh mã giao dịch duy nhất {@code REFUND-...}, lưu {@code PaymentTransaction} với khóa chống lặp
+     * và đồng bộ trạng thái đơn hàng gốc khi hoàn tất 100% đơn.
      *
-     * @param id      Mã ID phiếu trả hàng (> 0).
-     * @param request DTO chứa mã giao dịch ngân hàng (duy nhất) và ảnh chứng từ chuyển khoản (tùy chọn).
+     * @param id         Mã ID phiếu trả hàng (> 0).
+     * @param request    DTO chứa ghi chú hoàn tiền (tùy chọn).
+     * @param proofImage Tệp ảnh chụp màn hình giao dịch chuyển khoản thành công (bắt buộc).
      * @return {@link ReturnRequestResponse} phiếu đã chuyển sang {@code REFUNDED}.
      */
     ReturnRequestResponse executeRefund(
             @NotNull(message = "Vui lòng chọn mã yêu cầu trả hàng.")
             @Positive(message = "Mã yêu cầu trả hàng phải lớn hơn 0.") Long id,
-            @NotNull(message = "Vui lòng nhập thông tin giao dịch hoàn tiền.")
-            @Valid ReturnRequestRefundRequest request);
+            @Valid ReturnRequestRefundRequest request,
+            MultipartFile proofImage);
 
     /**
      * Chức năng (Bước 6): Phân loại và nhập lại tồn kho bán cho số lượng hàng đạt chuẩn (chỉ cộng tồn kho đúng 1 lần).

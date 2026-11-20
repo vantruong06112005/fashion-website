@@ -13,7 +13,9 @@ import iuh.fit.fashionwebsite.dto.request.ReturnRequestRefundRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestRejectRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestRestockItemRequest;
 import iuh.fit.fashionwebsite.dto.request.ReturnRequestRestockRequest;
+import iuh.fit.fashionwebsite.dto.request.shipping.GhnOrderCreationRequest;
 import iuh.fit.fashionwebsite.dto.response.ReturnRequestHolidayResponse;
+import iuh.fit.fashionwebsite.dto.response.shipping.GhnOrderResponse;
 import iuh.fit.fashionwebsite.entity.Order;
 import iuh.fit.fashionwebsite.entity.OrderItem;
 import iuh.fit.fashionwebsite.entity.PaymentMethod;
@@ -23,7 +25,10 @@ import iuh.fit.fashionwebsite.entity.ReturnRequest;
 import iuh.fit.fashionwebsite.entity.ReturnRequestHoliday;
 import iuh.fit.fashionwebsite.entity.ReturnRequestItem;
 import iuh.fit.fashionwebsite.entity.User;
+import iuh.fit.fashionwebsite.enums.OrderStatus;
+import iuh.fit.fashionwebsite.enums.PaymentStatus;
 import iuh.fit.fashionwebsite.enums.ReturnRequestStatus;
+import iuh.fit.fashionwebsite.enums.ShippingProvider;
 import iuh.fit.fashionwebsite.enums.TransactionStatus;
 import iuh.fit.fashionwebsite.exception.AppException;
 import iuh.fit.fashionwebsite.exception.returns.ReturnRequestErrorCode;
@@ -41,14 +46,19 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mapstruct.factory.Mappers;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -79,6 +89,8 @@ class ReturnRequestAdminServiceTest {
     @Mock private ProductVariantRepository productVariantRepository;
     @Mock private PaymentTransactionRepository paymentTransactionRepository;
     @Mock private PaymentMethodRepository paymentMethodRepository;
+    @Mock private ReturnRequestShippingService returnRequestShippingService;
+    @Mock private ReturnRequestImageService returnRequestImageService;
     @Mock private UserService userService;
     @Mock private ApplicationEventPublisher eventPublisher;
 
@@ -107,6 +119,8 @@ class ReturnRequestAdminServiceTest {
         customer = User.builder().id(7L).username("customer01").build();
         variant = ProductVariant.builder().id(8L).stockQuantity(10).build();
         order = Order.builder().id(10L).orderCode("ORD-10").user(customer)
+                .orderStatus(OrderStatus.DELIVERED)
+                .paymentStatus(PaymentStatus.PAID)
                 .subtotal(new BigDecimal("200000"))
                 .discountAmount(BigDecimal.ZERO)
                 .shippingFee(new BigDecimal("20000"))
@@ -122,6 +136,11 @@ class ReturnRequestAdminServiceTest {
         returnRequest = ReturnRequest.builder().id(1L).returnCode("RT-1").user(customer).order(order)
                 .reason("DEFECTIVE").reasonDetail("Bung đường may")
                 .status(ReturnRequestStatus.PENDING_APPROVAL)
+                .pickupContactName("Nguyễn Văn A")
+                .pickupPhone("0901234567")
+                .pickupAddress("12 Nguyễn Văn Bảo")
+                .pickupProvinceName("Hồ Chí Minh")
+                .pickupWardName("Phường Hạnh Thông")
                 .isOverdue(false)
                 .items(List.of(returnItem))
                 .images(List.of())
@@ -131,6 +150,12 @@ class ReturnRequestAdminServiceTest {
 
         Clock clock = Clock.fixed(NOW.atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(),
                 ZoneId.of("Asia/Ho_Chi_Minh"));
+        TransactionTemplate directTransactionTemplate = new TransactionTemplate() {
+            @Override
+            public <T> T execute(TransactionCallback<T> action) {
+                return action.doInTransaction(null);
+            }
+        };
         adminService = new ReturnRequestAdminServiceImpl(
                 returnRequestRepository,
                 returnRequestItemRepository,
@@ -140,6 +165,9 @@ class ReturnRequestAdminServiceTest {
                 paymentMethodRepository,
                 Mappers.getMapper(ReturnRequestMapper.class),
                 new ReturnRefundCalculator(),
+                returnRequestShippingService,
+                returnRequestImageService,
+                directTransactionTemplate,
                 userService,
                 clock,
                 eventPublisher
@@ -148,8 +176,15 @@ class ReturnRequestAdminServiceTest {
         // Dùng lenient() cho các stub nền vì không phải test nào cũng đi qua mọi repository
         lenient().when(userService.getCurrentUserEntity()).thenReturn(staff);
         lenient().when(returnRequestRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(returnRequest));
+        lenient().when(returnRequestRepository.findByIdWithItemsForShipping(1L)).thenReturn(Optional.of(returnRequest));
         lenient().when(returnRequestRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(returnRequestItemRepository.findForReturnValidation(101L)).thenReturn(List.of(returnItem));
+        lenient().when(returnRequestImageService.upload(any()))
+                .thenReturn(List.of("https://res.cloudinary.com/demo/refund-proof.png"));
+        lenient().when(returnRequestShippingService.buildReturnPickupOrderRequest(any()))
+                .thenReturn(GhnOrderCreationRequest.builder().clientOrderCode("RT-1").build());
+        lenient().when(returnRequestShippingService.createReturnPickupOrder(any(), any()))
+                .thenReturn(new GhnOrderResponse("GHN-RET-001", 32000L, Instant.now()));
     }
 
     /**
@@ -189,7 +224,44 @@ class ReturnRequestAdminServiceTest {
         // Khách có tối đa 7 ngày kể từ khi được duyệt để gửi kiện hàng trả cho đơn vị vận chuyển
         assertEquals(NOW.plusDays(7), res.getHandoverDeadline());
         assertEquals(99L, res.getApprovedBy());
-        verify(eventPublisher).publishEvent(any(ReturnRequestStatusChangedEvent.class));
+        assertEquals(ShippingProvider.GHN, res.getReturnShippingProvider());
+        assertEquals("GHN-RET-001", res.getReturnTrackingCode());
+        // Lý do DEFECTIVE -> Shop chịu phí ship chiều hoàn (0đ)
+        assertEquals(0, BigDecimal.ZERO.compareTo(res.getReturnShippingFee()));
+
+        // Xác minh lời gọi HTTP sang GHN diễn ra TRƯỚC khi mở khóa bi quan PESSIMISTIC_WRITE
+        InOrder inOrder = inOrder(returnRequestShippingService, returnRequestRepository);
+        inOrder.verify(returnRequestShippingService).createReturnPickupOrder(any(), eq("RT-1"));
+        inOrder.verify(returnRequestRepository).findByIdForUpdate(1L);
+
+        ArgumentCaptor<ReturnRequestStatusChangedEvent> eventCaptor = ArgumentCaptor.forClass(ReturnRequestStatusChangedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertTrue(eventCaptor.getValue().detailMessage().contains("GHN-RET-001"));
+    }
+
+    /**
+     * Kiểm thử duyệt phiếu lý do {@code CHANGE_OF_MIND} gán sẵn cước GHN làm phí ship chiều hoàn dự kiến,
+     * và duyệt với {@code autoCreateShippingOrder = false} sẽ bỏ qua GHN (phí = 0đ, không tạo mã vận đơn).
+     */
+    @Test
+    void approveAssignsGhnFeeForChangeOfMindAndSupportsSkippingGhn() {
+        returnRequest.setReason("CHANGE_OF_MIND");
+        var withGhn = adminService.approveReturnRequest(1L, ReturnRequestApproveRequest.builder().build());
+        assertEquals(ShippingProvider.GHN, withGhn.getReturnShippingProvider());
+        assertEquals("GHN-RET-001", withGhn.getReturnTrackingCode());
+        assertEquals(0, new BigDecimal("32000").compareTo(withGhn.getReturnShippingFee()));
+
+        // Đặt lại trạng thái để test nhánh bỏ qua GHN (khách tự mang hàng đến cửa hàng)
+        returnRequest.setStatus(ReturnRequestStatus.PENDING_APPROVAL);
+        clearInvocations(returnRequestShippingService);
+        var skipped = adminService.approveReturnRequest(1L, ReturnRequestApproveRequest.builder()
+                .autoCreateShippingOrder(false)
+                .instructionNote("Khách mang trực tiếp tới cửa hàng.")
+                .build());
+        assertNull(skipped.getReturnShippingProvider());
+        assertNull(skipped.getReturnTrackingCode());
+        assertEquals(0, BigDecimal.ZERO.compareTo(skipped.getReturnShippingFee()));
+        verifyNoInteractions(returnRequestShippingService);
     }
 
     /**
@@ -325,6 +397,39 @@ class ReturnRequestAdminServiceTest {
     }
 
     /**
+     * Kiểm thử kế thừa phí vận chuyển GHN ở Bước 4: với đơn {@code CHANGE_OF_MIND} đã lưu sẵn
+     * {@code returnShippingFee} từ Bước 2, nếu nhân viên không truyền đè phí mới khi kiểm định
+     * thì hệ thống tự giữ nguyên phí GHN đó; nếu nhân viên có truyền số mới thì cập nhật theo số mới.
+     */
+    @Test
+    void inspectInheritsSavedGhnFeeForChangeOfMindWhenOmittedAndAllowsOverride() {
+        returnRequest.setReason("CHANGE_OF_MIND");
+        returnRequest.setStatus(ReturnRequestStatus.INSPECTING);
+        returnRequest.setReturnShippingFee(new BigDecimal("32000"));
+        returnRequest.setBankName("Vietcombank");
+        returnRequest.setAccountNumber("0123456789");
+        returnRequest.setAccountHolderName("NGUYEN VAN A");
+
+        // Không truyền returnShippingFee -> giữ nguyên 32.000đ từ Bước 2
+        var inherited = adminService.inspectReturnRequest(1L, ReturnRequestInspectRequest.builder()
+                .items(List.of(ReturnRequestInspectItemRequest.builder()
+                        .returnRequestItemId(501L).acceptedQuantity(2).build()))
+                .build());
+        assertEquals(0, new BigDecimal("32000").compareTo(inherited.getReturnShippingFee()));
+        assertEquals(0, new BigDecimal("168000").compareTo(inherited.getRefundAmount()));
+
+        // Cho phép nhân viên nhập số mới (ví dụ 25.000đ) để ghi đè khi cần
+        returnRequest.setStatus(ReturnRequestStatus.INSPECTING);
+        var overridden = adminService.inspectReturnRequest(1L, ReturnRequestInspectRequest.builder()
+                .items(List.of(ReturnRequestInspectItemRequest.builder()
+                        .returnRequestItemId(501L).acceptedQuantity(2).build()))
+                .returnShippingFee(new BigDecimal("25000"))
+                .build());
+        assertEquals(0, new BigDecimal("25000").compareTo(overridden.getReturnShippingFee()));
+        assertEquals(0, new BigDecimal("175000").compareTo(overridden.getRefundAmount()));
+    }
+
+    /**
      * Kiểm thử chặn nhân viên trừ phí ship trả về đối với phiếu lý do hàng lỗi ({@code DEFECTIVE}) khi không bật đề xuất đổi lý do.
      * <p>
      * Đầu vào / ngữ cảnh giả lập: Phiếu lý do {@code DEFECTIVE} ở {@code INSPECTING}, gửi {@code returnShippingFee = 25000}
@@ -426,30 +531,33 @@ class ReturnRequestAdminServiceTest {
         // Kiểm tra fallback sang FWDEMO1_BANK khi không có mã BANK_TRANSFER mặc định
         when(paymentMethodRepository.findByCode("BANK_TRANSFER")).thenReturn(Optional.empty());
         when(paymentMethodRepository.findByCode("FWDEMO1_BANK")).thenReturn(Optional.of(pm));
-        when(paymentTransactionRepository.findByTransactionCode("UNC-2026-001")).thenReturn(Optional.empty());
 
+        MockMultipartFile proofImage = validProofImage();
         var res = adminService.executeRefund(1L, ReturnRequestRefundRequest.builder()
-                .refundTransactionCode("UNC-2026-001")
-                .refundProofImageUrl("https://res.cloudinary.com/test/unc.png")
                 .note("Đã chuyển khoản")
-                .build());
+                .build(), proofImage);
 
         assertEquals(ReturnRequestStatus.REFUNDED, res.getStatus());
-        assertEquals("UNC-2026-001", res.getRefundTransactionCode());
+        assertNotNull(res.getRefundTransactionCode());
+        assertTrue(res.getRefundTransactionCode().matches("^REFUND-20261025-RT1-[A-Z2-9]{6}$"));
+        assertEquals("https://res.cloudinary.com/demo/refund-proof.png", res.getRefundProofImageUrl());
         assertEquals(NOW, res.getRefundedAt());
         assertEquals(NOW, res.getCompletedAt());
         assertEquals(99L, res.getRefundedBy());
+        // Hoàn đủ 100% đơn -> đồng bộ Order sang RETURNED & REFUNDED
+        assertEquals(OrderStatus.RETURNED, order.getOrderStatus());
+        assertEquals(PaymentStatus.REFUNDED, order.getPaymentStatus());
 
-        // Kiểm tra đối chiếu sổ quỹ: PaymentTransaction phải lưu đúng số tiền 200k và mã giao dịch UNC-2026-001
+        // Kiểm tra đối chiếu sổ quỹ: PaymentTransaction phải lưu đúng số tiền 200k và mã giao dịch tự sinh REFUND-...
         ArgumentCaptor<PaymentTransaction> txCaptor = ArgumentCaptor.forClass(PaymentTransaction.class);
         verify(paymentTransactionRepository).save(txCaptor.capture());
         assertEquals(TransactionStatus.REFUNDED, txCaptor.getValue().getStatus());
         assertEquals(new BigDecimal("200000"), txCaptor.getValue().getAmount());
-        assertEquals("UNC-2026-001", txCaptor.getValue().getTransactionCode());
+        assertEquals(res.getRefundTransactionCode(), txCaptor.getValue().getTransactionCode());
 
         // Tình huống 7: Nhấn hoàn tiền lần 2 bị chặn ngay lập tức.
         AppException dup = assertThrows(AppException.class, () -> adminService.executeRefund(1L,
-                ReturnRequestRefundRequest.builder().refundTransactionCode("UNC-2026-002").build()));
+                ReturnRequestRefundRequest.builder().build(), proofImage));
         assertSame(ReturnRequestErrorCode.RETURN_ALREADY_REFUNDED, dup.getErrorCode());
     }
 
@@ -478,12 +586,14 @@ class ReturnRequestAdminServiceTest {
         when(paymentMethodRepository.findByCode("BANK_TRANSFER"))
                 .thenReturn(Optional.of(PaymentMethod.builder().id(2L).code("BANK_TRANSFER").build()));
 
-        var res = adminService.executeRefund(1L, ReturnRequestRefundRequest.builder()
-                .refundTransactionCode("UNC-PARTIAL-1").build());
+        var res = adminService.executeRefund(1L, ReturnRequestRefundRequest.builder().build(), validProofImage());
 
         assertEquals(ReturnRequestStatus.REFUNDED, res.getStatus());
         // Vì còn 1 chiếc không đạt chuẩn chưa trả lại khách, phiếu chưa được phép đánh dấu hoàn tất toàn bộ
         assertNull(res.getCompletedAt());
+        // Mới hoàn 1/2 số lượng đơn -> đơn hàng gốc vẫn giữ nguyên DELIVERED & PAID
+        assertEquals(OrderStatus.DELIVERED, order.getOrderStatus());
+        assertEquals(PaymentStatus.PAID, order.getPaymentStatus());
 
         // Sau khi gửi trả hàng lỗi lại cho khách, admin bấm complete để chốt completedAt
         var completed = adminService.completeReturnRequest(1L);
@@ -829,13 +939,13 @@ class ReturnRequestAdminServiceTest {
      * và ưu tiên dùng phương thức thanh toán từ giao dịch gốc của đơn hàng khi ghi nhận giao dịch hoàn.
      */
     @Test
-    void executeRefundValidatesStatusDuplicateCodeAndUsesOrderTransactionPaymentMethod() {
+    void executeRefundValidatesStatusRequiresProofImageAndUsesOrderTransactionPaymentMethod() {
         returnRequest.setStatus(ReturnRequestStatus.WAITING_CUSTOMER_FEEDBACK);
         assertSame(ReturnRequestErrorCode.RETURN_NOT_WAITING_REFUND,
                 assertThrows(AppException.class, () -> adminService.executeRefund(1L,
-                        ReturnRequestRefundRequest.builder().refundTransactionCode("UNC-01").build())).getErrorCode());
+                        ReturnRequestRefundRequest.builder().build(), validProofImage())).getErrorCode());
 
-        // Đủ WAITING_REFUND kèm inspectedAt, full acceptedQuantity (tự động đóng completedAt) và thông tin ngân hàng đầy đủ
+        // Đủ WAITING_REFUND kèm inspectedAt, full acceptedQuantity và thông tin ngân hàng đầy đủ nhưng thiếu ảnh chứng từ -> REFUND_PROOF_IMAGE_REQUIRED
         returnRequest.setStatus(ReturnRequestStatus.WAITING_REFUND);
         returnRequest.setInspectedAt(NOW.minusHours(1));
         returnItem.setAcceptedQuantity(2);
@@ -844,31 +954,43 @@ class ReturnRequestAdminServiceTest {
         returnRequest.setAccountNumber("0123456789");
         returnRequest.setAccountHolderName("NGUYEN VAN A");
 
-        when(returnRequestRepository.existsByRefundTransactionCodeAndIdNot("UNC-DUP", 1L)).thenReturn(true);
-        assertSame(ReturnRequestErrorCode.DUPLICATE_REFUND_TRANSACTION_CODE,
+        assertSame(ReturnRequestErrorCode.REFUND_PROOF_IMAGE_REQUIRED,
                 assertThrows(AppException.class, () -> adminService.executeRefund(1L,
-                        ReturnRequestRefundRequest.builder().refundTransactionCode("UNC-DUP").build())).getErrorCode());
+                        ReturnRequestRefundRequest.builder().build(), null)).getErrorCode());
+
+        MockMultipartFile emptyFile = new MockMultipartFile("proofImage", "empty.png", "image/png", new byte[0]);
+        assertSame(ReturnRequestErrorCode.REFUND_PROOF_IMAGE_REQUIRED,
+                assertThrows(AppException.class, () -> adminService.executeRefund(1L,
+                        ReturnRequestRefundRequest.builder().build(), emptyFile)).getErrorCode());
+        verify(returnRequestImageService, never()).upload(any());
 
         PaymentMethod originalMethod = PaymentMethod.builder().id(5L).code("VNPAY").name("VNPay").build();
         order.setPaymentTransactions(List.of(PaymentTransaction.builder()
                 .transactionCode("PAY-10").paymentMethod(originalMethod).status(TransactionStatus.SUCCESS).build()));
-        when(returnRequestRepository.existsByRefundTransactionCodeAndIdNot("UNC-OK", 1L)).thenReturn(false);
 
         var refunded = adminService.executeRefund(1L, ReturnRequestRefundRequest.builder()
-                .refundTransactionCode("UNC-OK")
-                .refundProofImageUrl("https://cdn.example.com/unc-ok.jpg")
-                .build());
+                .note("Chuyển khoản hoàn đơn VNPay qua STK khách").build(), validProofImage());
 
         assertEquals(ReturnRequestStatus.REFUNDED, refunded.getStatus());
         assertEquals(NOW, refunded.getRefundedAt());
         assertEquals(NOW, refunded.getCompletedAt());
         assertEquals(99L, refunded.getRefundedBy());
+        assertTrue(refunded.getRefundTransactionCode().startsWith("REFUND-20261025-RT1-"));
 
         ArgumentCaptor<PaymentTransaction> txCaptor = ArgumentCaptor.forClass(PaymentTransaction.class);
         verify(paymentTransactionRepository).save(txCaptor.capture());
         assertEquals(originalMethod, txCaptor.getValue().getPaymentMethod());
         assertEquals(TransactionStatus.REFUNDED, txCaptor.getValue().getStatus());
         verify(paymentMethodRepository, never()).findByCode(any());
+    }
+
+    private MockMultipartFile validProofImage() {
+        return new MockMultipartFile(
+                "proofImage",
+                "refund-receipt.png",
+                "image/png",
+                new byte[]{(byte) 0x89, 'P', 'N', 'G', 13, 10, 26, 10, 0}
+        );
     }
 
     /**

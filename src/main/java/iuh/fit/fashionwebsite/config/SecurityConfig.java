@@ -58,6 +58,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/auth/**", "/ws/**").permitAll()
                         .requestMatchers("/payment/vn-pay-callback", "/payment/vn-pay-ipn").permitAll()
+                        .requestMatchers("/returns/webhooks/**").permitAll()
                         .requestMatchers("/admin/chat/**", "/api/admin/chat/**").hasAnyRole("ADMIN", "STAFF")
                         .requestMatchers(HttpMethod.GET, "/products", "/products/**", "/categories", "/categories/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/shipping/provinces", "/shipping/wards").permitAll()
@@ -80,7 +81,7 @@ public class SecurityConfig {
         DefaultBearerTokenResolver delegate = new DefaultBearerTokenResolver();
         return request -> {
             String path = request.getRequestURI().substring(request.getContextPath().length());
-            if (path.startsWith("/auth/") || path.startsWith("/ws")) {
+            if (path.startsWith("/auth/") || path.startsWith("/ws") || path.startsWith("/returns/webhooks/")) {
                 // nó không có nghĩa là tự auto bỏ qua xác thực JWT,
                 // mà là Spring Security sẽ không tìm token trong header Authorization.
                 return null;

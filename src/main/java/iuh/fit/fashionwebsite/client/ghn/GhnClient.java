@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import java.util.List;
+import java.util.Map;
 
 @Component
 public class GhnClient {
@@ -116,6 +117,37 @@ public class GhnClient {
         }
         if (response.data() == null) {
             throw new IllegalStateException("GHN không trả về dữ liệu tạo đơn");
+        }
+
+        return response.data();
+    }
+
+    /**
+     * Chức năng: Gọi API GHN {@code /v2/shipping-order/detail} để tra cứu trạng thái vận chuyển hiện tại của một mã vận đơn.
+     *
+     * @param orderCode Mã vận đơn GHN cần tra cứu.
+     * @return {@link GhnOrderDetailResponse} chứa trạng thái vận đơn ({@code status}) và thông tin phí/cập nhật.
+     */
+    public GhnOrderDetailResponse getGhnOrderDetail(String orderCode) {
+        GhnResponse<GhnOrderDetailResponse> response = restClient.post()
+                .uri("/v2/shipping-order/detail")
+                .header("Token", token)
+                .header("ShopId", shopId)
+                .body(Map.of("order_code", orderCode))
+                .retrieve()
+                .body(new ParameterizedTypeReference<>() {});
+
+        if (response == null) {
+            throw new IllegalStateException("GHN không trả về order detail response");
+        }
+
+        if (!Integer.valueOf(200).equals(response.code())) {
+            throw new IllegalStateException(
+                    "GHN trả lỗi: " + response.code() + " - " + response.message()
+            );
+        }
+        if (response.data() == null) {
+            throw new IllegalStateException("GHN không trả về dữ liệu chi tiết vận đơn");
         }
 
         return response.data();

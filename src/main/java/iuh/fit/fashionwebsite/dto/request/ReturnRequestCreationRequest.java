@@ -66,6 +66,20 @@ public class ReturnRequestCreationRequest {
     @Size(max = 100, message = "Tên chủ tài khoản không được quá 100 ký tự.")
     private String accountHolderName;
 
+    // Mã địa chỉ trong sổ địa chỉ của khách hàng (tùy chọn; bỏ trống sẽ tự lấy snapshot từ đơn hàng gốc).
+    @Positive(message = "Mã địa chỉ lấy hàng phải lớn hơn 0.")
+    private Long pickupAddressId;
+
+    // Tên người bàn giao hàng trả cho shipper (tùy chọn; bỏ trống sẽ lấy tên người nhận từ đơn hàng gốc).
+    @Size(max = 100, message = "Tên người liên hệ lấy hàng không được quá 100 ký tự.")
+    private String pickupContactName;
+
+    // Số điện thoại người bàn giao hàng trả (tùy chọn; bỏ trống sẽ lấy SĐT từ đơn hàng gốc).
+    @Pattern(regexp = "^(\\+84|0)[0-9]{9,10}$",
+            message = "Số điện thoại lấy hàng phải là số điện thoại Việt Nam hợp lệ.")
+    @Size(max = 20, message = "Số điện thoại lấy hàng không được quá 20 ký tự.")
+    private String pickupPhone;
+
     // Trường cũ chỉ giữ để báo lỗi rõ ràng. Service từ chối URL do client cung cấp;
     // tệp minh chứng phải đi qua multipart để kiểm tra nội dung và tải đúng folder.
     @Size(max = 5, message = "Mỗi yêu cầu trả hàng chỉ được gửi tối đa 5 ảnh.")

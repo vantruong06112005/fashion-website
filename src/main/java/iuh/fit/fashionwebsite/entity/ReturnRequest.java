@@ -3,6 +3,7 @@ package iuh.fit.fashionwebsite.entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import iuh.fit.fashionwebsite.enums.ReturnRequestStatus;
 import iuh.fit.fashionwebsite.enums.ReturnRequestType;
+import iuh.fit.fashionwebsite.enums.ShippingProvider;
 import iuh.fit.fashionwebsite.exception.AppException;
 import iuh.fit.fashionwebsite.exception.returns.ReturnRequestErrorCode;
 import jakarta.persistence.*;
@@ -22,7 +23,12 @@ import java.util.List;
  * Hỗ trợ xóa mềm qua {@code @SQLDelete} và tự động lọc bản ghi chưa xóa qua {@code @SQLRestriction}.
  */
 @Entity
-@Table(name = "return_requests")
+@Table(
+        name = "return_requests",
+        indexes = {
+                @Index(name = "idx_return_requests_return_tracking_code", columnList = "return_tracking_code")
+        }
+)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -164,6 +170,37 @@ public class ReturnRequest extends BaseEntity {
     // Thời gian dự kiến xử lý xong mới khi phiếu bị quá hạn.
     @Column(name = "estimated_completion_at")
     private LocalDateTime estimatedCompletionAt;
+
+    // --- Thông tin vận chuyển chiều hoàn & địa chỉ lấy hàng trả (snapshot cố định tại thời điểm tạo/sửa phiếu) ---
+
+    // Đơn vị vận chuyển chiều hoàn hàng về kho (do hệ thống/nhân viên gán ở Bước 2-3, khách không tự nhập).
+    @Enumerated(EnumType.STRING)
+    @Column(name = "return_shipping_provider", length = 50)
+    private ShippingProvider returnShippingProvider;
+
+    // Mã vận đơn chiều hoàn hàng về kho (phục vụ theo dõi hành trình và đối soát webhook vận chuyển).
+    @Column(name = "return_tracking_code", length = 100)
+    private String returnTrackingCode;
+
+    // Tên người liên hệ bàn giao kiện hàng trả cho shipper (mặc định chép từ người nhận của đơn hàng gốc).
+    @Column(name = "pickup_contact_name", length = 100)
+    private String pickupContactName;
+
+    // Số điện thoại người bàn giao kiện hàng trả cho shipper (mặc định chép từ SĐT của đơn hàng gốc).
+    @Column(name = "pickup_phone", length = 20)
+    private String pickupPhone;
+
+    // Địa chỉ chi tiết nơi shipper đến thu gom hàng trả (snapshot từ sổ địa chỉ đã chọn hoặc từ đơn hàng gốc).
+    @Column(name = "pickup_address", length = 500)
+    private String pickupAddress;
+
+    // Tên Tỉnh/Thành phố nơi lấy hàng trả, tách riêng theo chuẩn GHN.
+    @Column(name = "pickup_province_name", length = 100)
+    private String pickupProvinceName;
+
+    // Tên Phường/Xã nơi lấy hàng trả, tách riêng theo chuẩn GHN.
+    @Column(name = "pickup_ward_name", length = 100)
+    private String pickupWardName;
 
     // --- Thông tin hoàn tiền, phí vận chuyển trả về & ngân hàng (Phần III & Phần IV - Bước 5) ---
 

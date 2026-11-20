@@ -22,6 +22,9 @@ public class ReturnRequestApproveRequest {
     @Size(max = 1000, message = "Hướng dẫn bàn giao không được quá 1000 ký tự.")
     private String instructionNote;
 
+    // Cờ cho phép tự động gọi GHN tạo đơn thu gom chiều về khi duyệt (mặc định true; truyền false nếu khách tự mang hàng đến cửa hàng).
+    private Boolean autoCreateShippingOrder;
+
     /**
      * Chặn các trường JSON lạ không thuộc DTO duyệt yêu cầu để chống mass-assignment
      * (ví dụ: tự gửi thêm {@code status}, {@code approvedBy}, {@code handoverDeadline}).

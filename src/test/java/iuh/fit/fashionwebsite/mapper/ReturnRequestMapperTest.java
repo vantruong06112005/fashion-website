@@ -11,6 +11,7 @@ import iuh.fit.fashionwebsite.entity.ReturnRequestItem;
 import iuh.fit.fashionwebsite.entity.User;
 import iuh.fit.fashionwebsite.enums.ReturnRequestStatus;
 import iuh.fit.fashionwebsite.enums.ReturnRequestType;
+import iuh.fit.fashionwebsite.enums.ShippingProvider;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
@@ -236,6 +237,71 @@ class ReturnRequestMapperTest {
         // Kiểm tra ràng buộc cho từng phần tử trong list: không rỗng, không null, độ dài tối đa 255 ký tự
         request.setImageUrls(Arrays.asList(" ", null, "a".repeat(256)));
         assertEquals(3, validator.validate(request).size());
+    }
+
+    /**
+     * Kiểm thử ánh xạ các trường vận đơn chiều hoàn và snapshot địa chỉ lấy hàng từ Entity sang Response,
+     * đồng thời đảm bảo chiều tạo mới từ Request luôn để trống cho Service xử lý.
+     */
+    @Test
+    void responseMapsReturnShippingAndPickupSnapshotFields() {
+        var createEntity = mapper.toReturnRequest(validRequest());
+        assertNull(createEntity.getReturnShippingProvider());
+        assertNull(createEntity.getReturnTrackingCode());
+        assertNull(createEntity.getPickupAddress());
+        assertNull(createEntity.getPickupProvinceName());
+        assertNull(createEntity.getPickupWardName());
+
+        var entity = ReturnRequest.builder()
+                .id(12L)
+                .returnCode("RT-SHIP-01")
+                .status(ReturnRequestStatus.WAITING_FOR_RETURN_DELIVERY)
+                .returnShippingProvider(ShippingProvider.GHN)
+                .returnTrackingCode("GHN-RET-999")
+                .pickupContactName("Nguyễn Văn A")
+                .pickupPhone("0901234567")
+                .pickupAddress("12 Nguyễn Văn Bảo")
+                .pickupProvinceName("Hồ Chí Minh")
+                .pickupWardName("Phường Hạnh Thông")
+                .build();
+
+        var response = mapper.toReturnRequestResponse(entity);
+        assertEquals(ShippingProvider.GHN, response.getReturnShippingProvider());
+        assertEquals("GHN-RET-999", response.getReturnTrackingCode());
+        assertEquals("Nguyễn Văn A", response.getPickupContactName());
+        assertEquals("0901234567", response.getPickupPhone());
+        assertEquals("12 Nguyễn Văn Bảo", response.getPickupAddress());
+        assertEquals("Hồ Chí Minh", response.getPickupProvinceName());
+        assertEquals("Phường Hạnh Thông", response.getPickupWardName());
+        // Trạng thái WAITING_FOR_RETURN_DELIVERY chưa sinh link VietQR hoàn tiền
+        assertNull(response.getRefundVietQrUrl());
+    }
+
+    /**
+     * Kiểm thử tự động sinh đường dẫn ảnh VietQR khi phiếu ở trạng thái {@code WAITING_REFUND},
+     * có đủ 3 thông tin ngân hàng nhận tiền và số tiền hoàn dương; trả về {@code null} nếu tên ngân hàng lạ.
+     */
+    @Test
+    void responseGeneratesVietQrUrlOnlyWhenWaitingRefundWithSupportedBank() {
+        var waitingRefund = ReturnRequest.builder()
+                .id(20L)
+                .returnCode("RT-2026-0020")
+                .status(ReturnRequestStatus.WAITING_REFUND)
+                .refundAmount(new BigDecimal("175000"))
+                .bankName("Vietcombank")
+                .accountNumber("0123456789")
+                .accountHolderName("NGUYEN VAN A")
+                .build();
+
+        var res = mapper.toReturnRequestResponse(waitingRefund);
+        assertNotNull(res.getRefundVietQrUrl());
+        assertTrue(res.getRefundVietQrUrl().startsWith("https://img.vietqr.io/image/970436-0123456789-compact2.png"));
+        assertTrue(res.getRefundVietQrUrl().contains("amount=175000"));
+        assertTrue(res.getRefundVietQrUrl().contains("Hoan%20tien%20RT-2026-0020"));
+
+        // Ngân hàng không nằm trong bảng mã BIN -> null, không ném ngoại lệ
+        waitingRefund.setBankName("Unknown Bank");
+        assertNull(mapper.toReturnRequestResponse(waitingRefund).getRefundVietQrUrl());
     }
 
     /**

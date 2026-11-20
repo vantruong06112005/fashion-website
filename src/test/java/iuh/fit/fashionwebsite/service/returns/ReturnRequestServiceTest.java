@@ -12,6 +12,7 @@ import iuh.fit.fashionwebsite.entity.ReturnRequest;
 import iuh.fit.fashionwebsite.entity.ReturnRequestImage;
 import iuh.fit.fashionwebsite.entity.ReturnRequestItem;
 import iuh.fit.fashionwebsite.entity.User;
+import iuh.fit.fashionwebsite.entity.UserAddress;
 import iuh.fit.fashionwebsite.enums.OrderStatus;
 import iuh.fit.fashionwebsite.enums.ReturnRequestStatus;
 import iuh.fit.fashionwebsite.enums.ReturnRequestType;
@@ -22,6 +23,7 @@ import iuh.fit.fashionwebsite.repository.OrderItemRepository;
 import iuh.fit.fashionwebsite.repository.OrderRepository;
 import iuh.fit.fashionwebsite.repository.ReturnRequestItemRepository;
 import iuh.fit.fashionwebsite.repository.ReturnRequestRepository;
+import iuh.fit.fashionwebsite.repository.UserAddressRepository;
 import iuh.fit.fashionwebsite.service.returns.impl.ReturnRequestServiceImpl;
 import iuh.fit.fashionwebsite.service.user.UserService;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,6 +66,7 @@ class ReturnRequestServiceTest {
     @Mock private OrderItemRepository orderItemRepository;
     @Mock private ReturnRequestRepository returnRequestRepository;
     @Mock private ReturnRequestItemRepository returnRequestItemRepository;
+    @Mock private UserAddressRepository userAddressRepository;
     @Mock private UserService userService;
     @Mock private ReturnRequestImageService imageService;
     @Mock private ApplicationEventPublisher eventPublisher;
@@ -85,6 +88,11 @@ class ReturnRequestServiceTest {
     void setUp() {
         user = User.builder().id(7L).build();
         order = Order.builder().id(10L).user(user).orderCode("ORDER-10")
+                .shippingRecipientName("Nguyễn Văn A")
+                .shippingPhone("0901234567")
+                .shippingAddress("12 Nguyễn Văn Bảo, Gò Vấp")
+                .shippingProvinceName("Hồ Chí Minh")
+                .shippingWardName("Phường Hạnh Thông")
                 .orderStatus(OrderStatus.DELIVERED).deliveredAt(NOW.minusDays(1)).build();
         orderItem = OrderItem.builder().id(101L).order(order).quantity(3)
                 .productName("Áo đỏ").variantInfo("Đỏ - M")
@@ -92,7 +100,7 @@ class ReturnRequestServiceTest {
         Clock clock = Clock.fixed(NOW.atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(),
                 ZoneId.of("Asia/Ho_Chi_Minh"));
         service = new ReturnRequestServiceImpl(orderRepository, orderItemRepository,
-                returnRequestRepository, returnRequestItemRepository,
+                returnRequestRepository, returnRequestItemRepository, userAddressRepository,
                 Mappers.getMapper(ReturnRequestMapper.class), userService, clock, imageService, eventPublisher);
         // Dùng lenient() vì một số test sẽ ghi đè hoặc không đi tới hết tất cả các repository
         lenient().when(userService.getCurrentUserEntity()).thenReturn(user);
@@ -775,6 +783,112 @@ class ReturnRequestServiceTest {
                 .id(1L).returnRequest(req).orderItem(orderItem)
                 .oldVariant(orderItem.getProductVariant()).quantity(2).build());
         return req;
+    }
+
+    /**
+     * Kiểm thử tạo phiếu trả hàng không truyền {@code pickupAddressId} sẽ tự động chép snapshot
+     * địa chỉ lấy hàng và thông tin liên hệ từ đơn hàng gốc {@code Order}.
+     */
+    @Test
+    void createReturnFallsBackToOrderShippingSnapshotWhenPickupAddressIdIsNull() {
+        var response = service.createReturnRequest(request(1));
+
+        assertEquals("Nguyễn Văn A", response.getPickupContactName());
+        assertEquals("0901234567", response.getPickupPhone());
+        assertEquals("12 Nguyễn Văn Bảo, Gò Vấp", response.getPickupAddress());
+        assertEquals("Hồ Chí Minh", response.getPickupProvinceName());
+        assertEquals("Phường Hạnh Thông", response.getPickupWardName());
+        assertNull(response.getReturnShippingProvider());
+        assertNull(response.getReturnTrackingCode());
+        verifyNoInteractions(userAddressRepository);
+    }
+
+    /**
+     * Kiểm thử tạo phiếu trả hàng với {@code pickupAddressId} thuộc sổ địa chỉ của chính khách hàng
+     * cùng tên/SĐT người bàn giao riêng sẽ lưu đúng bản snapshot mới.
+     */
+    @Test
+    void createReturnUsesOwnedUserAddressAndCustomContactWhenProvided() {
+        var address = UserAddress.builder()
+                .id(55L).user(user)
+                .fullAddress("  99 Lê Lợi, Quận 1  ")
+                .provinceName(" Hồ Chí Minh ")
+                .wardName(" Phường Bến Nghé ")
+                .build();
+        when(userAddressRepository.findByIdAndUserId(55L, 7L)).thenReturn(Optional.of(address));
+
+        var req = request(1);
+        req.setPickupAddressId(55L);
+        req.setPickupContactName("  Trần Thị B  ");
+        req.setPickupPhone("0988777666");
+
+        var response = service.createReturnRequest(req);
+
+        assertEquals("Trần Thị B", response.getPickupContactName());
+        assertEquals("0988777666", response.getPickupPhone());
+        assertEquals("99 Lê Lợi, Quận 1", response.getPickupAddress());
+        assertEquals("Hồ Chí Minh", response.getPickupProvinceName());
+        assertEquals("Phường Bến Nghé", response.getPickupWardName());
+    }
+
+    /**
+     * Kiểm thử chống IDOR khi {@code pickupAddressId} không thuộc user hiện tại và chặn sổ địa chỉ thiếu tỉnh/phường.
+     */
+    @Test
+    void createReturnRejectsUnknownOrIncompletePickupAddressBeforeUpload() {
+        when(userAddressRepository.findByIdAndUserId(999L, 7L)).thenReturn(Optional.empty());
+        var notFoundReq = request(1);
+        notFoundReq.setPickupAddressId(999L);
+        assertRejected(ReturnRequestErrorCode.PICKUP_ADDRESS_NOT_FOUND, notFoundReq);
+
+        var incomplete = UserAddress.builder().id(56L).user(user)
+                .fullAddress("123 Đường ABC").provinceName("Hồ Chí Minh").wardName("  ").build();
+        when(userAddressRepository.findByIdAndUserId(56L, 7L)).thenReturn(Optional.of(incomplete));
+        var incompleteReq = request(1);
+        incompleteReq.setPickupAddressId(56L);
+        assertRejected(ReturnRequestErrorCode.PICKUP_ADDRESS_INCOMPLETE, incompleteReq);
+        verify(imageService, never()).upload(any());
+    }
+
+    /**
+     * Kiểm thử cập nhật phiếu ở trạng thái {@code PENDING_APPROVAL}: đổi địa chỉ lấy hàng khi truyền {@code pickupAddressId}
+     * và giữ nguyên snapshot hiện có khi không truyền.
+     */
+    @Test
+    void updateReturnUpdatesPickupSnapshotWhenProvidedAndKeepsExistingWhenOmitted() {
+        var existing = existingPendingRequest(20L);
+        existing.setPickupContactName("Nguyễn Văn A");
+        existing.setPickupPhone("0901234567");
+        existing.setPickupAddress("12 Nguyễn Văn Bảo");
+        existing.setPickupProvinceName("Hồ Chí Minh");
+        existing.setPickupWardName("Phường Hạnh Thông");
+        when(returnRequestRepository.findOwnedReturnRequestForUpdate(20L, 7L)).thenReturn(Optional.of(existing));
+
+        // Lần 1: không truyền pickupAddressId/contact -> giữ nguyên snapshot cũ
+        var keepReq = ReturnRequestUpdateRequest.builder()
+                .reason("CHANGE_OF_MIND").reasonDetail("Đổi ý nhẹ")
+                .items(List.of(item(1))).build();
+        var kept = service.updateReturnRequest(20L, keepReq);
+        assertEquals("12 Nguyễn Văn Bảo", kept.getPickupAddress());
+        assertEquals("Nguyễn Văn A", kept.getPickupContactName());
+
+        // Lần 2: truyền pickupAddressId mới + SĐT mới -> cập nhật snapshot
+        var newAddr = UserAddress.builder().id(88L).user(user)
+                .fullAddress("45 Hai Bà Trưng").provinceName("Hà Nội").wardName("Phường Tràng Tiền").build();
+        when(userAddressRepository.findByIdAndUserId(88L, 7L)).thenReturn(Optional.of(newAddr));
+        var updateReq = ReturnRequestUpdateRequest.builder()
+                .reason("CHANGE_OF_MIND").reasonDetail("Đổi địa chỉ lấy hàng")
+                .items(List.of(item(1)))
+                .pickupAddressId(88L)
+                .pickupContactName("Lê Văn C")
+                .pickupPhone("0912345678")
+                .build();
+        var updated = service.updateReturnRequest(20L, updateReq);
+        assertEquals("45 Hai Bà Trưng", updated.getPickupAddress());
+        assertEquals("Hà Nội", updated.getPickupProvinceName());
+        assertEquals("Phường Tràng Tiền", updated.getPickupWardName());
+        assertEquals("Lê Văn C", updated.getPickupContactName());
+        assertEquals("0912345678", updated.getPickupPhone());
     }
 
     /**
