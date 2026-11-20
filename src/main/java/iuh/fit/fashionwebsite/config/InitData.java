@@ -607,6 +607,9 @@ public class InitData implements CommandLineRunner {
         o.setShippingRecipientName(shippingRecipientName);
         o.setShippingPhone(shippingPhone);
         o.setShippingAddress(shippingAddress);
+        String[] shippingLocation = resolveShippingLocation(shippingAddress);
+        o.setShippingProvinceName(shippingLocation[0]);
+        o.setShippingWardName(shippingLocation[1]);
         o.setShippingProvider(shippingProvider);
         o.setTrackingCode(trackingCode);
         o.setSubtotal(subtotal);
@@ -624,6 +627,21 @@ public class InitData implements CommandLineRunner {
         orders.put(orderCode, saved);
         trackSeeded(saved, saved.getId());
         return saved;
+    }
+
+    private String[] resolveShippingLocation(String shippingAddress) {
+        if (shippingAddress != null) {
+            if (shippingAddress.contains("Phường 4")) {
+                return new String[]{"Hồ Chí Minh", "Phường 4"};
+            }
+            if (shippingAddress.contains("Phường 10")) {
+                return new String[]{"Hồ Chí Minh", "Phường 10"};
+            }
+            if (shippingAddress.contains("Phường Bến Thành")) {
+                return new String[]{"Hồ Chí Minh", "Phường Bến Thành"};
+            }
+        }
+        return new String[]{"Hồ Chí Minh", "Phường Bến Thành"};
     }
 
     private OrderItem seedOrderItem(String itemKey, Order order, ProductVariant productVariant,
@@ -2032,6 +2050,7 @@ public class InitData implements CommandLineRunner {
 
     private void seedAllPaymentMethodsAndOffers() {
         pm_cod = seedPaymentMethod("FWDEMO1_COD", "Thanh toán khi nhận hàng (COD)", "Thu tiền khi giao hàng — giao dịch giả lập.", null, true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
+        pm_bank = seedPaymentMethod("FWDEMO1_BANK", "Thanh toán online (VietQR)", "Không có tài khoản ngân hàng hoặc giao dịch thật.", null, true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         pm_vnpay = seedPaymentMethod("FWDEMO1_VNPAY", "Thanh toán online (VNPay)", "Thanh toán trực tuyến qua VNPay.", null, true, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         offer1 = seedSpecialOffer("FW-DEMO-V1 | Đầu năm", 10, null, "PRODUCT", new BigDecimal("0"), null, dt("2026-01-01 00:00:00"), dt("2026-03-01 00:00:00"), false, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
         offer2 = seedSpecialOffer("FW-DEMO-V1 | Hè", 15, null, "PRODUCT", new BigDecimal("0"), null, dt("2026-05-01 00:00:00"), dt("2026-08-01 00:00:00"), false, dt("2025-12-01 00:00:00"), dt("2025-12-01 00:00:00"));
